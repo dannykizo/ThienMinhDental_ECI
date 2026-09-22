@@ -12,6 +12,8 @@ Sản phẩm gồm:
 
 Các milestone **W1–W9 của Web-first MVP** đã được triển khai cho Backend API và Admin Web: nền tảng/auth, nhân viên, lịch làm việc, geofence, chấm công, công tác, nghỉ phép, điều chỉnh công, thông báo, báo cáo tháng và KPI Lite. Mobile App Android đã có vertical slice đầu tiên cho đăng nhập, khôi phục phiên, xem trạng thái chấm công trong ngày và check-in/check-out văn phòng bằng một mẫu GPS tại thời điểm người dùng chủ động thao tác. Push notification, công tác, nghỉ phép, thông báo và upload ảnh trên Mobile chưa được triển khai.
 
+Customer alignment C1 đã bổ sung cơ cấu HCM/HN, một nhân viên thuộc nhiều phòng ban, phân công chính có lịch sử, vai trò Kế toán trưởng và Quản lý khu vực theo phạm vi chi nhánh. Admin Web quản lý các trường này tại module Nhân viên.
+
 ## Đọc trước khi code
 
 1. `AGENTS.md` — quyền hạn và ranh giới của Codex, OpenCode, Antigravity.
@@ -80,7 +82,7 @@ Seed sẽ từ chối chạy ngoài `NODE_ENV=development`. Credential demo khô
 - `/api/business-trips`, `/api/leave-requests`, `/api/announcements` — công tác, nghỉ phép và truyền thông nội bộ.
 - `/api/reporting`, `/api/kpi` — dashboard, đối soát tháng, Excel và KPI Lite không chấm điểm.
 
-Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9. Mọi migration chạy với `synchronize=false`.
+Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC theo phản hồi khách hàng. Mọi migration chạy với `synchronize=false`.
 
 Android platform shell đã được tạo trong `mobile/`. Xem hướng dẫn chạy USB/Wi-Fi debugging và vị trí APK tại `mobile/README.md`.
 

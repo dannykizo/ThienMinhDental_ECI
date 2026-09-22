@@ -2,6 +2,16 @@
 
 Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-first MVP, trừ các giới hạn được ghi rõ. Mobile Android đã triển khai vertical slice đăng nhập và chấm công văn phòng; các flow mobile khác vẫn theo trạng thái ghi tại từng mục.
 
+## Organization and access scope
+
+1. Admin tạo nhân viên và chọn chi nhánh, phòng ban chính, các phòng ban kiêm nhiệm, chức vụ và quản lý trực tiếp.
+2. Mỗi nhân viên có đúng một phân công chính đang hiệu lực; các phân công cũ được đóng ngày hiệu lực thay vì xóa.
+3. Admin và Kế toán trưởng có phạm vi dữ liệu toàn cục theo quyền nghiệp vụ được cấp.
+4. Quản lý khu vực chỉ thấy nhân viên thuộc các chi nhánh trong `user_branch_scopes`.
+5. Khi nhân viên nghỉ việc, hồ sơ và tài khoản bị khóa nhưng mã nhân viên cùng lịch sử vẫn được giữ lại.
+
+**Implementation status:** Migration `1790035200000-customer-organization-rbac` đã bổ sung HCM/HN, phân công tổ chức nhiều-nhiều, phạm vi chi nhánh và role Kế toán trưởng/Quản lý khu vực. Danh sách nhân viên và Dashboard đã áp dụng scope; các module nghiệp vụ còn lại chỉ cấp quyền mới khi truy vấn theo scope tương ứng được triển khai.
+
 ## Shared attendance state
 
 Nguồn trạng thái nằm ở Backend; Web và Mobile chỉ hiển thị kết quả API.

@@ -32,6 +32,14 @@
 - Mobile attendance vertical slice dùng `geolocator` chỉ tại sự kiện check-in/check-out; API `GET /attendance/me/today` là nguồn trạng thái trong ngày. Không có background location tracking.
 - Leave balance và cutoff chưa có policy được duyệt nên không được tự suy diễn trong code.
 
+### Customer alignment C1 — organization and RBAC
+
+- Migration `1790035200000-customer-organization-rbac` bổ sung `branches`, `employee_organization_assignments` và `user_branch_scopes`.
+- Giữ `employees.department_id/position_id` làm projection tương thích cho phân công chính; lịch sử và quan hệ nhiều phòng ban nằm trong bảng assignment mới.
+- Role nghiệp vụ gồm `ADMIN`, `CHIEF_ACCOUNTANT`, `AREA_MANAGER`, `EMPLOYEE`; `MANAGER` được giữ tạm để tương thích dữ liệu cũ.
+- Admin có quyền ghi cấu hình nhân sự. Kế toán trưởng đọc dữ liệu nhân viên/chấm công và báo cáo. Quản lý khu vực chỉ được cấp endpoint đã thực thi scope chi nhánh ở Backend.
+- Khóa nhân viên đồng thời thu hồi quyền đăng nhập; không hard-delete hồ sơ hay mã nhân viên.
+
 ## Repository layout
 
 ```text
@@ -103,10 +111,11 @@ Chỉ tạo các thư mục con này khi module bắt đầu có code thật; kh
 - [x] KPI Lite operational counts on Admin Web.
 - Advanced Excel templates and organization-specific reconciliation rules.
 - Push notification reliability and delivery tracking.
+- [x] Multi-branch organization assignments and branch-scoped employee directory.
 
 ### Phase 3 — only after new approval
 
-- Multi-branch support, advanced RBAC, payroll/API integration, advanced analytics.
+- Permission engine tùy biến ngoài role/phạm vi đã chốt, payroll/API integration, advanced analytics.
 
 ## Definition of Done
 

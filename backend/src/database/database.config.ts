@@ -6,6 +6,11 @@ import { RoleEntity } from './entities/role.entity.js';
 import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserEntity } from './entities/user.entity.js';
 import {
+  BranchEntity,
+  EmployeeOrganizationAssignmentEntity,
+  UserBranchScopeEntity,
+} from './entities/organization.entity.js';
+import {
   AnnouncementEntity,
   AnnouncementRecipientEntity,
   AttendanceAdjustmentEntity,
@@ -26,6 +31,9 @@ export const databaseEntities = [
   PositionEntity,
   RoleEntity,
   UserRoleEntity,
+  BranchEntity,
+  EmployeeOrganizationAssignmentEntity,
+  UserBranchScopeEntity,
   WorkScheduleEntity,
   EmployeeScheduleEntity,
   OfficeLocationEntity,

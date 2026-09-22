@@ -7,7 +7,7 @@ import { ReportingService } from '../reporting/reporting.service.js';
 
 @Controller('kpi')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(RoleCode.Admin, RoleCode.Manager)
+@Roles(RoleCode.Admin, RoleCode.ChiefAccountant)
 export class KpiController {
   constructor(private readonly reporting: ReportingService) {}
   @Get('monthly') monthly(@Query('month') month: string): Promise<unknown> { return this.reporting.kpi(month); }

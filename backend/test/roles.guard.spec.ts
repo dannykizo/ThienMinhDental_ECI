@@ -36,6 +36,20 @@ describe('RolesGuard', () => {
     expect(guard.canActivate(createContext([RoleCode.Admin]))).toBe(true);
   });
 
+  it('allows the chief accountant only where that role is explicitly accepted', () => {
+    const reflector = {
+      getAllAndOverride: vi.fn(() => [
+        RoleCode.Admin,
+        RoleCode.ChiefAccountant,
+      ]),
+    } as unknown as Reflector;
+    const guard = new RolesGuard(reflector);
+
+    expect(
+      guard.canActivate(createContext([RoleCode.ChiefAccountant])),
+    ).toBe(true);
+  });
+
   it('rejects a user without an accepted admin-web role', () => {
     const reflector = {
       getAllAndOverride: vi.fn(() => [RoleCode.Admin, RoleCode.Manager]),

@@ -8,7 +8,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '@/components/admin-ui';
-import { apiRequest } from '@/lib/auth-api';
+import { apiRequest, getAdminSession } from '@/lib/auth-api';
 
 interface Lookup {
   id: string;
@@ -27,6 +27,23 @@ interface Employee {
   department?: Lookup;
   position?: Lookup;
   accountEmail?: string;
+  accountRoles: string[];
+  scopeBranchIds: string[];
+  organizationAssignments: OrganizationAssignment[];
+}
+
+interface OrganizationAssignment {
+  id: string;
+  branchId: string;
+  branchCode: string;
+  branchName: string;
+  departmentId: string;
+  departmentName: string;
+  positionId?: string;
+  positionName?: string;
+  managerEmployeeId?: string;
+  managerName?: string;
+  isPrimary: boolean;
 }
 
 const employeeTypeLabels: Record<string, string> = {
@@ -38,19 +55,23 @@ export default function EmployeesPage() {
   const [items, setItems] = useState<Employee[] | null>(null);
   const [departments, setDepartments] = useState<Lookup[]>([]);
   const [positions, setPositions] = useState<Lookup[]>([]);
+  const [branches, setBranches] = useState<Lookup[]>([]);
+  const [canManage, setCanManage] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   async function load(): Promise<void> {
-    const [employees, deps, pos] = await Promise.all([
+    const [employees, deps, pos, branchItems] = await Promise.all([
       apiRequest<Employee[]>('/employees'),
       apiRequest<Lookup[]>('/employees/lookups/departments'),
       apiRequest<Lookup[]>('/employees/lookups/positions'),
+      apiRequest<Lookup[]>('/employees/lookups/branches'),
     ]);
     setItems(employees);
     setDepartments(deps);
     setPositions(pos);
+    setBranches(branchItems);
   }
 
   useEffect(() => {
@@ -58,11 +79,15 @@ export default function EmployeesPage() {
       apiRequest<Employee[]>('/employees'),
       apiRequest<Lookup[]>('/employees/lookups/departments'),
       apiRequest<Lookup[]>('/employees/lookups/positions'),
+      apiRequest<Lookup[]>('/employees/lookups/branches'),
+      getAdminSession(),
     ])
-      .then(([employees, deps, pos]) => {
+      .then(([employees, deps, pos, branchItems, session]) => {
         setItems(employees);
         setDepartments(deps);
         setPositions(pos);
+        setBranches(branchItems);
+        setCanManage(session.roles.includes('ADMIN'));
       })
       .catch(() => setError('Không thể tải danh sách nhân viên.'));
   }, []);
@@ -74,6 +99,14 @@ export default function EmployeesPage() {
     setMessage('');
     const data = new FormData(event.currentTarget);
     const value = (key: string) => String(data.get(key) ?? '');
+    const primaryDepartmentId = value('primaryDepartmentId');
+    const departmentIds = [
+      primaryDepartmentId,
+      ...data.getAll('additionalDepartmentIds').map(String),
+    ].filter((id, index, all) => id && all.indexOf(id) === index);
+    const branchId = value('branchId');
+    const positionId = value('positionId') || undefined;
+    const managerEmployeeId = value('managerEmployeeId') || undefined;
     try {
       await apiRequest('/employees', {
         method: 'POST',
@@ -83,11 +116,17 @@ export default function EmployeesPage() {
           employeeType: value('employeeType'),
           phone: value('phone') || undefined,
           hireDate: value('hireDate') || undefined,
-          departmentId: value('departmentId') || undefined,
-          positionId: value('positionId') || undefined,
+          organizationAssignments: departmentIds.map((departmentId) => ({
+            branchId,
+            departmentId,
+            positionId,
+            managerEmployeeId,
+            isPrimary: departmentId === primaryDepartmentId,
+          })),
           email: value('email') || undefined,
           temporaryPassword: value('temporaryPassword') || undefined,
           role: value('role') || undefined,
+          scopeBranchIds: data.getAll('scopeBranchIds').map(String),
         }),
       });
       event.currentTarget.reset();
@@ -114,7 +153,7 @@ export default function EmployeesPage() {
 
   async function createLookup(
     event: FormEvent<HTMLFormElement>,
-    kind: 'departments' | 'positions',
+    kind: 'departments' | 'positions' | 'branches',
   ): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -130,7 +169,9 @@ export default function EmployeesPage() {
       setMessage(
         kind === 'departments'
           ? 'Đã thêm phòng ban mới.'
-          : 'Đã thêm chức vụ mới.',
+          : kind === 'positions'
+            ? 'Đã thêm chức vụ mới.'
+            : 'Đã thêm chi nhánh mới.',
       );
       await load();
     } catch (caught) {
@@ -158,7 +199,7 @@ export default function EmployeesPage() {
         aria-label="Thống kê nhân sự"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
           gap: '14px',
           marginBottom: '24px',
         }}
@@ -188,9 +229,14 @@ export default function EmployeesPage() {
           <strong>{positions.length}</strong>
           <span>Vị trí chuyên môn</span>
         </article>
+        <article className="metric-card">
+          <p>Chi nhánh</p>
+          <strong>{branches.length}</strong>
+          <span>Phạm vi vận hành</span>
+        </article>
       </section>
 
-      <details className="editor-panel" open>
+      {canManage && <details className="editor-panel" open>
         <summary>+ Thêm hồ sơ nhân viên mới</summary>
         <form className="form-grid" onSubmit={submit}>
           <label>
@@ -209,9 +255,20 @@ export default function EmployeesPage() {
             </select>
           </label>
           <label>
-            Phòng ban
-            <select name="departmentId">
-              <option value="">Chưa phân phòng</option>
+            Chi nhánh làm việc
+            <select name="branchId" required>
+              <option value="">Chọn chi nhánh</option>
+              {branches.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Phòng ban chính
+            <select name="primaryDepartmentId" required>
+              <option value="">Chọn phòng ban chính</option>
               {departments.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
@@ -220,12 +277,34 @@ export default function EmployeesPage() {
             </select>
           </label>
           <label>
+            Phòng ban kiêm nhiệm
+            <select multiple name="additionalDepartmentIds" size={4}>
+              {departments.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <small>Giữ Ctrl để chọn nhiều phòng ban.</small>
+          </label>
+          <label>
             Chức vụ
             <select name="positionId">
               <option value="">Chưa phân chức vụ</option>
               {positions.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Quản lý trực tiếp
+            <select name="managerEmployeeId">
+              <option value="">Chưa chỉ định</option>
+              {items?.filter((item) => item.isActive).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.fullName} · {item.employeeCode}
                 </option>
               ))}
             </select>
@@ -255,9 +334,22 @@ export default function EmployeesPage() {
             Vai trò hệ thống
             <select name="role">
               <option value="EMPLOYEE">Nhân viên (Xem công của mình)</option>
-              <option value="MANAGER">Quản lý (Duyệt đơn, xem nhóm)</option>
+              <option value="AREA_MANAGER">Quản lý khu vực</option>
+              <option value="CHIEF_ACCOUNTANT">Kế toán trưởng</option>
+              <option value="MANAGER">Quản lý cũ (tương thích)</option>
               <option value="ADMIN">Admin (Toàn quyền quản trị)</option>
             </select>
+          </label>
+          <label>
+            Phạm vi chi nhánh quản lý
+            <select multiple name="scopeBranchIds" size={3}>
+              {branches.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+            <small>Áp dụng cho vai trò Quản lý khu vực.</small>
           </label>
           <button
             className="primary-button form-action span-2"
@@ -266,9 +358,9 @@ export default function EmployeesPage() {
             {saving ? 'Đang lưu…' : 'Tạo hồ sơ nhân viên'}
           </button>
         </form>
-      </details>
+      </details>}
 
-      <div className="split-editors">
+      {canManage && <div className="split-editors">
         <details className="editor-panel">
           <summary>+ Thêm phòng ban mới</summary>
           <form
@@ -300,7 +392,23 @@ export default function EmployeesPage() {
             <button className="secondary-button">Thêm chức vụ</button>
           </form>
         </details>
-      </div>
+
+        <details className="editor-panel">
+          <summary>+ Thêm chi nhánh mới</summary>
+          <form
+            className="inline-form"
+            onSubmit={(event) => void createLookup(event, 'branches')}
+          >
+            <input name="code" placeholder="Mã chi nhánh (VD: DN)" required />
+            <input
+              name="name"
+              placeholder="Tên chi nhánh"
+              required
+            />
+            <button className="secondary-button">Thêm chi nhánh</button>
+          </form>
+        </details>
+      </div>}
 
       {items === null ? (
         <LoadingState />
@@ -317,11 +425,12 @@ export default function EmployeesPage() {
                 <th>Mã NV</th>
                 <th>Họ và tên</th>
                 <th>Loại nhân sự</th>
+                <th>Chi nhánh</th>
                 <th>Phòng ban</th>
                 <th>Chức vụ</th>
                 <th>Tài khoản</th>
                 <th>Trạng thái</th>
-                <th>Thao tác</th>
+                {canManage && <th>Thao tác</th>}
               </tr>
             </thead>
             <tbody>
@@ -351,8 +460,29 @@ export default function EmployeesPage() {
                         item.employeeType}
                     </span>
                   </td>
-                  <td>{item.department?.name ?? '—'}</td>
-                  <td>{item.position?.name ?? '—'}</td>
+                  <td>
+                    {[
+                      ...new Set(
+                        item.organizationAssignments.map(
+                          (assignment) => assignment.branchName,
+                        ),
+                      ),
+                    ].join(', ') || '—'}
+                  </td>
+                  <td>
+                    {item.organizationAssignments
+                      .map((assignment) =>
+                        assignment.isPrimary
+                          ? `${assignment.departmentName} (chính)`
+                          : assignment.departmentName,
+                      )
+                      .join(', ') || item.department?.name || '—'}
+                  </td>
+                  <td>
+                    {item.organizationAssignments.find(
+                      (assignment) => assignment.isPrimary,
+                    )?.positionName ?? item.position?.name ?? '—'}
+                  </td>
                   <td>
                     <small style={{ color: 'var(--muted)' }}>
                       {item.accountEmail ?? '—'}
@@ -361,7 +491,7 @@ export default function EmployeesPage() {
                   <td>
                     <StatusBadge value={item.isActive ? 'ACTIVE' : 'INACTIVE'} />
                   </td>
-                  <td>
+                  {canManage && <td>
                     <button
                       className="table-action"
                       onClick={() => void toggle(item)}
@@ -369,7 +499,7 @@ export default function EmployeesPage() {
                     >
                       {item.isActive ? 'Tạm khóa' : 'Mở khóa'}
                     </button>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

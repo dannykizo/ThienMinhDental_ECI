@@ -2,6 +2,8 @@ import { BadRequestException, ConflictException, Injectable } from '@nestjs/comm
 import { InjectDataSource } from '@nestjs/typeorm';
 import ExcelJS from 'exceljs';
 import { DataSource } from 'typeorm';
+import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
+import { RoleCode } from '../auth/domain/role-code.js';
 
 export interface MonthlyRow {
   employeeId: string;
@@ -20,14 +22,26 @@ export interface MonthlyRow {
 export class ReportingService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  async dashboard(): Promise<Record<string, number>> {
-    const [row] = await this.dataSource.query<Array<Record<string, number>>>(`SELECT
-      (SELECT COUNT(*)::int FROM employees WHERE is_active=true) AS "activeEmployees",
-      (SELECT COUNT(DISTINCT employee_id)::int FROM attendance_events WHERE (server_time AT TIME ZONE 'Asia/Bangkok')::date=(now() AT TIME ZONE 'Asia/Bangkok')::date) AS "attendanceToday",
-      (SELECT COUNT(*)::int FROM attendance_events WHERE cardinality(risk_flags)>0 AND (server_time AT TIME ZONE 'Asia/Bangkok')::date=(now() AT TIME ZONE 'Asia/Bangkok')::date) AS "reviewRequired",
-      (SELECT COUNT(*)::int FROM business_trips WHERE status IN ('ASSIGNED','IN_PROGRESS')) AS "activeTrips",
-      (SELECT COUNT(*)::int FROM leave_requests WHERE status='SUBMITTED') AS "pendingLeave",
-      (SELECT COUNT(*)::int FROM announcements WHERE status='PUBLISHED') AS "publishedAnnouncements"`);
+  async dashboard(user: AuthenticatedUserView): Promise<Record<string, number>> {
+    const globalAccess = user.roles.some((role) =>
+      [RoleCode.Admin, RoleCode.ChiefAccountant].includes(role),
+    );
+    const [row] = await this.dataSource.query<Array<Record<string, number>>>(`WITH allowed AS (
+      SELECT e.id
+      FROM employees e
+      WHERE $2::boolean = true
+      UNION
+      SELECT DISTINCT a.employee_id
+      FROM user_branch_scopes s
+      JOIN employee_organization_assignments a ON a.branch_id = s.branch_id AND a.effective_to IS NULL
+      WHERE s.user_id = $1
+    ) SELECT
+      (SELECT COUNT(*)::int FROM employees e JOIN allowed x ON x.id=e.id WHERE e.is_active=true) AS "activeEmployees",
+      (SELECT COUNT(DISTINCT employee_id)::int FROM attendance_events WHERE employee_id IN (SELECT id FROM allowed) AND (server_time AT TIME ZONE 'Asia/Bangkok')::date=(now() AT TIME ZONE 'Asia/Bangkok')::date) AS "attendanceToday",
+      (SELECT COUNT(*)::int FROM attendance_events WHERE employee_id IN (SELECT id FROM allowed) AND cardinality(risk_flags)>0 AND (server_time AT TIME ZONE 'Asia/Bangkok')::date=(now() AT TIME ZONE 'Asia/Bangkok')::date) AS "reviewRequired",
+      (SELECT COUNT(DISTINCT bt.id)::int FROM business_trips bt JOIN business_trip_members btm ON btm.business_trip_id=bt.id WHERE btm.employee_id IN (SELECT id FROM allowed) AND bt.status IN ('ASSIGNED','IN_PROGRESS')) AS "activeTrips",
+      (SELECT COUNT(*)::int FROM leave_requests WHERE employee_id IN (SELECT id FROM allowed) AND status='SUBMITTED') AS "pendingLeave",
+      (SELECT COUNT(*)::int FROM announcements WHERE status='PUBLISHED') AS "publishedAnnouncements"`, [user.id, globalAccess]);
     return row ?? {};
   }
 

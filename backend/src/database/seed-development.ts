@@ -1,8 +1,13 @@
 import { hash } from 'bcryptjs';
+import { IsNull } from 'typeorm';
 import { applicationDataSource } from './data-source.js';
 import { DepartmentEntity } from './entities/department.entity.js';
 import { EmployeeEntity } from './entities/employee.entity.js';
 import { PositionEntity } from './entities/position.entity.js';
+import {
+  BranchEntity,
+  EmployeeOrganizationAssignmentEntity,
+} from './entities/organization.entity.js';
 import { RoleEntity } from './entities/role.entity.js';
 import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserEntity } from './entities/user.entity.js';
@@ -10,6 +15,8 @@ import { RoleCode } from '../modules/auth/domain/role-code.js';
 
 const roleNames: Record<RoleCode, string> = {
   [RoleCode.Admin]: 'Quản trị viên',
+  [RoleCode.ChiefAccountant]: 'Kế toán trưởng',
+  [RoleCode.AreaManager]: 'Quản lý khu vực',
   [RoleCode.Manager]: 'Quản lý chi nhánh',
   [RoleCode.Employee]: 'Nhân viên',
 };
@@ -35,6 +42,19 @@ async function seedDevelopment(): Promise<void> {
       role.name = roleNames[code];
       roles.set(code, await roleRepository.save(role));
     }
+
+    const branchRepository = manager.getRepository(BranchEntity);
+    let hcmBranch = await branchRepository.findOne({ where: { code: 'HCM' } });
+    hcmBranch ??= branchRepository.create({ code: 'HCM' });
+    hcmBranch.name = 'Chi nhánh TP.HCM';
+    hcmBranch.isActive = true;
+    hcmBranch = await branchRepository.save(hcmBranch);
+
+    let hnBranch = await branchRepository.findOne({ where: { code: 'HN' } });
+    hnBranch ??= branchRepository.create({ code: 'HN' });
+    hnBranch.name = 'Chi nhánh Hà Nội';
+    hnBranch.isActive = true;
+    await branchRepository.save(hnBranch);
 
     const departmentRepository = manager.getRepository(DepartmentEntity);
     let department = await departmentRepository.findOne({
@@ -72,7 +92,25 @@ async function seedDevelopment(): Promise<void> {
     employee.departmentId = department.id;
     employee.positionId = position.id;
     employee.userId = user.id;
-    await employeeRepository.save(employee);
+    employee = await employeeRepository.save(employee);
+
+    const assignmentRepository = manager.getRepository(
+      EmployeeOrganizationAssignmentEntity,
+    );
+    let adminAssignment = await assignmentRepository.findOne({
+      where: { employeeId: employee.id, isPrimary: true, effectiveTo: IsNull() },
+    });
+    adminAssignment ??= assignmentRepository.create({
+      employeeId: employee.id,
+      effectiveFrom: new Date().toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Bangkok',
+      }),
+      isPrimary: true,
+    });
+    adminAssignment.branchId = hcmBranch.id;
+    adminAssignment.departmentId = department.id;
+    adminAssignment.positionId = position.id;
+    await assignmentRepository.save(adminAssignment);
 
     const adminRole = roles.get(RoleCode.Admin);
     if (!adminRole) {
@@ -111,7 +149,26 @@ async function seedDevelopment(): Promise<void> {
     mobileEmployee.departmentId = employeeDepartment.id;
     mobileEmployee.positionId = employeePosition.id;
     mobileEmployee.userId = employeeUser.id;
-    await employeeRepository.save(mobileEmployee);
+    mobileEmployee = await employeeRepository.save(mobileEmployee);
+
+    let mobileAssignment = await assignmentRepository.findOne({
+      where: {
+        employeeId: mobileEmployee.id,
+        isPrimary: true,
+        effectiveTo: IsNull(),
+      },
+    });
+    mobileAssignment ??= assignmentRepository.create({
+      employeeId: mobileEmployee.id,
+      effectiveFrom: new Date().toLocaleDateString('en-CA', {
+        timeZone: 'Asia/Bangkok',
+      }),
+      isPrimary: true,
+    });
+    mobileAssignment.branchId = hcmBranch.id;
+    mobileAssignment.departmentId = employeeDepartment.id;
+    mobileAssignment.positionId = employeePosition.id;
+    await assignmentRepository.save(mobileAssignment);
 
     const employeeRole = roles.get(RoleCode.Employee);
     if (!employeeRole) throw new Error('EMPLOYEE_ROLE_SEED_FAILED');

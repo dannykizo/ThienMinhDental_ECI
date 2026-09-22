@@ -2,7 +2,7 @@
 
 ## Product statement
 
-Thiên Minh Dental Workforce là hệ thống **Chấm công – Công tác – Thông báo nội bộ** cho Chi nhánh TP.HCM tại **Số 9A Phạm Cự Lượng, Phường 2, Quận Tân Bình, TP. Hồ Chí Minh**.
+Thiên Minh Dental Workforce là hệ thống **Chấm công – Công tác – Thông báo nội bộ** cho hai khu vực vận hành TP.HCM và Hà Nội. Văn phòng TP.HCM hiện tại ở **Số 9A Phạm Cự Lượng, Phường 2, Quận Tân Bình, TP. Hồ Chí Minh**; địa chỉ/tọa độ Hà Nội được cấu hình bởi Admin khi có dữ liệu chính thức.
 
 Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu và đang làm việc theo hình thức nào**, sau đó tạo được bảng công cuối tháng sạch. Đây không phải hệ HRM/ERP nhân sự toàn diện.
 
@@ -11,7 +11,8 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 | Nhóm | Nhu cầu chính |
 |---|---|
 | Admin/Người phụ trách chấm công | Quản lý tài khoản, theo dõi hôm nay, xử lý bất thường, xuất báo cáo |
-| Quản lý chi nhánh | Giao công tác, duyệt nghỉ/giải trình, gửi thông báo, xem KPI Lite |
+| Kế toán trưởng | Đối soát báo cáo tháng và mở lại kỳ công đã chốt |
+| Quản lý khu vực | Chỉ xem và xử lý nhân viên thuộc chi nhánh được phân quyền |
 | Nhân viên văn phòng | Check-in/out tại văn phòng, gửi đơn, nhận thông báo |
 | Nhân viên kỹ thuật | Nhận phiếu công tác, check-in/out hiện trường, ghi chú/ảnh khi được yêu cầu |
 
@@ -36,6 +37,8 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Một ngày không chấm công tại văn phòng không tự động đồng nghĩa vắng mặt nếu nhân viên có công tác hoặc nghỉ đã duyệt.
 - Phát hiện mock location chỉ là tín hiệu rủi ro; hệ thống không tuyên bố chống giả GPS tuyệt đối.
 - Mọi sửa đổi thủ công với bảng công phải có người sửa, thời gian, lý do, giá trị cũ và mới.
+- Một nhân viên có thể thuộc nhiều phòng ban nhưng phải có đúng một phân công tổ chức chính tại một thời điểm.
+- Nhân viên nghỉ việc được khóa hồ sơ/tài khoản; không xóa vật lý mã nhân viên hoặc lịch sử nghiệp vụ.
 
 ## Explicit non-goals for MVP
 
@@ -44,7 +47,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Quản lý tài sản và kho thiết bị.
 - GPS tracking nền/liên tục hoặc bản đồ theo dõi nhân viên cả ngày.
 - Microservices, Kubernetes, message broker hoặc workflow nhiều cấp.
-- Đa chi nhánh và phân quyền động phức tạp.
+- Bộ máy phân quyền động ngoài bốn nhóm Admin, Kế toán trưởng, Quản lý khu vực và Nhân viên.
 
 ## Success criteria
 
@@ -53,4 +56,3 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Admin nhìn được trạng thái trong ngày và lý do bất thường.
 - Cuối tháng xuất được bảng công đối soát được đến từng ngày và từng sự kiện.
 - Thông báo có đối tượng nhận và thống kê đã đọc/chưa đọc.
-

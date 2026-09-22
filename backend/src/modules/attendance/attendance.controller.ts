@@ -14,7 +14,7 @@ export class AttendanceController {
   constructor(private readonly service: AttendanceService) {}
   @Post('events') record(@CurrentUser() user: AuthenticatedUserView, @Body() input: RecordAttendanceEventDto): Promise<unknown> { return this.service.record(user, input); }
   @Get('me/today') today(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.getToday(user); }
-  @Get('daily') @Roles(RoleCode.Admin, RoleCode.Manager) daily(@Query('date') date?: string): Promise<unknown> { return this.service.list(date); }
+  @Get('daily') @Roles(RoleCode.Admin, RoleCode.ChiefAccountant, RoleCode.Manager) daily(@Query('date') date?: string): Promise<unknown> { return this.service.list(date); }
   @Post('adjustments') @Roles(RoleCode.Admin) adjust(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateAttendanceAdjustmentDto): Promise<unknown> { return this.service.createAdjustment(user, input); }
-  @Get('adjustments') @Roles(RoleCode.Admin, RoleCode.Manager) adjustments(): Promise<unknown> { return this.service.listAdjustments(); }
+  @Get('adjustments') @Roles(RoleCode.Admin) adjustments(): Promise<unknown> { return this.service.listAdjustments(); }
 }

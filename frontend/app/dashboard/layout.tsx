@@ -8,6 +8,7 @@ import {
   ApiError,
   getAdminSession,
   logout,
+  type RoleCode,
   type SessionUser,
 } from '@/lib/auth-api';
 
@@ -140,6 +141,30 @@ const navigation: NavItem[] = [
   },
 ];
 
+const chiefAccountantRoutes = new Set([
+  '/dashboard',
+  '/dashboard/employees',
+  '/dashboard/attendance',
+  '/dashboard/reports',
+  '/dashboard/kpi',
+]);
+
+const scopedManagerRoutes = new Set([
+  '/dashboard',
+  '/dashboard/employees',
+]);
+
+function canAccessNavigation(item: NavItem, roles: RoleCode[]): boolean {
+  if (roles.includes('ADMIN')) return true;
+  if (roles.includes('CHIEF_ACCOUNTANT')) {
+    return chiefAccountantRoutes.has(item.href);
+  }
+  if (roles.includes('AREA_MANAGER') || roles.includes('MANAGER')) {
+    return scopedManagerRoutes.has(item.href);
+  }
+  return false;
+}
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -268,7 +293,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         <nav aria-label="Điều hướng quản trị" className="sidebar-nav">
           <p className="nav-label">QUẢN TRỊ</p>
-          {navigation.map((item) =>
+          {navigation.filter((item) => canAccessNavigation(item, user?.roles ?? [])).map((item) =>
             item.ready ? (
               <Link
                 aria-current={pathname === item.href ? 'page' : undefined}
@@ -318,7 +343,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="topbar-left">
             <div className="topbar-branch">
               <span aria-hidden="true">📍</span>
-              Chi nhánh TP.HCM · 9A Phạm Cự Lượng
+              Phạm vi dữ liệu theo quyền tài khoản
             </div>
             {currentDateString && (
               <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
