@@ -154,8 +154,9 @@ export class ReportingService {
     if (rows.length === 0) throw new ConflictException({ code: 'REPORT_HAS_NO_DATA', message: 'Chưa có dữ liệu lịch làm việc để chốt kỳ công.' });
     const incomplete = rows.filter((row) => row.status === 'INCOMPLETE').length;
     const [openExplanations] = await this.dataSource.query<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM attendance_explanation_requests WHERE work_date >= $1::date AND work_date < ($1::date + INTERVAL '1 month') AND status IN ('REQUESTED','SUBMITTED')`, [`${month}-01`]);
-    if (incomplete > 0 || (openExplanations?.count ?? 0) > 0) {
-      throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: `Còn ${incomplete} ngày thiếu check-out và ${openExplanations?.count ?? 0} giải trình chưa hoàn tất.` });
+    const [pendingLeave] = await this.dataSource.query<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM leave_requests WHERE status='SUBMITTED' AND start_date < ($1::date + INTERVAL '1 month') AND end_date >= $1::date`, [`${month}-01`]);
+    if (incomplete > 0 || (openExplanations?.count ?? 0) > 0 || (pendingLeave?.count ?? 0) > 0) {
+      throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: `Còn ${incomplete} ngày thiếu check-out, ${openExplanations?.count ?? 0} giải trình và ${pendingLeave?.count ?? 0} đơn nghỉ chưa hoàn tất.` });
     }
     await this.dataSource.transaction(async (manager) => {
       const [current] = await manager.query<Array<{ id: string; status: string }>>('SELECT id,status FROM attendance_periods WHERE period_month=$1::date FOR UPDATE', [`${month}-01`]);

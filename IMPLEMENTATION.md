@@ -75,6 +75,15 @@
 - Business trip changes and member actions use `configuration_audit_logs`; audit payloads intentionally exclude precise coordinates.
 - Because customer answers W25–W29 are blank, C5 intentionally does not add multi-location itineraries, customer signatures, schedule-change workflows or multi-level approval.
 
+### Customer alignment C6 — leave request and approval
+
+- Migration `1790467200000-leave-operations` records the submitting account and submission time and adds indexes for employee/date and status/date queries.
+- Admin/legacy Manager can record a request for an employee; an authenticated employee can list and submit only their own requests through `/leave-requests/mine`.
+- Backend owns date-range validation, active-request overlap detection, one-step review and the mandatory rejection reason. Every submission and review is written to `configuration_audit_logs`.
+- Leave changes are rejected when any affected attendance month is locked. A month with a pending leave request cannot be locked, so the monthly report cannot silently finalize unresolved leave.
+- Approved leave is already consumed by the daily attendance/monthly reporting projection; rejected leave is excluded.
+- Because customer answers W30–W35 are blank, C6 intentionally remains full-day/date-range only and does not add leave balance, accrual, half-day/hour leave, attachments, delegation, multi-level approval, retroactive edits or cancellation of approved requests.
+
 ## Repository layout
 
 ```text

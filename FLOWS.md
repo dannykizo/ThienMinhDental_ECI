@@ -99,17 +99,17 @@ DRAFT -> ASSIGNED -> IN_PROGRESS -> COMPLETED
 ## Mobile + Admin Web — leave request
 
 ```text
-DRAFT -> SUBMITTED -> APPROVED
-                  -> REJECTED
-SUBMITTED/APPROVED -> CANCELLED (theo quyền và cutoff được duyệt sau)
+SUBMITTED -> APPROVED
+          -> REJECTED
 ```
 
 1. Nhân viên chọn loại nghỉ, khoảng ngày và lý do.
-2. Backend kiểm tra trùng lịch và dữ liệu bắt buộc.
-3. Quản lý/Admin duyệt hoặc từ chối kèm ghi chú.
-4. Mobile nhận kết quả; daily attendance projection cập nhật ngày đã duyệt.
+2. Backend kiểm tra khoảng ngày, nhân viên đang hoạt động, kỳ công chưa khóa và không trùng đơn `SUBMITTED`/`APPROVED`.
+3. Admin/Manager duyệt một cấp hoặc từ chối; lý do từ chối là bắt buộc.
+4. Mọi lần gửi và duyệt/từ chối có audit. Đơn đang chờ là blocker khi chốt kỳ công.
+5. Mobile nhận kết quả; daily attendance projection cập nhật ngày đã duyệt.
 
-**Web-first status:** Admin Web/API đã tạo đơn, kiểm tra trùng ngày và duyệt/từ chối một cấp. Mobile UI chưa triển khai. Leave balance/cutoff policy chưa được khách hàng chốt nên không được tự phát minh.
+**Web-first status:** Customer alignment C6 đã triển khai Admin Web và Backend API cho danh sách giàu thông tin, đơn của nhân viên hiện tại, tạo đơn, kiểm tra trùng ngày, khóa theo kỳ công, duyệt/từ chối một cấp và audit. Mobile UI chưa triển khai. Vì W30–W35 chưa có quyết định khách hàng, leave balance/cộng dồn, nghỉ nửa ngày/giờ, file minh chứng, duyệt thay/nhiều cấp, sửa hồi tố và hủy đơn đã duyệt đều chưa được triển khai.
 
 ## Admin Web — attendance adjustment
 

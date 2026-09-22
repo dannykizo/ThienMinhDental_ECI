@@ -189,6 +189,8 @@ export class LeaveRequestEntity {
   @Column({ type: 'date', name: 'end_date' }) endDate!: string;
   @Column({ type: 'text' }) reason!: string;
   @Column({ type: 'varchar', length: 30, default: 'SUBMITTED' }) status!: string;
+  @Column({ type: 'uuid', name: 'submitted_by', nullable: true }) submittedBy?: string | null;
+  @Column({ type: 'timestamptz', name: 'submitted_at' }) submittedAt!: Date;
   @Column({ type: 'uuid', name: 'reviewed_by', nullable: true }) reviewedBy?: string | null;
   @Column({ type: 'text', name: 'review_note', nullable: true }) reviewNote?: string | null;
   @Column({ type: 'timestamptz', name: 'reviewed_at', nullable: true }) reviewedAt?: Date | null;
