@@ -56,6 +56,15 @@
 - Geofence được chọn theo chi nhánh hiện hành của nhân viên và khoảng cách gần nhất. Database cùng DTO cùng giới hạn bán kính/ngưỡng accuracy tối đa 50 m.
 - Chỉ `ADMIN` được tạo/sửa lịch, vị trí và xem `configuration_audit_logs`. Không seed tọa độ HN hoặc địa điểm ngoài văn phòng khi chưa có dữ liệu chính thức.
 
+### Customer alignment C4 — attendance reconciliation and period locking
+
+- Migration `1790294400000-attendance-reconciliation` adds mandatory explanation requests and monthly attendance period state.
+- Admin creates an explanation request with issue type, required response deadline and note. Employees respond through the authenticated API; GPS-risk responses require an image reference, capture time and coordinates as one complete evidence set.
+- Admin alone can review explanations and read attendance adjustment history. Adjustment values remain limited to check-in time, check-out time and day status until the customer defines a broader policy.
+- Admin or Chief Accountant can lock a reconciled month. A month with incomplete check-outs or open explanations cannot be locked. A locked month rejects new explanations and attendance adjustments.
+- Only `CHIEF_ACCOUNTANT` can reopen a locked period, and the reason is mandatory. Lock and reopen actions are recorded in `configuration_audit_logs`.
+- Admin Web implements the C4 operational screens. Mobile presentation for explanation/photo capture remains out of this Web-first slice.
+
 ## Repository layout
 
 ```text

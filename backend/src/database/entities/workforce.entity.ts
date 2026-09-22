@@ -133,6 +133,43 @@ export class AttendanceAdjustmentEntity {
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
 }
 
+@Entity({ name: 'attendance_explanation_requests' })
+export class AttendanceExplanationEntity {
+  @PrimaryGeneratedColumn('uuid') id!: string;
+  @Column({ type: 'uuid', name: 'employee_id' }) employeeId!: string;
+  @Column({ type: 'date', name: 'work_date' }) workDate!: string;
+  @Column({ type: 'uuid', name: 'attendance_event_id', nullable: true }) attendanceEventId?: string | null;
+  @Column({ type: 'varchar', length: 40, name: 'issue_type' }) issueType!: string;
+  @Column({ type: 'text', name: 'request_note' }) requestNote!: string;
+  @Column({ type: 'varchar', length: 30, default: 'REQUESTED' }) status!: string;
+  @Column({ type: 'timestamptz', name: 'due_at' }) dueAt!: Date;
+  @Column({ type: 'uuid', name: 'requested_by' }) requestedBy!: string;
+  @Column({ type: 'text', name: 'response_text', nullable: true }) responseText?: string | null;
+  @Column({ type: 'varchar', length: 500, name: 'evidence_image_reference', nullable: true }) evidenceImageReference?: string | null;
+  @Column({ type: 'timestamptz', name: 'evidence_captured_at', nullable: true }) evidenceCapturedAt?: Date | null;
+  @Column({ type: 'double precision', name: 'evidence_latitude', nullable: true }) evidenceLatitude?: number | null;
+  @Column({ type: 'double precision', name: 'evidence_longitude', nullable: true }) evidenceLongitude?: number | null;
+  @Column({ type: 'uuid', name: 'reviewed_by', nullable: true }) reviewedBy?: string | null;
+  @Column({ type: 'text', name: 'review_note', nullable: true }) reviewNote?: string | null;
+  @Column({ type: 'timestamptz', name: 'reviewed_at', nullable: true }) reviewedAt?: Date | null;
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' }) updatedAt!: Date;
+}
+
+@Entity({ name: 'attendance_periods' })
+export class AttendancePeriodEntity {
+  @PrimaryGeneratedColumn('uuid') id!: string;
+  @Column({ type: 'date', name: 'period_month', unique: true }) periodMonth!: string;
+  @Column({ type: 'varchar', length: 20, default: 'OPEN' }) status!: 'OPEN' | 'LOCKED';
+  @Column({ type: 'uuid', name: 'locked_by', nullable: true }) lockedBy?: string | null;
+  @Column({ type: 'timestamptz', name: 'locked_at', nullable: true }) lockedAt?: Date | null;
+  @Column({ type: 'uuid', name: 'reopened_by', nullable: true }) reopenedBy?: string | null;
+  @Column({ type: 'timestamptz', name: 'reopened_at', nullable: true }) reopenedAt?: Date | null;
+  @Column({ type: 'text', name: 'reopen_reason', nullable: true }) reopenReason?: string | null;
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' }) updatedAt!: Date;
+}
+
 @Entity({ name: 'leave_requests' })
 export class LeaveRequestEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;

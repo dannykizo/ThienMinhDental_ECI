@@ -66,6 +66,10 @@ export function LoadingState(): ReactNode {
 }
 
 const statusToneMap: Record<string, 'success' | 'warning' | 'danger'> = {
+  LOCKED: 'success',
+  REQUESTED: 'warning',
+  OPEN: 'warning',
+  CHECKED_IN: 'warning',
   APPROVED: 'success',
   COMPLETED: 'success',
   PUBLISHED: 'success',
@@ -84,6 +88,10 @@ const statusToneMap: Record<string, 'success' | 'warning' | 'danger'> = {
 };
 
 const statusLabelMap: Record<string, string> = {
+  LOCKED: 'Đã chốt',
+  REQUESTED: 'Chờ giải trình',
+  OPEN: 'Đang mở',
+  CHECKED_IN: 'Đã vào ca',
   APPROVED: 'Đã duyệt',
   COMPLETED: 'Hoàn thành',
   PUBLISHED: 'Đã đăng',

@@ -60,6 +60,22 @@ Không dùng `ABSENT` như một nút trong event flow. `ABSENT`, `LEAVE` và `B
 
 **Implementation status:** Backend đã có persistence, geofence/accuracy/mock-location validation và risk flags. Mobile Android xin permission khi người dùng bấm chấm công, lấy đúng một mẫu GPS, gửi device time/accuracy/mock-location signal và hiển thị trạng thái ngày từ Backend. Không theo dõi vị trí nền hoặc liên tục.
 
+## Admin Web + Mobile API — attendance explanation and period closing
+
+```text
+REQUESTED -> SUBMITTED -> APPROVED
+                       -> REJECTED
+```
+
+1. Admin filters the daily attendance view and sends a mandatory explanation request with a deadline.
+2. The employee response is accepted only while the request is `REQUESTED` and before its deadline.
+3. A GPS-risk response must include an image reference, capture time, latitude and longitude together. Partial evidence is rejected by Backend.
+4. Admin reviews a submitted explanation. A rejection requires a reason.
+5. Admin adjustments preserve old/new values, reason, actor and timestamp. No adjustment is accepted after the month is locked.
+6. Admin or Chief Accountant can lock a month after incomplete check-outs and open explanations are resolved. Only Chief Accountant can reopen it with a mandatory reason.
+
+**Web-first status:** Admin Web and Backend API are implemented. The employee response API is ready for Mobile integration; Mobile photo capture/upload and on-image timestamp/coordinate overlay are not yet implemented.
+
 ## Mobile + Admin Web — business trip
 
 Business trip state machine:

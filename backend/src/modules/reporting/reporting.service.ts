@@ -18,6 +18,17 @@ export interface MonthlyRow {
   adjustmentCount: number;
 }
 
+interface AttendancePeriodView {
+  id: string | null;
+  periodMonth: string;
+  status: 'OPEN' | 'LOCKED';
+  lockedAt: string | null;
+  lockedByName: string | null;
+  reopenedAt: string | null;
+  reopenedByName: string | null;
+  reopenReason: string | null;
+}
+
 @Injectable()
 export class ReportingService {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
@@ -129,6 +140,41 @@ export class ReportingService {
     sheet.autoFilter = { from: 'A1', to: 'I1' };
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
     return Buffer.from(await workbook.xlsx.writeBuffer());
+  }
+
+  async getPeriod(month: string): Promise<AttendancePeriodView> {
+    this.validateMonth(month);
+    const [period] = await this.dataSource.query<AttendancePeriodView[]>(`SELECT p.id,p.period_month::text AS "periodMonth",p.status,p.locked_at AS "lockedAt",COALESCE(locker.full_name,lu.email) AS "lockedByName",p.reopened_at AS "reopenedAt",COALESCE(reopener.full_name,ru.email) AS "reopenedByName",p.reopen_reason AS "reopenReason" FROM attendance_periods p LEFT JOIN users lu ON lu.id=p.locked_by LEFT JOIN employees locker ON locker.user_id=lu.id LEFT JOIN users ru ON ru.id=p.reopened_by LEFT JOIN employees reopener ON reopener.user_id=ru.id WHERE p.period_month=$1::date`, [`${month}-01`]);
+    return period ?? { id: null, periodMonth: `${month}-01`, status: 'OPEN', lockedAt: null, lockedByName: null, reopenedAt: null, reopenedByName: null, reopenReason: null };
+  }
+
+  async lockPeriod(user: AuthenticatedUserView, month: string, reason?: string): Promise<AttendancePeriodView> {
+    this.validateMonth(month);
+    const rows = await this.monthly(month);
+    if (rows.length === 0) throw new ConflictException({ code: 'REPORT_HAS_NO_DATA', message: 'Chưa có dữ liệu lịch làm việc để chốt kỳ công.' });
+    const incomplete = rows.filter((row) => row.status === 'INCOMPLETE').length;
+    const [openExplanations] = await this.dataSource.query<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM attendance_explanation_requests WHERE work_date >= $1::date AND work_date < ($1::date + INTERVAL '1 month') AND status IN ('REQUESTED','SUBMITTED')`, [`${month}-01`]);
+    if (incomplete > 0 || (openExplanations?.count ?? 0) > 0) {
+      throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: `Còn ${incomplete} ngày thiếu check-out và ${openExplanations?.count ?? 0} giải trình chưa hoàn tất.` });
+    }
+    await this.dataSource.transaction(async (manager) => {
+      const [current] = await manager.query<Array<{ id: string; status: string }>>('SELECT id,status FROM attendance_periods WHERE period_month=$1::date FOR UPDATE', [`${month}-01`]);
+      if (current?.status === 'LOCKED') throw new ConflictException({ code: 'ATTENDANCE_PERIOD_ALREADY_LOCKED', message: 'Kỳ công đã được chốt.' });
+      const [saved] = await manager.query<Array<{ id: string }>>(`INSERT INTO attendance_periods(period_month,status,locked_by,locked_at,reopened_by,reopened_at,reopen_reason) VALUES($1::date,'LOCKED',$2,now(),NULL,NULL,NULL) ON CONFLICT(period_month) DO UPDATE SET status='LOCKED',locked_by=$2,locked_at=now(),reopened_by=NULL,reopened_at=NULL,reopen_reason=NULL,updated_at=now() RETURNING id`, [`${month}-01`, user.id]);
+      await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,old_value,new_value,created_by) VALUES('ATTENDANCE_PERIOD',$1,'LOCK',$2::jsonb,$3::jsonb,$4)`, [saved.id, JSON.stringify({ status: current?.status ?? 'OPEN' }), JSON.stringify({ status: 'LOCKED', month, reason: reason?.trim() || null }), user.id]);
+    });
+    return this.getPeriod(month);
+  }
+
+  async reopenPeriod(user: AuthenticatedUserView, month: string, reason: string): Promise<AttendancePeriodView> {
+    this.validateMonth(month);
+    await this.dataSource.transaction(async (manager) => {
+      const [current] = await manager.query<Array<{ id: string; status: string }>>('SELECT id,status FROM attendance_periods WHERE period_month=$1::date FOR UPDATE', [`${month}-01`]);
+      if (!current || current.status !== 'LOCKED') throw new ConflictException({ code: 'ATTENDANCE_PERIOD_NOT_LOCKED', message: 'Kỳ công hiện không ở trạng thái đã chốt.' });
+      await manager.query(`UPDATE attendance_periods SET status='OPEN',reopened_by=$2,reopened_at=now(),reopen_reason=$3,updated_at=now() WHERE id=$1`, [current.id, user.id, reason.trim()]);
+      await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,old_value,new_value,created_by) VALUES('ATTENDANCE_PERIOD',$1,'REOPEN',$2::jsonb,$3::jsonb,$4)`, [current.id, JSON.stringify({ status: 'LOCKED' }), JSON.stringify({ status: 'OPEN', month, reason: reason.trim() }), user.id]);
+    });
+    return this.getPeriod(month);
   }
 
   private validateMonth(month: string): void {
