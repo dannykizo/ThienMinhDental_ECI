@@ -1,0 +1,38 @@
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+*.local
+
+# Flutter/Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+mobile/build/
+mobile/.metadata
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local infrastructure
+postgres-data/
+
+# Local dev launcher logs
+logs/
+
+# Local attendance evidence captured during development
+CHECK_IN_IMAGE/
+
+# GitNexus local index (generated, never architecture source-of-truth)
+.gitnexus/

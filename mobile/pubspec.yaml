@@ -1,0 +1,33 @@
+name: thien_minh_dental_workforce
+description: Employee attendance and internal work app for Thien Minh Dental HCMC.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_secure_storage: ^11.1.1
+  geolocator: ^14.0.3
+  http: ^1.6.0
+  intl: ^0.20.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/thien-minh-logo.png
+    - assets/brand/thien-minh-mark.png
+
+flutter_launcher_icons:
+  android: true
+  image_path: assets/brand/app-icon.png
+  adaptive_icon_background: "#351942"
+  adaptive_icon_foreground: assets/brand/thien-minh-mark.png

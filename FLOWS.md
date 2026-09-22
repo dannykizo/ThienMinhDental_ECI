@@ -1,0 +1,92 @@
+# Business and UI Flows
+
+Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-first MVP, trừ các giới hạn được ghi rõ. Mobile Android đã triển khai vertical slice đăng nhập và chấm công văn phòng; các flow mobile khác vẫn theo trạng thái ghi tại từng mục.
+
+## Shared attendance state
+
+Nguồn trạng thái nằm ở Backend; Web và Mobile chỉ hiển thị kết quả API.
+
+```text
+NOT_CHECKED_IN
+  -> CHECKED_IN
+  -> CHECKED_OUT
+
+Exceptional review flags (orthogonal):
+LATE | EARLY_LEAVE | OUTSIDE_GEOFENCE | LOW_ACCURACY | MOCK_LOCATION_SIGNAL
+```
+
+Không dùng `ABSENT` như một nút trong event flow. `ABSENT`, `LEAVE` và `BUSINESS_TRIP` là kết quả tổng hợp ngày sau khi đối chiếu lịch làm việc, đơn nghỉ và phiếu công tác.
+
+## Mobile — office attendance
+
+1. Nhân viên mở Home; App lấy trạng thái attendance hôm nay.
+2. Khi bấm Check-in/out, App xin quyền và lấy một GPS sample kèm accuracy.
+3. App gửi event, thời gian thiết bị, vị trí và device signals lên Backend.
+4. Backend dùng server time, office configuration và schedule để đánh giá.
+5. Mobile hiển thị một trong các UI state: `SUBMITTING`, `SUCCESS`, `REVIEW_REQUIRED`, `FAILED`.
+6. Không giữ foreground/background location sau khi request hoàn tất.
+
+**Implementation status:** Backend đã có persistence, geofence/accuracy/mock-location validation và risk flags. Mobile Android xin permission khi người dùng bấm chấm công, lấy đúng một mẫu GPS, gửi device time/accuracy/mock-location signal và hiển thị trạng thái ngày từ Backend. Không theo dõi vị trí nền hoặc liên tục.
+
+## Mobile + Admin Web — business trip
+
+Business trip state machine:
+
+```text
+DRAFT -> ASSIGNED -> IN_PROGRESS -> COMPLETED
+  |         |             |
+  +------> CANCELLED <-----+
+```
+
+1. Admin tạo phiếu với khách hàng/phòng khám, địa chỉ, thời gian, nội dung và thành viên.
+2. Khi `ASSIGNED`, nhân viên nhận thông báo và thấy phiếu trên Mobile.
+3. Thành viên bấm Bắt đầu công tác; Backend ghi location event và chuyển phần tham gia của nhân viên sang `IN_PROGRESS`.
+4. Khi kết thúc, nhân viên gửi location, ghi chú và ảnh nếu phiếu yêu cầu.
+5. Attendance daily projection nhận diện ngày đó là công tác, không tự tính vắng văn phòng.
+
+**Web-first status:** Admin Web đã tạo/giao/chuyển trạng thái phiếu; Backend kiểm tra thành viên khi nhận attendance event công tác và daily projection không tính sai thành vắng. Mobile UI, push và ảnh hiện trường chưa triển khai.
+
+## Mobile + Admin Web — leave request
+
+```text
+DRAFT -> SUBMITTED -> APPROVED
+                  -> REJECTED
+SUBMITTED/APPROVED -> CANCELLED (theo quyền và cutoff được duyệt sau)
+```
+
+1. Nhân viên chọn loại nghỉ, khoảng ngày và lý do.
+2. Backend kiểm tra trùng lịch và dữ liệu bắt buộc.
+3. Quản lý/Admin duyệt hoặc từ chối kèm ghi chú.
+4. Mobile nhận kết quả; daily attendance projection cập nhật ngày đã duyệt.
+
+**Web-first status:** Admin Web/API đã tạo đơn, kiểm tra trùng ngày và duyệt/từ chối một cấp. Mobile UI chưa triển khai. Leave balance/cutoff policy chưa được khách hàng chốt nên không được tự phát minh.
+
+## Admin Web — attendance adjustment
+
+1. Admin mở bản ghi bất thường.
+2. Nhập giá trị điều chỉnh và lý do bắt buộc.
+3. Backend kiểm tra quyền, lưu bản mới và audit record bất biến.
+4. Báo cáo dùng giá trị hiệu lực mới nhưng vẫn truy vết được giá trị cũ.
+
+**Web-first status:** Đã triển khai authorization, lý do bắt buộc, tự chụp giá trị cũ tại Backend, record audit bất biến và giá trị hiệu lực trong báo cáo.
+
+## Admin Web + Mobile — announcements
+
+```text
+DRAFT -> PUBLISHED -> DELIVERED -> READ
+                   -> DELIVERY_PARTIAL
+DRAFT -> CANCELLED
+```
+
+`DELIVERED` là trạng thái theo từng người nhận, không phải toàn bộ thông báo. Push notification chỉ là tín hiệu mở App; nội dung chính thức được tải từ Backend.
+
+**Web-first status:** Đã triển khai audience resolution, recipient delivery state, API danh sách cá nhân và read receipt. Push/FCM và Mobile UI chưa triển khai.
+
+## Admin Web — monthly report
+
+1. Admin chọn tháng và bộ lọc nhân viên/phòng ban.
+2. Backend tổng hợp schedule + attendance event + trip + approved leave + adjustments.
+3. Hệ thống trả summary và các ngày cần đối soát.
+4. Chỉ cho xuất bản công “final” khi không còn lỗi blocking; cảnh báo không blocking phải hiện trong file.
+
+**Web-first status:** Đã triển khai đối soát theo tháng, lọc nhân viên/phòng ban, cảnh báo và Excel. Export final bị chặn khi còn `INCOMPLETE`; template nâng cao theo biểu mẫu doanh nghiệp chưa được chốt.

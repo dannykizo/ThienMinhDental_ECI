@@ -1,0 +1,19 @@
+{
+  "name": "thien-minh-dental-workforce",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev:api": "corepack pnpm --dir backend dev",
+    "dev:web": "corepack pnpm --dir frontend dev",
+    "build": "corepack pnpm -r --if-present build",
+    "lint": "corepack pnpm -r --if-present lint",
+    "test": "corepack pnpm -r --if-present test",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "infra:up": "docker compose up -d postgres",
+    "infra:down": "docker compose down"
+  }
+}

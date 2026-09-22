@@ -1,0 +1,20 @@
+'use client';
+
+import { type FormEvent, useEffect, useState } from 'react';
+import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
+import { apiRequest } from '@/lib/auth-api';
+
+interface Department { id: string; name: string; }
+interface Announcement { id: string; title: string; body: string; status: string; audience_type: string; created_at: string; published_at?: string; recipientCount: number; readCount: number; }
+
+export default function AnnouncementsPage() {
+  const [items, setItems] = useState<Announcement[] | null>(null); const [departments, setDepartments] = useState<Department[]>([]); const [message, setMessage] = useState(''); const [error, setError] = useState('');
+  async function load(): Promise<void> { const [announcements, deps] = await Promise.all([apiRequest<Announcement[]>('/announcements'), apiRequest<Department[]>('/employees/lookups/departments')]); setItems(announcements); setDepartments(deps); }
+  useEffect(() => { Promise.all([apiRequest<Announcement[]>('/announcements'), apiRequest<Department[]>('/employees/lookups/departments')]).then(([announcements, deps]) => { setItems(announcements); setDepartments(deps); }).catch(() => setError('Không thể tải thông báo.')); }, []);
+  async function create(event: FormEvent<HTMLFormElement>): Promise<void> { event.preventDefault(); const form = new FormData(event.currentTarget); try { await apiRequest('/announcements', { method: 'POST', body: JSON.stringify({ title: form.get('title'), body: form.get('body'), audienceType: form.get('audienceType'), departmentId: form.get('departmentId') || undefined }) }); event.currentTarget.reset(); setMessage('Đã lưu thông báo nháp.'); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể tạo thông báo.'); } }
+  async function transition(id: string, status: string): Promise<void> { try { await apiRequest(`/announcements/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }); setMessage(status === 'PUBLISHED' ? 'Đã xuất bản và tạo danh sách người nhận.' : 'Đã hủy thông báo.'); await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể cập nhật.'); } }
+  return <div className="module-page"><PageHeader eyebrow="W7 / NỘI BỘ" title="Thông báo nội bộ" description="Nội dung chính thức lưu tại Backend; thống kê người nhận và đã đọc theo từng nhân viên." />{message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
+    <details className="editor-panel" open><summary>Soạn thông báo</summary><form className="form-grid" onSubmit={create}><label className="span-2">Tiêu đề<input name="title" required /></label><label>Đối tượng<select name="audienceType"><option value="ALL">Tất cả nhân viên</option><option value="DEPARTMENT">Theo phòng ban</option></select></label><label>Phòng ban<select name="departmentId"><option value="">Không chọn</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></label><label className="span-2">Nội dung<textarea name="body" rows={5} required /></label><button className="primary-button form-action">Lưu bản nháp</button></form></details>
+    {items === null ? <LoadingState /> : items.length === 0 ? <EmptyState title="Chưa có thông báo" description="Soạn thông báo đầu tiên bằng biểu mẫu phía trên." /> : <div className="card-list">{items.map((item) => <article className="list-card announcement-card" key={item.id}><div><p className="mono">{item.audience_type} · {formatDate(item.created_at)}</p><h3>{item.title}</h3><p>{item.body}</p><small>{item.recipientCount} người nhận · {item.readCount} đã đọc</small></div><div><StatusBadge value={item.status} />{item.status === 'DRAFT' && <><button className="table-action success-action" onClick={() => void transition(item.id, 'PUBLISHED')}>Xuất bản</button><button className="table-action danger-action" onClick={() => void transition(item.id, 'CANCELLED')}>Hủy</button></>}</div></article>)}</div>}
+  </div>;
+}
