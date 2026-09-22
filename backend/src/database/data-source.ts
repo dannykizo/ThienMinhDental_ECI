@@ -5,6 +5,7 @@ import { InitialFoundation1726358400000 } from './migrations/1726358400000-initi
 import { WebMvp1726444800000 } from './migrations/1726444800000-web-mvp.js';
 import { CustomerOrganizationRbac1790035200000 } from './migrations/1790035200000-customer-organization-rbac.js';
 import { AuthSessions1790121600000 } from './migrations/1790121600000-auth-sessions.js';
+import { ScheduleLocationAlignment1790208000000 } from './migrations/1790208000000-schedule-location-alignment.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -21,6 +22,7 @@ export const applicationDataSource = new DataSource({
     WebMvp1726444800000,
     CustomerOrganizationRbac1790035200000,
     AuthSessions1790121600000,
+    ScheduleLocationAlignment1790208000000,
   ],
   migrationsTableName: 'schema_migrations',
 });

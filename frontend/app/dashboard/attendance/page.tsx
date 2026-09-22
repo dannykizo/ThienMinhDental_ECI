@@ -20,6 +20,10 @@ interface DailyRow {
   checkedOutAt: string | null;
   riskFlags: string[];
   status: string;
+  workedMinutes: number;
+  overtimeMinutes: number;
+  requiredWorkMinutes: number;
+  isFullWorkday: boolean;
 }
 
 interface Adjustment {
@@ -198,6 +202,7 @@ export default function AttendancePage() {
                 <th>Giờ vào (Check-in)</th>
                 <th>Giờ ra (Check-out)</th>
                 <th>Trạng thái</th>
+                <th>Công / Tăng ca</th>
                 <th>Cảnh báo / Rủi ro</th>
               </tr>
             </thead>
@@ -234,6 +239,12 @@ export default function AttendancePage() {
                   </td>
                   <td>
                     <StatusBadge value={row.status} />
+                  </td>
+                  <td>
+                    <strong>{row.workedMinutes}/{row.requiredWorkMinutes} phút</strong>
+                    <div style={{ color: row.isFullWorkday ? 'var(--emerald-dark)' : 'var(--muted)', fontSize: '0.76rem' }}>
+                      {row.isFullWorkday ? 'Đủ công' : 'Chưa đủ công'}{row.overtimeMinutes > 0 ? ` · OT ${row.overtimeMinutes} phút` : ''}
+                    </div>
                   </td>
                   <td>
                     {row.riskFlags.length > 0 ? (

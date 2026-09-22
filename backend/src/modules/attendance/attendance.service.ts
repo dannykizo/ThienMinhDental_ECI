@@ -5,16 +5,27 @@ import { AttendanceAdjustmentEntity, AttendanceEventEntity, BusinessTripMemberEn
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { AttendanceRiskFlag } from './domain/attendance-risk-flag.js';
 import { OfficeGeofence } from './domain/office-geofence.js';
+import { calculateWorkSummary, evaluateScheduleRisk, localMinutes, type SchedulePolicyInput } from './domain/schedule-policy.js';
 import type { CreateAttendanceAdjustmentDto, RecordAttendanceEventDto } from './attendance.dto.js';
 
-interface ScheduleRow { start_time: string; end_time: string; late_tolerance_minutes: number; }
-interface AttendanceDailyRow { employeeId: string; status: string; }
+interface ScheduleRow extends SchedulePolicyInput { id: string; }
+interface AttendanceDailyRow {
+  employeeId: string;
+  checkedInAt: Date | null;
+  checkedOutAt: Date | null;
+  status: string;
+  [key: string]: unknown;
+}
 interface TodayAttendanceView {
   checkedInAt: Date | null;
   checkedOutAt: Date | null;
   date: string;
   riskFlags: string[];
   status: 'NOT_CHECKED_IN' | 'CHECKED_IN' | 'CHECKED_OUT';
+  workedMinutes: number;
+  overtimeMinutes: number;
+  requiredWorkMinutes: number;
+  isFullWorkday: boolean;
 }
 
 @Injectable()
@@ -23,7 +34,6 @@ export class AttendanceService {
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(AttendanceEventEntity) private readonly events: Repository<AttendanceEventEntity>,
     @InjectRepository(AttendanceAdjustmentEntity) private readonly adjustments: Repository<AttendanceAdjustmentEntity>,
-    @InjectRepository(OfficeLocationEntity) private readonly locations: Repository<OfficeLocationEntity>,
     @InjectRepository(BusinessTripMemberEntity) private readonly tripMembers: Repository<BusinessTripMemberEntity>,
   ) {}
 
@@ -43,7 +53,7 @@ export class AttendanceService {
     if (input.eventType === 'CHECK_IN' && last?.eventType === 'CHECK_IN') throw new ConflictException({ code: 'ALREADY_CHECKED_IN', message: 'Nhân viên đã check-in và chưa check-out.' });
     if (input.eventType === 'CHECK_OUT' && (!last || last.eventType !== 'CHECK_IN')) throw new ConflictException({ code: 'CHECK_IN_REQUIRED', message: 'Phải check-in trước khi check-out.' });
 
-    const riskFlags = await this.evaluateRisk(user.employeeId, input, now);
+    const risk = await this.evaluateRisk(user.employeeId, input, now);
     return this.events.save(this.events.create({
       employeeId: user.employeeId,
       eventType: input.eventType,
@@ -53,14 +63,19 @@ export class AttendanceService {
       latitude: input.latitude,
       longitude: input.longitude,
       accuracyMeters: input.accuracyMeters ?? null,
-      riskFlags,
+      riskFlags: risk.flags,
       businessTripId: input.businessTripId ?? null,
+      officeLocationId: risk.officeLocationId,
     }));
   }
 
-  async list(date?: string): Promise<AttendanceDailyRow[]> {
+  async list(date?: string): Promise<unknown[]> {
     const selected = date ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
-    return this.dataSource.query<AttendanceDailyRow[]>(`SELECT e.id AS "employeeId", e.employee_code AS "employeeCode", e.full_name AS "fullName", e.employee_type AS "employeeType", MIN(a.server_time) FILTER (WHERE a.event_type='CHECK_IN') AS "checkedInAt", MAX(a.server_time) FILTER (WHERE a.event_type='CHECK_OUT') AS "checkedOutAt", COALESCE(array_remove(array_agg(DISTINCT flag), NULL), '{}') AS "riskFlags", CASE WHEN COUNT(a.id) FILTER (WHERE a.event_type='CHECK_OUT') > 0 THEN 'CHECKED_OUT' WHEN COUNT(a.id) FILTER (WHERE a.event_type='CHECK_IN') > 0 THEN 'CHECKED_IN' ELSE 'NOT_CHECKED_IN' END AS status FROM employees e LEFT JOIN attendance_events a ON a.employee_id=e.id AND (a.server_time AT TIME ZONE 'Asia/Bangkok')::date=$1::date LEFT JOIN LATERAL unnest(a.risk_flags) flag ON true WHERE e.is_active=true GROUP BY e.id ORDER BY e.full_name`, [selected]);
+    const rows = await this.dataSource.query<AttendanceDailyRow[]>(`SELECT e.id AS "employeeId", e.employee_code AS "employeeCode", e.full_name AS "fullName", e.employee_type AS "employeeType", MIN(a.server_time) FILTER (WHERE a.event_type='CHECK_IN') AS "checkedInAt", MAX(a.server_time) FILTER (WHERE a.event_type='CHECK_OUT') AS "checkedOutAt", COALESCE(array_remove(array_agg(DISTINCT flag), NULL), '{}') AS "riskFlags", CASE WHEN COUNT(a.id) FILTER (WHERE a.event_type='CHECK_OUT') > 0 THEN 'CHECKED_OUT' WHEN COUNT(a.id) FILTER (WHERE a.event_type='CHECK_IN') > 0 THEN 'CHECKED_IN' ELSE 'NOT_CHECKED_IN' END AS status FROM employees e LEFT JOIN attendance_events a ON a.employee_id=e.id AND (a.server_time AT TIME ZONE 'Asia/Bangkok')::date=$1::date LEFT JOIN LATERAL unnest(a.risk_flags) flag ON true WHERE e.is_active=true GROUP BY e.id ORDER BY e.full_name`, [selected]);
+    return Promise.all(rows.map(async (row) => ({
+      ...row,
+      ...calculateWorkSummary(row.checkedInAt, row.checkedOutAt, await this.resolveSchedule(row.employeeId, selected)),
+    })));
   }
 
   async getToday(user: AuthenticatedUserView): Promise<TodayAttendanceView> {
@@ -74,12 +89,14 @@ export class AttendanceService {
     const checkedInAt = events.find((event) => event.eventType === 'CHECK_IN')?.serverTime ?? null;
     const checkedOutAt = events.findLast((event) => event.eventType === 'CHECK_OUT')?.serverTime ?? null;
     const status = checkedOutAt ? 'CHECKED_OUT' : checkedInAt ? 'CHECKED_IN' : 'NOT_CHECKED_IN';
+    const date = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     return {
       checkedInAt,
       checkedOutAt,
-      date: now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }),
+      date,
       riskFlags: [...new Set(events.flatMap((event) => event.riskFlags))],
       status,
+      ...calculateWorkSummary(checkedInAt, checkedOutAt, await this.resolveSchedule(user.employeeId, date)),
     };
   }
 
@@ -91,26 +108,65 @@ export class AttendanceService {
 
   listAdjustments(): Promise<AttendanceAdjustmentEntity[]> { return this.adjustments.find({ order: { createdAt: 'DESC' }, take: 100 }); }
 
-  private async evaluateRisk(employeeId: string, input: RecordAttendanceEventDto, now: Date): Promise<string[]> {
+  private async evaluateRisk(employeeId: string, input: RecordAttendanceEventDto, now: Date): Promise<{ flags: string[]; officeLocationId: string | null }> {
     const flags: string[] = [];
+    let officeLocationId: string | null = null;
     if (input.mockLocationSignal) flags.push(AttendanceRiskFlag.MockLocationSignal);
     if (input.attendanceType === 'OFFICE') {
-      const location = await this.locations.findOne({ where: { isActive: true }, order: { name: 'ASC' } });
-      if (!location) throw new NotFoundException({ code: 'OFFICE_LOCATION_NOT_CONFIGURED', message: 'Chưa cấu hình vị trí văn phòng.' });
-      const geofence = new OfficeGeofence({ latitude: location.latitude, longitude: location.longitude }, location.radiusMeters);
-      if (!geofence.contains({ latitude: input.latitude!, longitude: input.longitude! })) flags.push(AttendanceRiskFlag.OutsideGeofence);
-      if (input.accuracyMeters !== undefined && input.accuracyMeters > location.accuracyThresholdMeters) flags.push(AttendanceRiskFlag.LowAccuracy);
+      const date = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+      const locations = await this.dataSource.query<OfficeLocationEntity[]>(
+        `SELECT id, name, address, latitude, longitude, radius_meters AS "radiusMeters",
+          accuracy_threshold_meters AS "accuracyThresholdMeters", branch_id AS "branchId",
+          location_type AS "locationType", is_active AS "isActive"
+         FROM office_locations l
+         WHERE l.is_active=true AND (l.branch_id IS NULL OR l.branch_id IN (
+           SELECT a.branch_id FROM employee_organization_assignments a
+           WHERE a.employee_id=$1 AND a.effective_from <= $2::date
+             AND (a.effective_to IS NULL OR a.effective_to >= $2::date)
+         ))`,
+        [employeeId, date],
+      );
+      const point = { latitude: input.latitude!, longitude: input.longitude! };
+      const location = locations
+        .map((candidate) => ({ candidate, geofence: new OfficeGeofence({ latitude: candidate.latitude, longitude: candidate.longitude }, candidate.radiusMeters) }))
+        .sort((a, b) => a.geofence.distanceFromCenter(point) - b.geofence.distanceFromCenter(point))[0];
+      if (!location) throw new NotFoundException({ code: 'OFFICE_LOCATION_NOT_CONFIGURED', message: 'Chưa cấu hình vị trí làm việc cho chi nhánh của nhân viên.' });
+      officeLocationId = location.candidate.id;
+      if (!location.geofence.contains(point)) flags.push(AttendanceRiskFlag.OutsideGeofence);
+      if (input.accuracyMeters !== undefined && input.accuracyMeters > location.candidate.accuracyThresholdMeters) flags.push(AttendanceRiskFlag.LowAccuracy);
     }
-    const rows = await this.dataSource.query<ScheduleRow[]>(`SELECT ws.start_time, ws.end_time, ws.late_tolerance_minutes FROM employee_schedules es JOIN work_schedules ws ON ws.id=es.schedule_id WHERE es.employee_id=$1 AND es.effective_from <= $2::date AND (es.effective_to IS NULL OR es.effective_to >= $2::date) AND ws.is_active=true LIMIT 1`, [employeeId, now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })]);
-    const schedule = rows[0];
-    if (schedule) {
-      const localMinutes = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false }).format(now).split(':')[0]) * 60 + Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false }).format(now).split(':')[1]);
-      const [startHour, startMinute] = schedule.start_time.split(':').map(Number);
-      const [endHour, endMinute] = schedule.end_time.split(':').map(Number);
-      if (input.eventType === 'CHECK_IN' && localMinutes > startHour * 60 + startMinute + schedule.late_tolerance_minutes) flags.push(AttendanceRiskFlag.Late);
-      if (input.eventType === 'CHECK_OUT' && localMinutes < endHour * 60 + endMinute) flags.push(AttendanceRiskFlag.EarlyLeave);
-    }
-    return flags;
+    const schedule = await this.resolveSchedule(employeeId, now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }));
+    if (schedule) flags.push(...evaluateScheduleRisk(input.eventType, localMinutes(now), schedule));
+    return { flags, officeLocationId };
+  }
+
+  private async resolveSchedule(employeeId: string, date: string): Promise<ScheduleRow | null> {
+    const [schedule] = await this.dataSource.query<ScheduleRow[]>(
+      `WITH org AS (
+         SELECT branch_id, department_id FROM employee_organization_assignments
+         WHERE employee_id=$1 AND effective_from <= $2::date
+           AND (effective_to IS NULL OR effective_to >= $2::date)
+         ORDER BY is_primary DESC, effective_from DESC LIMIT 1
+       ), candidates AS (
+         SELECT es.schedule_id, es.effective_from, 1 AS priority
+         FROM employee_schedules es
+         WHERE es.employee_id=$1 AND es.effective_from <= $2::date
+           AND (es.effective_to IS NULL OR es.effective_to >= $2::date)
+         UNION ALL
+         SELECT ds.schedule_id, ds.effective_from, 2 AS priority
+         FROM department_schedules ds JOIN org o ON o.branch_id=ds.branch_id AND o.department_id=ds.department_id
+         WHERE ds.effective_from <= $2::date AND (ds.effective_to IS NULL OR ds.effective_to >= $2::date)
+       )
+       SELECT ws.id, ws.start_time AS "startTime", ws.end_time AS "endTime",
+         ws.late_tolerance_minutes AS "lateToleranceMinutes",
+         ws.early_leave_tolerance_minutes AS "earlyLeaveToleranceMinutes",
+         ws.required_work_minutes AS "requiredWorkMinutes"
+       FROM candidates c JOIN work_schedules ws ON ws.id=c.schedule_id
+       WHERE ws.is_active=true AND extract(isodow from $2::date)::int=ANY(ws.weekdays)
+       ORDER BY c.priority, c.effective_from DESC LIMIT 1`,
+      [employeeId, date],
+    );
+    return schedule ?? null;
   }
 
   private dayRange(date: Date): [Date, Date] {
@@ -138,7 +194,7 @@ export class AttendanceService {
     );
     if (latest) return latest.value;
     if (fieldName === 'DAY_STATUS') {
-      const rows = await this.list(workDate);
+      const rows = await this.list(workDate) as AttendanceDailyRow[];
       return rows.find((row) => row.employeeId === employeeId)?.status ?? null;
     }
     const eventType = fieldName === 'CHECK_IN_TIME' ? 'CHECK_IN' : 'CHECK_OUT';

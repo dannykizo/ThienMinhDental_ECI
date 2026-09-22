@@ -51,11 +51,29 @@ export class ReportingService {
       SELECT $1::date AS month_start, LEAST(($1::date + INTERVAL '1 month - 1 day')::date, (now() AT TIME ZONE 'Asia/Bangkok')::date) AS month_end
     ), scheduled AS (
       SELECT e.id employee_id, e.employee_code, e.full_name, d.name department_name, day::date work_date
-      FROM employees e LEFT JOIN departments d ON d.id=e.department_id
-      JOIN employee_schedules es ON es.employee_id=e.id
-      JOIN work_schedules ws ON ws.id=es.schedule_id AND ws.is_active=true
+      FROM employees e
+      LEFT JOIN departments d ON d.id=e.department_id
       CROSS JOIN bounds b CROSS JOIN LATERAL generate_series(b.month_start,b.month_end,'1 day') day
-      WHERE e.is_active=true AND es.effective_from<=day::date AND (es.effective_to IS NULL OR es.effective_to>=day::date) AND extract(isodow from day)::int=ANY(ws.weekdays)
+      JOIN LATERAL (
+        SELECT ws.id
+        FROM (
+          SELECT es.schedule_id, es.effective_from, 1 AS priority
+          FROM employee_schedules es
+          WHERE es.employee_id=e.id AND es.effective_from<=day::date
+            AND (es.effective_to IS NULL OR es.effective_to>=day::date)
+          UNION ALL
+          SELECT ds.schedule_id, ds.effective_from, 2 AS priority
+          FROM employee_organization_assignments oa
+          JOIN department_schedules ds ON ds.branch_id=oa.branch_id AND ds.department_id=oa.department_id
+          WHERE oa.employee_id=e.id AND oa.effective_from<=day::date
+            AND (oa.effective_to IS NULL OR oa.effective_to>=day::date)
+            AND ds.effective_from<=day::date AND (ds.effective_to IS NULL OR ds.effective_to>=day::date)
+        ) candidate
+        JOIN work_schedules ws ON ws.id=candidate.schedule_id
+        WHERE ws.is_active=true AND extract(isodow from day)::int=ANY(ws.weekdays)
+        ORDER BY candidate.priority, candidate.effective_from DESC LIMIT 1
+      ) selected_schedule ON true
+      WHERE e.is_active=true
         AND ($2::uuid IS NULL OR e.id=$2::uuid) AND ($3::uuid IS NULL OR e.department_id=$3::uuid)
     ), event_rollup AS (
       SELECT employee_id,(server_time AT TIME ZONE 'Asia/Bangkok')::date work_date,

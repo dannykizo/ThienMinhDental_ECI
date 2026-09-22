@@ -48,6 +48,14 @@
 - Email cảnh báo dùng SMTP qua port `LoginAlertSender`; secret chỉ đến từ environment. Thiếu cấu hình được lưu là `SKIPPED`, lỗi giao nhận là `FAILED`, không chặn nhân viên đăng nhập.
 - Admin Web có trang lịch sử phiên và quyền thu hồi; Mobile gọi logout Backend trước khi xóa token cục bộ.
 
+### Customer alignment C3 — schedule, work duration and geofence
+
+- Migration `1790208000000-schedule-location-alignment` bổ sung `department_schedules`, lịch sử cấu hình, liên kết chi nhánh/loại cho vị trí và `office_location_id` trên attendance event.
+- Lịch theo phòng ban là mặc định; assignment theo nhân viên là override có độ ưu tiên cao hơn. Assignment cũ được đóng khoảng hiệu lực, không hard-delete.
+- Quy tắc 3 phút đi muộn, 480 phút đủ công, về sớm và OT nằm trong Backend. Web/Mobile chỉ hiển thị kết quả `workedMinutes`, `requiredWorkMinutes`, `isFullWorkday` và `overtimeMinutes`.
+- Geofence được chọn theo chi nhánh hiện hành của nhân viên và khoảng cách gần nhất. Database cùng DTO cùng giới hạn bán kính/ngưỡng accuracy tối đa 50 m.
+- Chỉ `ADMIN` được tạo/sửa lịch, vị trí và xem `configuration_audit_logs`. Không seed tọa độ HN hoặc địa điểm ngoài văn phòng khi chưa có dữ liệu chính thức.
+
 ## Repository layout
 
 ```text

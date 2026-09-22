@@ -14,7 +14,9 @@ export class WorkScheduleEntity {
   @Column({ type: 'int', array: true }) weekdays!: number[];
   @Column({ type: 'time', name: 'start_time' }) startTime!: string;
   @Column({ type: 'time', name: 'end_time' }) endTime!: string;
-  @Column({ type: 'int', name: 'late_tolerance_minutes', default: 0 }) lateToleranceMinutes!: number;
+  @Column({ type: 'int', name: 'late_tolerance_minutes', default: 3 }) lateToleranceMinutes!: number;
+  @Column({ type: 'int', name: 'early_leave_tolerance_minutes', default: 0 }) earlyLeaveToleranceMinutes!: number;
+  @Column({ type: 'int', name: 'required_work_minutes', default: 480 }) requiredWorkMinutes!: number;
   @Column({ type: 'boolean', name: 'is_active', default: true }) isActive!: boolean;
 }
 
@@ -22,6 +24,16 @@ export class WorkScheduleEntity {
 export class EmployeeScheduleEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'uuid', name: 'employee_id' }) employeeId!: string;
+  @Column({ type: 'uuid', name: 'schedule_id' }) scheduleId!: string;
+  @Column({ type: 'date', name: 'effective_from' }) effectiveFrom!: string;
+  @Column({ type: 'date', name: 'effective_to', nullable: true }) effectiveTo?: string | null;
+}
+
+@Entity({ name: 'department_schedules' })
+export class DepartmentScheduleEntity {
+  @PrimaryGeneratedColumn('uuid') id!: string;
+  @Column({ type: 'uuid', name: 'branch_id' }) branchId!: string;
+  @Column({ type: 'uuid', name: 'department_id' }) departmentId!: string;
   @Column({ type: 'uuid', name: 'schedule_id' }) scheduleId!: string;
   @Column({ type: 'date', name: 'effective_from' }) effectiveFrom!: string;
   @Column({ type: 'date', name: 'effective_to', nullable: true }) effectiveTo?: string | null;
@@ -35,8 +47,12 @@ export class OfficeLocationEntity {
   @Column({ type: 'double precision' }) latitude!: number;
   @Column({ type: 'double precision' }) longitude!: number;
   @Column({ type: 'int', name: 'radius_meters' }) radiusMeters!: number;
-  @Column({ type: 'int', name: 'accuracy_threshold_meters', default: 100 }) accuracyThresholdMeters!: number;
+  @Column({ type: 'int', name: 'accuracy_threshold_meters', default: 50 }) accuracyThresholdMeters!: number;
+  @Column({ type: 'uuid', name: 'branch_id', nullable: true }) branchId!: string | null;
+  @Column({ type: 'varchar', length: 30, name: 'location_type', default: 'OFFICE' }) locationType!: 'OFFICE' | 'EXTERNAL_WORKPLACE';
   @Column({ type: 'boolean', name: 'is_active', default: true }) isActive!: boolean;
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' }) updatedAt!: Date;
 }
 
 @Entity({ name: 'customers' })
@@ -88,6 +104,19 @@ export class AttendanceEventEntity {
   @Column({ type: 'double precision', name: 'accuracy_meters', nullable: true }) accuracyMeters?: number | null;
   @Column({ type: 'text', array: true, name: 'risk_flags', default: '{}' }) riskFlags!: string[];
   @Column({ type: 'uuid', name: 'business_trip_id', nullable: true }) businessTripId?: string | null;
+  @Column({ type: 'uuid', name: 'office_location_id', nullable: true }) officeLocationId?: string | null;
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
+}
+
+@Entity({ name: 'configuration_audit_logs' })
+export class ConfigurationAuditLogEntity {
+  @PrimaryGeneratedColumn('uuid') id!: string;
+  @Column({ type: 'varchar', length: 40, name: 'resource_type' }) resourceType!: string;
+  @Column({ type: 'uuid', name: 'resource_id' }) resourceId!: string;
+  @Column({ type: 'varchar', length: 40 }) action!: string;
+  @Column({ type: 'jsonb', name: 'old_value', nullable: true }) oldValue!: unknown;
+  @Column({ type: 'jsonb', name: 'new_value', nullable: true }) newValue!: unknown;
+  @Column({ type: 'uuid', name: 'created_by' }) createdBy!: string;
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
 }
 

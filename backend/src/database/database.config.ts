@@ -22,6 +22,8 @@ import {
   EmployeeScheduleEntity,
   LeaveRequestEntity,
   OfficeLocationEntity,
+  ConfigurationAuditLogEntity,
+  DepartmentScheduleEntity,
   WorkScheduleEntity,
 } from './entities/workforce.entity.js';
 
@@ -38,7 +40,9 @@ export const databaseEntities = [
   UserBranchScopeEntity,
   WorkScheduleEntity,
   EmployeeScheduleEntity,
+  DepartmentScheduleEntity,
   OfficeLocationEntity,
+  ConfigurationAuditLogEntity,
   CustomerEntity,
   BusinessTripEntity,
   BusinessTripMemberEntity,

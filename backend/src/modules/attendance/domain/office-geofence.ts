@@ -19,7 +19,7 @@ export class OfficeGeofence {
     return this.distanceFromCenter(point) <= this.radiusMeters;
   }
 
-  private distanceFromCenter(point: GeoPoint): number {
+  distanceFromCenter(point: GeoPoint): number {
     const latitudeDelta = toRadians(point.latitude - this.center.latitude);
     const longitudeDelta = toRadians(point.longitude - this.center.longitude);
     const centerLatitude = toRadians(this.center.latitude);
@@ -41,4 +41,3 @@ export class OfficeGeofence {
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
-

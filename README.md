@@ -16,6 +16,8 @@ Customer alignment C1 đã bổ sung cơ cấu HCM/HN, một nhân viên thuộc
 
 Customer alignment C2 đã bổ sung phiên đăng nhập 30 ngày, một tài khoản chỉ hoạt động trên một thiết bị, lịch sử đăng nhập/đăng xuất, Admin thu hồi thiết bị và cảnh báo email đăng nhập qua SMTP. Cần cấu hình `SMTP_*` và `ADMIN_LOGIN_ALERT_EMAILS` để gửi email thật; nếu chưa cấu hình, Admin Web hiển thị rõ trạng thái chưa gửi.
 
+Customer alignment C3 đã bổ sung lịch mặc định theo chi nhánh/phòng ban, ngoại lệ lịch theo nhân viên, quy tắc đủ công 8 giờ/đi muộn sau 3 phút/về sớm/OT, hai loại vị trí văn phòng và địa điểm bên ngoài, giới hạn GPS 50 m và lịch sử cấu hình chỉ Admin xem. Tọa độ HN và địa điểm bên ngoài không được seed giả; Admin nhập khi có thông tin chính thức.
+
 ## Đọc trước khi code
 
 1. `AGENTS.md` — quyền hạn và ranh giới của Codex, OpenCode, Antigravity.
@@ -86,7 +88,7 @@ Seed sẽ từ chối chạy ngoài `NODE_ENV=development`. Credential demo khô
 - `/api/business-trips`, `/api/leave-requests`, `/api/announcements` — công tác, nghỉ phép và truyền thông nội bộ.
 - `/api/reporting`, `/api/kpi` — dashboard, đối soát tháng, Excel và KPI Lite không chấm điểm.
 
-Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC; migration `1790121600000-auth-sessions` bổ sung phiên và lịch sử thiết bị. Mọi migration chạy với `synchronize=false`.
+Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC; migration `1790121600000-auth-sessions` bổ sung phiên và lịch sử thiết bị; migration `1790208000000-schedule-location-alignment` bổ sung lịch theo phòng ban, giới hạn vị trí và audit cấu hình. Mọi migration chạy với `synchronize=false`.
 
 Android platform shell đã được tạo trong `mobile/`. Xem hướng dẫn chạy USB/Wi-Fi debugging và vị trí APK tại `mobile/README.md`.
 

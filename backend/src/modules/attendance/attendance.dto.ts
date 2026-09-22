@@ -1,8 +1,8 @@
 import { IsBoolean, IsDateString, IsDefined, IsIn, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Max, Min, MinLength } from 'class-validator';
 
 export class RecordAttendanceEventDto {
-  @IsIn(['CHECK_IN', 'CHECK_OUT']) eventType!: string;
-  @IsIn(['OFFICE', 'BUSINESS_TRIP']) attendanceType!: string;
+  @IsIn(['CHECK_IN', 'CHECK_OUT']) eventType!: 'CHECK_IN' | 'CHECK_OUT';
+  @IsIn(['OFFICE', 'BUSINESS_TRIP']) attendanceType!: 'OFFICE' | 'BUSINESS_TRIP';
   @IsOptional() @IsDateString() deviceTime?: string;
   @IsOptional() @IsLatitude() latitude?: number;
   @IsOptional() @IsLongitude() longitude?: number;
