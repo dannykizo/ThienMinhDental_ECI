@@ -17,6 +17,23 @@ interface SessionResponse {
   user: SessionUser;
 }
 
+export interface LoginSessionAudit {
+  id: string;
+  accountEmail: string;
+  displayName: string;
+  deviceName: string;
+  clientType: 'WEB' | 'MOBILE';
+  ipAddress: string | null;
+  signedInAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokeReason: string | null;
+  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+  loginAlertStatus: 'PENDING' | 'SENT' | 'SKIPPED' | 'FAILED';
+  loginAlertNote: string | null;
+  isCurrent: boolean;
+}
+
 interface ErrorResponse {
   code?: string;
   message?: string | string[];
@@ -64,13 +81,35 @@ export async function login(
   email: string,
   password: string,
 ): Promise<SessionUser> {
+  const deviceStorageKey = 'thien-minh-web-device-id';
+  let deviceId = window.localStorage.getItem(deviceStorageKey);
+  if (!deviceId) {
+    deviceId = window.crypto.randomUUID();
+    window.localStorage.setItem(deviceStorageKey, deviceId);
+  }
   const response = await fetch(`${apiUrl}/auth/login`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      clientType: 'WEB',
+      deviceId,
+      deviceName: `${window.navigator.platform || 'Máy tính'} · Trình duyệt web`,
+    }),
   });
   return (await parseResponse<SessionResponse>(response)).user;
+}
+
+export function getLoginSessions(): Promise<LoginSessionAudit[]> {
+  return apiRequest<LoginSessionAudit[]>('/auth/admin/sessions');
+}
+
+export async function revokeLoginSession(sessionId: string): Promise<void> {
+  await apiRequest<void>(`/auth/admin/sessions/${sessionId}/revoke`, {
+    method: 'POST',
+  });
 }
 
 export async function getAdminSession(): Promise<SessionUser> {

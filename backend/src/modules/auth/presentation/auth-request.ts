@@ -3,4 +3,5 @@ import type { AuthenticatedUserView } from '../application/auth.service.js';
 
 export interface AuthenticatedRequest extends Request {
   user: AuthenticatedUserView;
+  authSessionId: string;
 }

@@ -1,3 +1,6 @@
+import 'dart:io';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -16,6 +19,7 @@ class SessionController extends ChangeNotifier {
       : _storage = storage;
 
   static const String _tokenKey = 'access_token';
+  static const String _deviceIdKey = 'device_id';
   final ApiClient api;
   final FlutterSecureStorage _storage;
   SessionUser? user;
@@ -33,17 +37,41 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> login(String email, String password) async {
-    final LoginSession result = await api.login(email, password);
+    final String deviceId = await _getOrCreateDeviceId();
+    final LoginSession result = await api.login(
+      email,
+      password,
+      deviceId: deviceId,
+      deviceName: '${Platform.operatingSystem} · Thiên Minh Workforce',
+    );
     user = result.user;
     await _storage.write(key: _tokenKey, value: result.accessToken);
     notifyListeners();
   }
 
   Future<void> logout() async {
+    try {
+      await api.logout();
+    } on Object {
+      // Local logout must still succeed when the device is offline.
+    }
     user = null;
     api.accessToken = null;
     await _storage.delete(key: _tokenKey);
     notifyListeners();
+  }
+
+  Future<String> _getOrCreateDeviceId() async {
+    final String? existing = await _storage.read(key: _deviceIdKey);
+    if (existing != null && existing.length >= 8) return existing;
+
+    final Random random = Random.secure();
+    final String generated = List<String>.generate(
+      32,
+      (_) => random.nextInt(16).toRadixString(16),
+    ).join();
+    await _storage.write(key: _deviceIdKey, value: generated);
+    return generated;
   }
 }
 

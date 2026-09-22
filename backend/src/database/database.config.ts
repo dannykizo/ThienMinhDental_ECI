@@ -5,6 +5,7 @@ import { PositionEntity } from './entities/position.entity.js';
 import { RoleEntity } from './entities/role.entity.js';
 import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserEntity } from './entities/user.entity.js';
+import { AuthSessionEntity } from './entities/auth-session.entity.js';
 import {
   BranchEntity,
   EmployeeOrganizationAssignmentEntity,
@@ -26,6 +27,7 @@ import {
 
 export const databaseEntities = [
   UserEntity,
+  AuthSessionEntity,
   EmployeeEntity,
   DepartmentEntity,
   PositionEntity,

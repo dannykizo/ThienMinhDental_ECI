@@ -1,4 +1,4 @@
-import { IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsString()
@@ -10,4 +10,17 @@ export class LoginDto {
   @MinLength(8)
   @MaxLength(128)
   password!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  deviceId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  deviceName!: string;
+
+  @IsIn(['WEB', 'MOBILE'])
+  clientType!: 'WEB' | 'MOBILE';
 }

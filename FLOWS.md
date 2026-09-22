@@ -12,6 +12,17 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 
 **Implementation status:** Migration `1790035200000-customer-organization-rbac` đã bổ sung HCM/HN, phân công tổ chức nhiều-nhiều, phạm vi chi nhánh và role Kế toán trưởng/Quản lý khu vực. Danh sách nhân viên và Dashboard đã áp dụng scope; các module nghiệp vụ còn lại chỉ cấp quyền mới khi truy vấn theo scope tương ứng được triển khai.
 
+## Authentication session and device
+
+1. Web hoặc Mobile gửi định danh thiết bị ổn định cùng thông tin đăng nhập.
+2. Backend xác thực mật khẩu, thu hồi phiên đang hoạt động trước đó của tài khoản và tạo một phiên mới có hạn 30 ngày.
+3. JWT chứa mã phiên; mọi request được bảo vệ phải kiểm tra đồng thời chữ ký token, tài khoản đang hoạt động và phiên chưa hết hạn/chưa bị thu hồi.
+4. Đăng xuất, Admin thu hồi phiên, đăng nhập trên thiết bị mới hoặc khóa tài khoản đều làm thiết bị cũ mất quyền truy cập.
+5. Backend gửi email cảnh báo tới danh sách Admin cấu hình qua SMTP. Nếu SMTP chưa cấu hình hoặc gửi lỗi, đăng nhập vẫn thành công và trạng thái được lưu trong lịch sử để Admin nhìn thấy.
+6. Chỉ Admin được xem toàn bộ lịch sử đăng nhập/đăng xuất và chủ động đăng xuất thiết bị.
+
+**Implementation status:** C2 sử dụng bảng `auth_sessions`, endpoint quản trị `/auth/admin/sessions` và trang `Tài khoản & thiết bị`. Không triển khai tự đăng ký hoặc tự khôi phục mật khẩu vì khách hàng xác nhận tài khoản do Admin cung cấp.
+
 ## Shared attendance state
 
 Nguồn trạng thái nằm ở Backend; Web và Mobile chỉ hiển thị kết quả API.

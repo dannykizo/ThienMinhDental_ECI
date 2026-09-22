@@ -81,10 +81,21 @@ class TodayAttendance {
 class ApiClient {
   String? accessToken;
 
-  Future<LoginSession> login(String email, String password) async {
+  Future<LoginSession> login(
+    String email,
+    String password, {
+    required String deviceId,
+    required String deviceName,
+  }) async {
     final Map<String, dynamic> json = await _request(
       '/auth/login',
-      body: <String, dynamic>{'email': email, 'password': password},
+      body: <String, dynamic>{
+        'email': email,
+        'password': password,
+        'clientType': 'MOBILE',
+        'deviceId': deviceId,
+        'deviceName': deviceName,
+      },
       method: 'POST',
     );
     final String? token = json['accessToken'] as String?;
@@ -97,6 +108,10 @@ class ApiClient {
       accessToken: token,
       user: SessionUser.fromJson(json['user'] as Map<String, dynamic>),
     );
+  }
+
+  Future<void> logout() async {
+    await _request('/auth/logout', method: 'POST');
   }
 
   Future<SessionUser> me() async {

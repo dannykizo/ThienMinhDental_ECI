@@ -39,6 +39,8 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Mọi sửa đổi thủ công với bảng công phải có người sửa, thời gian, lý do, giá trị cũ và mới.
 - Một nhân viên có thể thuộc nhiều phòng ban nhưng phải có đúng một phân công tổ chức chính tại một thời điểm.
 - Nhân viên nghỉ việc được khóa hồ sơ/tài khoản; không xóa vật lý mã nhân viên hoặc lịch sử nghiệp vụ.
+- Phiên đăng nhập có hiệu lực tối đa 30 ngày. Mỗi tài khoản chỉ có một thiết bị hoạt động; đăng nhập mới thu hồi phiên cũ và lịch sử đăng nhập/đăng xuất được giữ để Admin kiểm tra.
+- Mỗi lần nhân sự đăng nhập phải tạo cảnh báo email tới địa chỉ Admin đã cấu hình. Lỗi gửi email không được chặn đăng nhập nhưng phải hiển thị trạng thái giao nhận trong Admin Web.
 
 ## Explicit non-goals for MVP
 

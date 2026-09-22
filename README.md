@@ -14,6 +14,8 @@ Các milestone **W1–W9 của Web-first MVP** đã được triển khai cho Ba
 
 Customer alignment C1 đã bổ sung cơ cấu HCM/HN, một nhân viên thuộc nhiều phòng ban, phân công chính có lịch sử, vai trò Kế toán trưởng và Quản lý khu vực theo phạm vi chi nhánh. Admin Web quản lý các trường này tại module Nhân viên.
 
+Customer alignment C2 đã bổ sung phiên đăng nhập 30 ngày, một tài khoản chỉ hoạt động trên một thiết bị, lịch sử đăng nhập/đăng xuất, Admin thu hồi thiết bị và cảnh báo email đăng nhập qua SMTP. Cần cấu hình `SMTP_*` và `ADMIN_LOGIN_ALERT_EMAILS` để gửi email thật; nếu chưa cấu hình, Admin Web hiển thị rõ trạng thái chưa gửi.
+
 ## Đọc trước khi code
 
 1. `AGENTS.md` — quyền hạn và ranh giới của Codex, OpenCode, Antigravity.
@@ -76,13 +78,15 @@ Seed sẽ từ chối chạy ngoài `NODE_ENV=development`. Credential demo khô
 - `POST /api/auth/logout` — xóa cookie phiên.
 - `GET /api/auth/me` — thông tin người dùng hiện tại, yêu cầu JWT.
 - `GET /api/auth/admin-session` — phiên hợp lệ cho Admin Web, yêu cầu role `ADMIN` hoặc `MANAGER`.
+- `GET /api/auth/admin/sessions` — lịch sử đăng nhập/đăng xuất, chỉ `ADMIN`.
+- `POST /api/auth/admin/sessions/:sessionId/revoke` — thu hồi một thiết bị, chỉ `ADMIN`.
 - `/api/employees`, `/api/work-schedules`, `/api/office-locations` — danh mục và cấu hình vận hành.
 - `GET /api/attendance/me/today` — trạng thái chấm công hôm nay của nhân viên hiện tại.
 - `/api/attendance` — sự kiện check-in/out, bảng ngày và audit điều chỉnh.
 - `/api/business-trips`, `/api/leave-requests`, `/api/announcements` — công tác, nghỉ phép và truyền thông nội bộ.
 - `/api/reporting`, `/api/kpi` — dashboard, đối soát tháng, Excel và KPI Lite không chấm điểm.
 
-Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC theo phản hồi khách hàng. Mọi migration chạy với `synchronize=false`.
+Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC; migration `1790121600000-auth-sessions` bổ sung phiên và lịch sử thiết bị. Mọi migration chạy với `synchronize=false`.
 
 Android platform shell đã được tạo trong `mobile/`. Xem hướng dẫn chạy USB/Wi-Fi debugging và vị trí APK tại `mobile/README.md`.
 

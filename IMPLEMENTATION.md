@@ -40,6 +40,14 @@
 - Admin có quyền ghi cấu hình nhân sự. Kế toán trưởng đọc dữ liệu nhân viên/chấm công và báo cáo. Quản lý khu vực chỉ được cấp endpoint đã thực thi scope chi nhánh ở Backend.
 - Khóa nhân viên đồng thời thu hồi quyền đăng nhập; không hard-delete hồ sơ hay mã nhân viên.
 
+### Customer alignment C2 — session, device and login alert
+
+- Migration `1790121600000-auth-sessions` lưu vòng đời phiên, thiết bị, client Web/Mobile, thời điểm đăng nhập/thu hồi và trạng thái cảnh báo email.
+- JWT mang `sid` và chỉ hợp lệ khi phiên tương ứng còn hoạt động. `AUTH_SESSION_DAYS` mặc định là 30; cookie Web dùng cùng thời điểm hết hạn và Mobile lưu token trong secure storage.
+- Mỗi tài khoản chỉ có một phiên hoạt động. Repository thay thế phiên trong transaction và database có partial unique index để bảo vệ invariant.
+- Email cảnh báo dùng SMTP qua port `LoginAlertSender`; secret chỉ đến từ environment. Thiếu cấu hình được lưu là `SKIPPED`, lỗi giao nhận là `FAILED`, không chặn nhân viên đăng nhập.
+- Admin Web có trang lịch sử phiên và quyền thu hồi; Mobile gọi logout Backend trước khi xóa token cục bộ.
+
 ## Repository layout
 
 ```text

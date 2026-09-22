@@ -2,6 +2,8 @@
 
 Flutter app dành cho nhân viên. Vertical slice hiện tại gồm đăng nhập, lưu phiên an toàn, xem trạng thái chấm công trong ngày và check-in/check-out văn phòng.
 
+Phiên đăng nhập được lưu tối đa 30 ngày và gắn với một định danh thiết bị trong secure storage. Đăng nhập trên máy mới tự thu hồi phiên máy cũ; thao tác đăng xuất gọi Backend để ghi lịch sử trước khi xóa token trên máy.
+
 Vị trí chỉ được lấy khi người dùng chủ động bấm check-in hoặc check-out. App không theo dõi GPS nền hoặc liên tục. Thời gian chính thức, geofence và risk flags đều do Backend quyết định.
 
 ## Tài khoản development-only
