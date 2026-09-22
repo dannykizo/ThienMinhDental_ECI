@@ -20,6 +20,8 @@ Customer alignment C3 đã bổ sung lịch mặc định theo chi nhánh/phòng
 
 Customer alignment C4 adds mandatory attendance explanations, complete GPS evidence metadata, Admin-only adjustment audit, monthly locking and Chief Accountant-only reopening. Mobile explanation/photo presentation remains pending; the authenticated employee API is available for the later Mobile slice.
 
+Customer alignment C5 hoàn thiện vận hành phiếu công tác: người phụ trách, chỉnh sửa phiếu nháp, giao/hủy có lý do, trạng thái riêng từng thành viên, GPS lúc bắt đầu/kết thúc, ảnh bằng chứng theo cấu hình và audit. Mobile UI/upload file thật chưa triển khai; API nhân viên đã sẵn sàng cho bước Mobile tiếp theo.
+
 ## Đọc trước khi code
 
 1. `AGENTS.md` — quyền hạn và ranh giới của Codex, OpenCode, Antigravity.
@@ -87,10 +89,10 @@ Seed sẽ từ chối chạy ngoài `NODE_ENV=development`. Credential demo khô
 - `/api/employees`, `/api/work-schedules`, `/api/office-locations` — danh mục và cấu hình vận hành.
 - `GET /api/attendance/me/today` — trạng thái chấm công hôm nay của nhân viên hiện tại.
 - `/api/attendance` — sự kiện check-in/out, bảng ngày, giải trình bắt buộc và audit điều chỉnh.
-- `/api/business-trips`, `/api/leave-requests`, `/api/announcements` — công tác, nghỉ phép và truyền thông nội bộ.
+- `/api/business-trips`, `/api/leave-requests`, `/api/announcements` — công tác, nghỉ phép và truyền thông nội bộ. Công tác dùng endpoint riêng `mine`, `start` và `complete` cho nhân viên.
 - `/api/reporting`, `/api/kpi` — dashboard, đối soát tháng, Excel và KPI Lite không chấm điểm.
 
-Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC; migration `1790121600000-auth-sessions` bổ sung phiên và lịch sử thiết bị; migration `1790208000000-schedule-location-alignment` bổ sung lịch theo phòng ban, giới hạn vị trí và audit cấu hình; migration `1790294400000-attendance-reconciliation` bổ sung giải trình và khóa kỳ công. Mọi migration chạy với `synchronize=false`.
+Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC; migration `1790121600000-auth-sessions` bổ sung phiên và lịch sử thiết bị; migration `1790208000000-schedule-location-alignment` bổ sung lịch theo phòng ban, giới hạn vị trí và audit cấu hình; migration `1790294400000-attendance-reconciliation` bổ sung giải trình và khóa kỳ công; migration `1790380800000-business-trip-operations` bổ sung vận hành công tác theo từng thành viên. Mọi migration chạy với `synchronize=false`.
 
 Android platform shell đã được tạo trong `mobile/`. Xem hướng dẫn chạy USB/Wi-Fi debugging và vị trí APK tại `mobile/README.md`.
 

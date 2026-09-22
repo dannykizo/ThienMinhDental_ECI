@@ -69,6 +69,7 @@ export class BusinessTripEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'varchar', length: 30, unique: true }) code!: string;
   @Column({ type: 'uuid', name: 'customer_id', nullable: true }) customerId?: string | null;
+  @Column({ type: 'uuid', name: 'responsible_employee_id', nullable: true }) responsibleEmployeeId?: string | null;
   @Column({ type: 'varchar', length: 180, name: 'site_name' }) siteName!: string;
   @Column({ type: 'varchar', length: 300, name: 'site_address' }) siteAddress!: string;
   @Column({ type: 'timestamptz', name: 'start_at' }) startAt!: Date;
@@ -76,6 +77,7 @@ export class BusinessTripEntity {
   @Column({ type: 'text' }) content!: string;
   @Column({ type: 'boolean', name: 'requires_photo', default: false }) requiresPhoto!: boolean;
   @Column({ type: 'varchar', length: 30, default: 'DRAFT' }) status!: string;
+  @Column({ type: 'text', name: 'cancel_reason', nullable: true }) cancelReason?: string | null;
   @Column({ type: 'uuid', name: 'created_by' }) createdBy!: string;
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
   @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' }) updatedAt!: Date;
@@ -89,6 +91,14 @@ export class BusinessTripMemberEntity {
   @Column({ type: 'timestamptz', name: 'started_at', nullable: true }) startedAt?: Date | null;
   @Column({ type: 'timestamptz', name: 'completed_at', nullable: true }) completedAt?: Date | null;
   @Column({ type: 'text', nullable: true }) note?: string | null;
+  @Column({ type: 'double precision', name: 'start_latitude', nullable: true }) startLatitude?: number | null;
+  @Column({ type: 'double precision', name: 'start_longitude', nullable: true }) startLongitude?: number | null;
+  @Column({ type: 'double precision', name: 'start_accuracy_meters', nullable: true }) startAccuracyMeters?: number | null;
+  @Column({ type: 'double precision', name: 'end_latitude', nullable: true }) endLatitude?: number | null;
+  @Column({ type: 'double precision', name: 'end_longitude', nullable: true }) endLongitude?: number | null;
+  @Column({ type: 'double precision', name: 'end_accuracy_meters', nullable: true }) endAccuracyMeters?: number | null;
+  @Column({ type: 'varchar', length: 500, name: 'evidence_image_reference', nullable: true }) evidenceImageReference?: string | null;
+  @Column({ type: 'timestamptz', name: 'evidence_captured_at', nullable: true }) evidenceCapturedAt?: Date | null;
 }
 
 @Entity({ name: 'attendance_events' })

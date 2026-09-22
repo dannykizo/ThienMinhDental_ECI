@@ -1271,6 +1271,32 @@ tbody tr:hover {
   min-height: 120px;
 }
 
+.trip-member-list, .trip-history {
+  display: flex;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trip-member-list > span {
+  display: inline-flex;
+  padding: 6px 9px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--ink-secondary);
+  font-size: 0.74rem;
+}
+
+.trip-history {
+  display: grid;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+}
+
 .notice {
   margin: 0 0 20px;
   padding: 14px 18px;

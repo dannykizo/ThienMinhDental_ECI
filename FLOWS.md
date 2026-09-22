@@ -88,11 +88,13 @@ DRAFT -> ASSIGNED -> IN_PROGRESS -> COMPLETED
 
 1. Admin tạo phiếu với khách hàng/phòng khám, địa chỉ, thời gian, nội dung và thành viên.
 2. Khi `ASSIGNED`, nhân viên nhận thông báo và thấy phiếu trên Mobile.
-3. Thành viên bấm Bắt đầu công tác; Backend ghi location event và chuyển phần tham gia của nhân viên sang `IN_PROGRESS`.
-4. Khi kết thúc, nhân viên gửi location, ghi chú và ảnh nếu phiếu yêu cầu.
-5. Attendance daily projection nhận diện ngày đó là công tác, không tự tính vắng văn phòng.
+3. Mỗi phiếu có một người phụ trách thuộc danh sách thành viên. Admin chỉ được sửa nội dung và thành viên khi phiếu còn `DRAFT`.
+4. Thành viên bấm Bắt đầu công tác; Backend kiểm tra đúng người được giao, lưu GPS vào attendance event và chuyển riêng phần tham gia của người đó sang `IN_PROGRESS`.
+5. Khi kết thúc, thành viên gửi GPS, ghi chú và ảnh nếu phiếu yêu cầu. Backend chỉ chuyển toàn phiếu sang `COMPLETED` khi mọi thành viên đều hoàn tất.
+6. Admin có thể hủy phiếu chưa hoàn tất nhưng phải nhập lý do. Mọi lần tạo, sửa, giao, hủy, bắt đầu và hoàn tất đều có audit.
+7. Attendance daily projection nhận diện ngày đó là công tác, không tự tính vắng văn phòng.
 
-**Web-first status:** Admin Web đã tạo/giao/chuyển trạng thái phiếu; Backend kiểm tra thành viên khi nhận attendance event công tác và daily projection không tính sai thành vắng. Mobile UI, push và ảnh hiện trường chưa triển khai.
+**Web-first status:** Customer alignment C5 đã triển khai Admin Web và Backend API cho tạo/sửa phiếu nháp, người phụ trách, thành viên, giao/hủy, trạng thái từng thành viên, GPS hai đầu, ảnh bắt buộc theo cấu hình và audit. Employee API `/business-trips/mine`, `/:id/start`, `/:id/complete` đã sẵn sàng; Mobile UI, upload file thật và push vẫn chưa triển khai. Do W25–W29 chưa có quyết định khách hàng, C5 chưa hỗ trợ nhiều địa điểm, chữ ký khách hàng hoặc nhiều cấp duyệt.
 
 ## Mobile + Admin Web — leave request
 

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { Between, DataSource, In, Repository } from 'typeorm';
-import { AttendanceAdjustmentEntity, AttendanceEventEntity, AttendanceExplanationEntity, BusinessTripMemberEntity, OfficeLocationEntity } from '../../database/entities/workforce.entity.js';
+import { AttendanceAdjustmentEntity, AttendanceEventEntity, AttendanceExplanationEntity, OfficeLocationEntity } from '../../database/entities/workforce.entity.js';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { AttendanceRiskFlag } from './domain/attendance-risk-flag.js';
 import { OfficeGeofence } from './domain/office-geofence.js';
@@ -36,17 +36,12 @@ export class AttendanceService {
     @InjectRepository(AttendanceEventEntity) private readonly events: Repository<AttendanceEventEntity>,
     @InjectRepository(AttendanceAdjustmentEntity) private readonly adjustments: Repository<AttendanceAdjustmentEntity>,
     @InjectRepository(AttendanceExplanationEntity) private readonly explanations: Repository<AttendanceExplanationEntity>,
-    @InjectRepository(BusinessTripMemberEntity) private readonly tripMembers: Repository<BusinessTripMemberEntity>,
   ) {}
 
   async record(user: AuthenticatedUserView, input: RecordAttendanceEventDto): Promise<AttendanceEventEntity> {
     if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
     if (input.latitude === undefined || input.longitude === undefined) throw new BadRequestException({ code: 'LOCATION_REQUIRED', message: 'Vị trí là bắt buộc tại sự kiện chấm công.' });
-    if (input.attendanceType === 'BUSINESS_TRIP') {
-      if (!input.businessTripId) throw new BadRequestException({ code: 'BUSINESS_TRIP_REQUIRED', message: 'Phiếu công tác là bắt buộc.' });
-      const member = await this.tripMembers.findOne({ where: { businessTripId: input.businessTripId, employeeId: user.employeeId } });
-      if (!member) throw new BadRequestException({ code: 'BUSINESS_TRIP_NOT_ASSIGNED', message: 'Nhân viên không thuộc phiếu công tác này.' });
-    }
+    if (input.attendanceType === 'BUSINESS_TRIP') throw new BadRequestException({ code: 'USE_BUSINESS_TRIP_WORKFLOW', message: 'Chấm công công tác phải dùng thao tác bắt đầu/kết thúc trên phiếu được giao.' });
 
     const now = new Date();
     const [dayStart, dayEnd] = this.dayRange(now);

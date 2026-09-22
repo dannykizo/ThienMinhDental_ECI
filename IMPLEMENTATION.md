@@ -65,6 +65,16 @@
 - Only `CHIEF_ACCOUNTANT` can reopen a locked period, and the reason is mandatory. Lock and reopen actions are recorded in `configuration_audit_logs`.
 - Admin Web implements the C4 operational screens. Mobile presentation for explanation/photo capture remains out of this Web-first slice.
 
+### Customer alignment C5 — business trip operation
+
+- Migration `1790380800000-business-trip-operations` adds the responsible employee, cancellation reason and per-member start/end GPS plus completion evidence metadata.
+- Admin owns trip preparation: create, edit while `DRAFT`, assign and cancel with a mandatory reason. Admin no longer marks a trip in progress or completed on behalf of employees.
+- An assigned employee starts and completes only their own participation through dedicated authenticated endpoints. Both actions persist server time and a single GPS sample as attendance events.
+- When `requires_photo=true`, completion requires an image reference and capture time. File upload/storage and the Mobile capture UI remain outside this Web-first slice.
+- Aggregate trip status moves to `IN_PROGRESS` when the first member starts and to `COMPLETED` only when every member completes.
+- Business trip changes and member actions use `configuration_audit_logs`; audit payloads intentionally exclude precise coordinates.
+- Because customer answers W25–W29 are blank, C5 intentionally does not add multi-location itineraries, customer signatures, schedule-change workflows or multi-level approval.
+
 ## Repository layout
 
 ```text
