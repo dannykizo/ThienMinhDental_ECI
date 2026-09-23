@@ -123,14 +123,20 @@ SUBMITTED -> APPROVED
 ## Admin Web + Mobile — announcements
 
 ```text
-DRAFT -> PUBLISHED -> DELIVERED -> READ
-                   -> DELIVERY_PARTIAL
-DRAFT -> CANCELLED
+DRAFT -> PUBLISHED -> WITHDRAWN
+  |
+  +----> CANCELLED
+
+Per recipient: DELIVERED -> READ -> ACKNOWLEDGED (chỉ tin quan trọng)
 ```
 
-`DELIVERED` là trạng thái theo từng người nhận, không phải toàn bộ thông báo. Push notification chỉ là tín hiệu mở App; nội dung chính thức được tải từ Backend.
+1. Chỉ Admin tạo và sửa bản nháp, chọn đúng một cá nhân hoặc một phòng ban rồi xuất bản.
+2. Khi xuất bản, Backend chốt danh sách nhân viên đang hoạt động. Đối tượng phòng ban dùng mọi phân công tổ chức còn hiệu lực, không chỉ projection phòng ban chính.
+3. Mở thông báo ghi `READ`; tin quan trọng chỉ hoàn tất khi nhân viên chủ động xác nhận và Backend ghi `ACKNOWLEDGED`.
+4. Admin xem toàn bộ trạng thái. Trưởng phòng chỉ xem nhân viên có phân công hiện hành trỏ tới mình tại `manager_employee_id`.
+5. Admin có thể thu hồi tin đã đăng; nội dung không còn xuất hiện trong `/announcements/mine`, nhưng lịch sử người nhận và audit được giữ nguyên.
 
-**Web-first status:** Đã triển khai audience resolution, recipient delivery state, API danh sách cá nhân và read receipt. Push/FCM và Mobile UI chưa triển khai.
+**Web-first status:** Customer alignment C7 đã triển khai Admin Web và Backend API cho nháp/chỉnh sửa/xuất bản/thu hồi, đối tượng cá nhân hoặc phòng ban, tin quan trọng cần xác nhận, thống kê người chưa đọc/chưa xác nhận và phạm vi Trưởng phòng. Mobile UI và Push/FCM chưa triển khai. File/ảnh, mức khẩn cấp, hẹn giờ, thời hạn hiển thị và lưu trữ tự động ghi `NOT_IMPLEMENTED` do W39 chưa được khách hàng giải thích.
 
 ## Admin Web — monthly report
 

@@ -206,8 +206,13 @@ export class AnnouncementEntity {
   @Column({ type: 'varchar', length: 30, default: 'DRAFT' }) status!: string;
   @Column({ type: 'varchar', length: 30, name: 'audience_type', default: 'ALL' }) audienceType!: string;
   @Column({ type: 'uuid', name: 'department_id', nullable: true }) departmentId?: string | null;
+  @Column({ type: 'uuid', name: 'employee_id', nullable: true }) employeeId?: string | null;
+  @Column({ type: 'boolean', name: 'requires_acknowledgement', default: false }) requiresAcknowledgement!: boolean;
   @Column({ type: 'uuid', name: 'created_by' }) createdBy!: string;
   @Column({ type: 'timestamptz', name: 'published_at', nullable: true }) publishedAt?: Date | null;
+  @Column({ type: 'uuid', name: 'withdrawn_by', nullable: true }) withdrawnBy?: string | null;
+  @Column({ type: 'timestamptz', name: 'withdrawn_at', nullable: true }) withdrawnAt?: Date | null;
+  @Column({ type: 'text', name: 'withdraw_reason', nullable: true }) withdrawReason?: string | null;
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
   @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' }) updatedAt!: Date;
 }
@@ -218,4 +223,5 @@ export class AnnouncementRecipientEntity {
   @PrimaryColumn({ type: 'uuid', name: 'employee_id' }) employeeId!: string;
   @Column({ type: 'timestamptz', name: 'delivered_at', nullable: true }) deliveredAt?: Date | null;
   @Column({ type: 'timestamptz', name: 'read_at', nullable: true }) readAt?: Date | null;
+  @Column({ type: 'timestamptz', name: 'acknowledged_at', nullable: true }) acknowledgedAt?: Date | null;
 }

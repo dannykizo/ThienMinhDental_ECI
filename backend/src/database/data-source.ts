@@ -9,6 +9,7 @@ import { ScheduleLocationAlignment1790208000000 } from './migrations/17902080000
 import { AttendanceReconciliation1790294400000 } from './migrations/1790294400000-attendance-reconciliation.js';
 import { BusinessTripOperations1790380800000 } from './migrations/1790380800000-business-trip-operations.js';
 import { LeaveOperations1790467200000 } from './migrations/1790467200000-leave-operations.js';
+import { AnnouncementAlignment1790553600000 } from './migrations/1790553600000-announcement-alignment.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -29,6 +30,7 @@ export const applicationDataSource = new DataSource({
     AttendanceReconciliation1790294400000,
     BusinessTripOperations1790380800000,
     LeaveOperations1790467200000,
+    AnnouncementAlignment1790553600000,
   ],
   migrationsTableName: 'schema_migrations',
 });

@@ -163,6 +163,7 @@ const chiefAccountantRoutes = new Set([
 const scopedManagerRoutes = new Set([
   '/dashboard',
   '/dashboard/employees',
+  '/dashboard/announcements',
 ]);
 
 function canAccessNavigation(item: NavItem, roles: RoleCode[]): boolean {

@@ -83,6 +83,7 @@ const statusToneMap: Record<string, 'success' | 'warning' | 'danger'> = {
   LATE: 'warning',
   REJECTED: 'danger',
   CANCELLED: 'danger',
+  WITHDRAWN: 'danger',
   ABSENT: 'danger',
   INACTIVE: 'danger',
 };
@@ -105,6 +106,7 @@ const statusLabelMap: Record<string, string> = {
   LATE: 'Đi muộn',
   REJECTED: 'Từ chối',
   CANCELLED: 'Đã hủy',
+  WITHDRAWN: 'Đã thu hồi',
   ABSENT: 'Vắng mặt',
   INACTIVE: 'Tạm khóa',
 };

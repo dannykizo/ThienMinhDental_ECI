@@ -84,6 +84,16 @@
 - Approved leave is already consumed by the daily attendance/monthly reporting projection; rejected leave is excluded.
 - Because customer answers W30–W35 are blank, C6 intentionally remains full-day/date-range only and does not add leave balance, accrual, half-day/hour leave, attachments, delegation, multi-level approval, retroactive edits or cancellation of approved requests.
 
+### Customer alignment C7 — internal announcements
+
+- Migration `1790553600000-announcement-alignment` adds individual targeting, mandatory acknowledgement metadata and published-announcement withdrawal while preserving legacy `ALL` records as read-only compatibility data.
+- Only `ADMIN` can create or edit a draft, publish, cancel a draft or withdraw a published announcement. Admin actions are recorded in `configuration_audit_logs`.
+- New announcements target exactly one active employee or one active department. Department publication resolves current active organization assignments so secondary department memberships are included.
+- `read_at` records that a recipient opened a message. Important messages additionally require the explicit `/announcements/:id/acknowledge` action and store `acknowledged_at`.
+- Admin can inspect every recipient. `MANAGER`/`AREA_MANAGER` can open the announcement tracking screen but only see recipients whose active organization assignment names the signed-in employee as direct manager.
+- Withdrawing removes the item from `/announcements/mine` without deleting its recipient history. The employee API is ready for later Mobile presentation.
+- Because W39 and Mobile M26–M29 are unanswered, C7 does not add attachments, images, urgency levels, scheduling, expiration/retention automation, lock-screen content or FCM delivery.
+
 ## Repository layout
 
 ```text
