@@ -115,7 +115,7 @@ export default function AnnouncementsPage() {
   return <div className="module-page">
     <PageHeader eyebrow="C7 / THÔNG BÁO NỘI BỘ" title={isAdmin ? 'Thông báo nội bộ' : 'Theo dõi xác nhận thông báo'} description={isAdmin ? 'Admin soạn bản nháp, chọn cá nhân hoặc phòng ban, xuất bản và theo dõi trạng thái đọc.' : 'Theo dõi nhân viên được phân công trực tiếp cho bạn; không hiển thị dữ liệu ngoài phạm vi quản lý.'} />
     {message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
-    <Notice kind="info"><strong>Phạm vi C7:</strong> Tin quan trọng yêu cầu nhân viên xác nhận riêng. File/ảnh, hẹn giờ đăng, mức khẩn cấp, thời hạn hiển thị và push notification chưa được triển khai.</Notice>
+    <Notice kind="info"><strong>Phạm vi C7:</strong> Tin quan trọng yêu cầu nhân viên xác nhận riêng. Hộp thư Mobile đã hoạt động; gửi push thật cần cấu hình Firebase trên môi trường triển khai. File/ảnh, hẹn giờ đăng, mức khẩn cấp và thời hạn hiển thị chưa được triển khai.</Notice>
 
     <section className="metric-grid" aria-label="Tổng quan thông báo">
       <article className="metric-card"><p>Bản nháp</p><strong>{metrics.draft}</strong><span>Chưa gửi tới nhân viên</span></article>

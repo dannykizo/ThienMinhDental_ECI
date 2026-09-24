@@ -1,6 +1,6 @@
 # Business and UI Flows
 
-Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-first MVP, trừ các giới hạn được ghi rõ. Mobile Android đã triển khai vertical slice đăng nhập và chấm công văn phòng; các flow mobile khác vẫn theo trạng thái ghi tại từng mục.
+Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-first MVP, trừ các giới hạn được ghi rõ. Mobile Android đã triển khai đăng nhập/khôi phục phiên, chấm công văn phòng, giải trình có ảnh bằng chứng/hàng đợi mạng yếu, phiếu công tác, đơn nghỉ phép và hộp thư thông báo; trạng thái FCM và các giới hạn còn lại được ghi tại từng mục.
 
 ## Organization and access scope
 
@@ -15,13 +15,14 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 ## Authentication session and device
 
 1. Web hoặc Mobile gửi định danh thiết bị ổn định cùng thông tin đăng nhập.
-2. Backend xác thực mật khẩu, thu hồi phiên đang hoạt động trước đó của tài khoản và tạo một phiên mới có hạn 30 ngày.
-3. JWT chứa mã phiên; mọi request được bảo vệ phải kiểm tra đồng thời chữ ký token, tài khoản đang hoạt động và phiên chưa hết hạn/chưa bị thu hồi.
-4. Đăng xuất, Admin thu hồi phiên, đăng nhập trên thiết bị mới hoặc khóa tài khoản đều làm thiết bị cũ mất quyền truy cập.
-5. Backend gửi email cảnh báo tới danh sách Admin cấu hình qua SMTP. Nếu SMTP chưa cấu hình hoặc gửi lỗi, đăng nhập vẫn thành công và trạng thái được lưu trong lịch sử để Admin nhìn thấy.
-6. Chỉ Admin được xem toàn bộ lịch sử đăng nhập/đăng xuất và chủ động đăng xuất thiết bị.
+2. Backend xác thực mật khẩu, thu hồi phiên đang hoạt động trước đó của tài khoản và tạo phiên Web tối đa 24 giờ hoặc phiên Mobile tối đa 30 ngày.
+3. JWT truy cập chứa mã phiên và sống 15 phút. Web giữ refresh token trong cookie HttpOnly; Mobile giữ refresh token trong secure storage. Refresh token được xoay vòng sau mỗi lần cấp access token mới.
+4. Mọi request được bảo vệ phải kiểm tra đồng thời chữ ký token, tài khoản đang hoạt động và phiên chưa hết hạn/chưa bị thu hồi. Web hết phiên sau 30 phút không hoạt động.
+5. Đăng xuất, Admin thu hồi phiên, đăng nhập trên thiết bị mới, phát hiện refresh token cũ bị dùng lại hoặc khóa tài khoản đều làm thiết bị cũ mất quyền truy cập.
+6. Backend gửi email cảnh báo tới danh sách Admin cấu hình qua SMTP. Nếu SMTP chưa cấu hình hoặc gửi lỗi, đăng nhập vẫn thành công và trạng thái được lưu trong lịch sử để Admin nhìn thấy.
+7. Chỉ Admin được xem toàn bộ lịch sử đăng nhập/đăng xuất và chủ động đăng xuất thiết bị.
 
-**Implementation status:** C2 sử dụng bảng `auth_sessions`, endpoint quản trị `/auth/admin/sessions` và trang `Tài khoản & thiết bị`. Không triển khai tự đăng ký hoặc tự khôi phục mật khẩu vì khách hàng xác nhận tài khoản do Admin cung cấp.
+**Implementation status:** C2 sử dụng bảng `auth_sessions`, endpoint `/auth/refresh`, endpoint quản trị `/auth/admin/sessions` và trang `Tài khoản & thiết bị`. Không triển khai tự đăng ký hoặc tự khôi phục mật khẩu vì tài khoản do Admin cung cấp.
 
 ## Admin Web — schedule and workplace configuration
 
@@ -74,7 +75,7 @@ REQUESTED -> SUBMITTED -> APPROVED
 5. Admin adjustments preserve old/new values, reason, actor and timestamp. No adjustment is accepted after the month is locked.
 6. Admin or Chief Accountant can lock a month after incomplete check-outs and open explanations are resolved. Only Chief Accountant can reopen it with a mandatory reason.
 
-**Web-first status:** Admin Web and Backend API are implemented. The employee response API is ready for Mobile integration; Mobile photo capture/upload and on-image timestamp/coordinate overlay are not yet implemented.
+**Implementation status:** Admin Web, Backend API và Mobile Android đã triển khai. App chụp ảnh bằng camera, lấy thời gian/tọa độ cùng sự kiện, lưu ảnh trong vùng dữ liệu riêng và xếp hàng phản hồi khi mạng yếu; app tự thử lại khi mở/resume màn hình hoặc người dùng bấm gửi lại. Backend lưu file development/local qua adapter riêng và bảo vệ endpoint đọc ảnh bằng authentication. Chưa chèn chữ thời gian/tọa độ trực tiếp lên bitmap vì business rule chỉ yêu cầu metadata đầy đủ.
 
 ## Mobile + Admin Web — business trip
 
@@ -94,7 +95,7 @@ DRAFT -> ASSIGNED -> IN_PROGRESS -> COMPLETED
 6. Admin có thể hủy phiếu chưa hoàn tất nhưng phải nhập lý do. Mọi lần tạo, sửa, giao, hủy, bắt đầu và hoàn tất đều có audit.
 7. Attendance daily projection nhận diện ngày đó là công tác, không tự tính vắng văn phòng.
 
-**Web-first status:** Customer alignment C5 đã triển khai Admin Web và Backend API cho tạo/sửa phiếu nháp, người phụ trách, thành viên, giao/hủy, trạng thái từng thành viên, GPS hai đầu, ảnh bắt buộc theo cấu hình và audit. Employee API `/business-trips/mine`, `/:id/start`, `/:id/complete` đã sẵn sàng; Mobile UI, upload file thật và push vẫn chưa triển khai. Do W25–W29 chưa có quyết định khách hàng, C5 chưa hỗ trợ nhiều địa điểm, chữ ký khách hàng hoặc nhiều cấp duyệt.
+**Implementation status:** Customer alignment C5 đã triển khai Admin Web, Backend API và Mobile Android cho tạo/giao phiếu, danh sách phân công, trạng thái từng thành viên, GPS một lần lúc bắt đầu/kết thúc, ghi chú và ảnh hiện trường bắt buộc theo cấu hình. Ảnh development được lưu local qua adapter riêng và Admin Web mở được ảnh có xác thực. Push vẫn chưa triển khai. Do W25–W29 chưa có quyết định khách hàng, C5 chưa hỗ trợ nhiều địa điểm, chữ ký khách hàng hoặc nhiều cấp duyệt.
 
 ## Mobile + Admin Web — leave request
 
@@ -109,7 +110,7 @@ SUBMITTED -> APPROVED
 4. Mọi lần gửi và duyệt/từ chối có audit. Đơn đang chờ là blocker khi chốt kỳ công.
 5. Mobile nhận kết quả; daily attendance projection cập nhật ngày đã duyệt.
 
-**Web-first status:** Customer alignment C6 đã triển khai Admin Web và Backend API cho danh sách giàu thông tin, đơn của nhân viên hiện tại, tạo đơn, kiểm tra trùng ngày, khóa theo kỳ công, duyệt/từ chối một cấp và audit. Mobile UI chưa triển khai. Vì W30–W35 chưa có quyết định khách hàng, leave balance/cộng dồn, nghỉ nửa ngày/giờ, file minh chứng, duyệt thay/nhiều cấp, sửa hồi tố và hủy đơn đã duyệt đều chưa được triển khai.
+**Implementation status:** Customer alignment C6 đã triển khai Admin Web, Backend API và Mobile Android. Nhân viên xem đơn của chính mình, tạo đơn nghỉ nguyên ngày/theo khoảng ngày và nhận trạng thái duyệt/từ chối từ Backend. Backend kiểm tra trùng ngày, kỳ công đã khóa, duyệt/từ chối một cấp và audit. Vì W30–W35 chưa có quyết định khách hàng, leave balance/cộng dồn, nghỉ nửa ngày/giờ, file minh chứng, duyệt thay/nhiều cấp, sửa hồi tố và hủy đơn đã duyệt đều chưa được triển khai.
 
 ## Admin Web — attendance adjustment
 
@@ -136,7 +137,7 @@ Per recipient: DELIVERED -> READ -> ACKNOWLEDGED (chỉ tin quan trọng)
 4. Admin xem toàn bộ trạng thái. Trưởng phòng chỉ xem nhân viên có phân công hiện hành trỏ tới mình tại `manager_employee_id`.
 5. Admin có thể thu hồi tin đã đăng; nội dung không còn xuất hiện trong `/announcements/mine`, nhưng lịch sử người nhận và audit được giữ nguyên.
 
-**Web-first status:** Customer alignment C7 đã triển khai Admin Web và Backend API cho nháp/chỉnh sửa/xuất bản/thu hồi, đối tượng cá nhân hoặc phòng ban, tin quan trọng cần xác nhận, thống kê người chưa đọc/chưa xác nhận và phạm vi Trưởng phòng. Mobile UI và Push/FCM chưa triển khai. File/ảnh, mức khẩn cấp, hẹn giờ, thời hạn hiển thị và lưu trữ tự động ghi `NOT_IMPLEMENTED` do W39 chưa được khách hàng giải thích.
+**Trạng thái hiện tại:** Customer alignment C7 đã triển khai Admin Web, Backend API và hộp thư Mobile cho nháp/chỉnh sửa/xuất bản/thu hồi, đối tượng cá nhân hoặc phòng ban, badge chưa đọc, chi tiết tin, xác nhận tin quan trọng, thống kê người chưa đọc/chưa xác nhận và phạm vi Trưởng phòng. Backend và Mobile đã có adapter FCM, đăng ký token theo tài khoản/thiết bị và điều hướng về hộp thư khi chạm push; môi trường chỉ gửi push thật sau khi cấu hình Firebase deployment. File/ảnh, mức khẩn cấp, hẹn giờ, thời hạn hiển thị và lưu trữ tự động vẫn là `NOT_IMPLEMENTED` do W39 chưa được khách hàng giải thích.
 
 ## Admin Web — monthly report
 

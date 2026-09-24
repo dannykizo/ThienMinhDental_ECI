@@ -23,7 +23,13 @@ export function hasCompleteEvidence(evidence: ExplanationEvidence): boolean {
 }
 
 export function validateEvidence(issueType: ExplanationIssueType, evidence: ExplanationEvidence): boolean {
-  const hasAny = Object.values(evidence).some((value) => value !== undefined && value !== '');
+  const evidenceValues = [
+    evidence.evidenceImageReference,
+    evidence.evidenceCapturedAt,
+    evidence.evidenceLatitude,
+    evidence.evidenceLongitude,
+  ];
+  const hasAny = evidenceValues.some((value) => value !== undefined && value !== '');
   return issueType === 'GPS_RISK' || hasAny ? hasCompleteEvidence(evidence) : true;
 }
 

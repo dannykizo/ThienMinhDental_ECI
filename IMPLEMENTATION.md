@@ -28,7 +28,7 @@
 - Điều chỉnh công là record bổ sung bất biến. Backend tự lấy giá trị cũ, bắt buộc lý do và báo cáo dùng giá trị mới nhất có hiệu lực.
 - Báo cáo tháng tổng hợp lịch + attendance + công tác + nghỉ đã duyệt + điều chỉnh; Excel final bị chặn khi còn ngày `INCOMPLETE`.
 - KPI Lite chỉ là số ngày theo trạng thái vận hành; không có công thức điểm, lương, thưởng hoặc phạt.
-- Thông báo resolve audience thành từng recipient và có API read receipt. FCM/push chưa cấu hình vì Mobile nằm ngoài Web-first.
+- Thông báo resolve audience thành từng recipient và có API read receipt. Mobile/Backend đã tích hợp adapter FCM; gửi push thật phụ thuộc Firebase project và credential của môi trường triển khai.
 - Mobile attendance vertical slice dùng `geolocator` chỉ tại sự kiện check-in/check-out; API `GET /attendance/me/today` là nguồn trạng thái trong ngày. Không có background location tracking.
 - Leave balance và cutoff chưa có policy được duyệt nên không được tự suy diễn trong code.
 
@@ -42,11 +42,12 @@
 
 ### Customer alignment C2 — session, device and login alert
 
-- Migration `1790121600000-auth-sessions` lưu vòng đời phiên, thiết bị, client Web/Mobile, thời điểm đăng nhập/thu hồi và trạng thái cảnh báo email.
-- JWT mang `sid` và chỉ hợp lệ khi phiên tương ứng còn hoạt động. `AUTH_SESSION_DAYS` mặc định là 30; cookie Web dùng cùng thời điểm hết hạn và Mobile lưu token trong secure storage.
+- Migration `1790121600000-auth-sessions` lưu vòng đời phiên, thiết bị, client Web/Mobile, thời điểm đăng nhập/thu hồi và trạng thái cảnh báo email. Migration `1790640000000-refresh-token-sessions` bổ sung hash refresh token hiện tại/trước đó và `last_seen_at`.
+- JWT truy cập mang `sid`, sống mặc định 15 phút và chỉ hợp lệ khi phiên tương ứng còn hoạt động. Refresh token là credential opaque, được hash trong database và xoay vòng sau mỗi lần sử dụng.
+- Admin Web dùng access cookie và refresh cookie HttpOnly; phiên tối đa 24 giờ, timeout không hoạt động 30 phút. Mobile lưu cặp token trong secure storage và duy trì phiên tối đa 30 ngày trên đúng thiết bị.
 - Mỗi tài khoản chỉ có một phiên hoạt động. Repository thay thế phiên trong transaction và database có partial unique index để bảo vệ invariant.
 - Email cảnh báo dùng SMTP qua port `LoginAlertSender`; secret chỉ đến từ environment. Thiếu cấu hình được lưu là `SKIPPED`, lỗi giao nhận là `FAILED`, không chặn nhân viên đăng nhập.
-- Admin Web có trang lịch sử phiên và quyền thu hồi; Mobile gọi logout Backend trước khi xóa token cục bộ.
+- Admin Web có trang lịch sử phiên và quyền thu hồi; Mobile tự refresh khi access token hết hạn, gọi logout Backend trước khi xóa token cục bộ và quay về đăng nhập khi refresh token không còn hợp lệ.
 
 ### Customer alignment C3 — schedule, work duration and geofence
 
@@ -63,16 +64,17 @@
 - Admin alone can review explanations and read attendance adjustment history. Adjustment values remain limited to check-in time, check-out time and day status until the customer defines a broader policy.
 - Admin or Chief Accountant can lock a reconciled month. A month with incomplete check-outs or open explanations cannot be locked. A locked month rejects new explanations and attendance adjustments.
 - Only `CHIEF_ACCOUNTANT` can reopen a locked period, and the reason is mandatory. Lock and reopen actions are recorded in `configuration_audit_logs`.
-- Admin Web implements the C4 operational screens. Mobile presentation for explanation/photo capture remains out of this Web-first slice.
+- Admin Web implements the C4 operational screens. Mobile Android now lists the employee's requests, captures evidence with one GPS sample, uploads authenticated image files and queues unsent responses in secure local storage for retry. Development uses `AttendanceEvidenceStorage` on local disk behind an adapter boundary; production object storage remains a deployment concern.
 
 ### Customer alignment C5 — business trip operation
 
 - Migration `1790380800000-business-trip-operations` adds the responsible employee, cancellation reason and per-member start/end GPS plus completion evidence metadata.
 - Admin owns trip preparation: create, edit while `DRAFT`, assign and cancel with a mandatory reason. Admin no longer marks a trip in progress or completed on behalf of employees.
 - An assigned employee starts and completes only their own participation through dedicated authenticated endpoints. Both actions persist server time and a single GPS sample as attendance events.
-- When `requires_photo=true`, completion requires an image reference and capture time. File upload/storage and the Mobile capture UI remain outside this Web-first slice.
+- When `requires_photo=true`, completion requires an image reference and capture time. Mobile captures and uploads the image through an authenticated endpoint; development uses `BusinessTripEvidenceStorage` on local disk behind an adapter boundary.
 - Aggregate trip status moves to `IN_PROGRESS` when the first member starts and to `COMPLETED` only when every member completes.
 - Business trip changes and member actions use `configuration_audit_logs`; audit payloads intentionally exclude precise coordinates.
+- Mobile lists the signed-in employee's assignments and exposes start/complete actions only for the participation state returned by Backend. Each action captures one GPS sample; no background or continuous tracking is used.
 - Because customer answers W25–W29 are blank, C5 intentionally does not add multi-location itineraries, customer signatures, schedule-change workflows or multi-level approval.
 
 ### Customer alignment C6 — leave request and approval
@@ -82,6 +84,7 @@
 - Backend owns date-range validation, active-request overlap detection, one-step review and the mandatory rejection reason. Every submission and review is written to `configuration_audit_logs`.
 - Leave changes are rejected when any affected attendance month is locked. A month with a pending leave request cannot be locked, so the monthly report cannot silently finalize unresolved leave.
 - Approved leave is already consumed by the daily attendance/monthly reporting projection; rejected leave is excluded.
+- Mobile lists only the signed-in employee's requests and submits full-day/date-range requests through `/leave-requests/mine`. It renders pending, approved and rejected results returned by Backend and does not duplicate overlap or locked-period rules in the client.
 - Because customer answers W30–W35 are blank, C6 intentionally remains full-day/date-range only and does not add leave balance, accrual, half-day/hour leave, attachments, delegation, multi-level approval, retroactive edits or cancellation of approved requests.
 
 ### Customer alignment C7 — internal announcements
@@ -91,8 +94,17 @@
 - New announcements target exactly one active employee or one active department. Department publication resolves current active organization assignments so secondary department memberships are included.
 - `read_at` records that a recipient opened a message. Important messages additionally require the explicit `/announcements/:id/acknowledge` action and store `acknowledged_at`.
 - Admin can inspect every recipient. `MANAGER`/`AREA_MANAGER` can open the announcement tracking screen but only see recipients whose active organization assignment names the signed-in employee as direct manager.
-- Withdrawing removes the item from `/announcements/mine` without deleting its recipient history. The employee API is ready for later Mobile presentation.
-- Because W39 and Mobile M26–M29 are unanswered, C7 does not add attachments, images, urgency levels, scheduling, expiration/retention automation, lock-screen content or FCM delivery.
+- Withdrawing removes the item from `/announcements/mine` without deleting its recipient history. Mobile exposes an inbox with unread badge, detail/read receipt and explicit acknowledgement for important messages.
+- Migration `1790726400000-push-notification-devices` stores active Android FCM tokens by account and device. Publication attempts push only after the recipient transaction succeeds; invalid tokens are disabled and push failure does not roll back inbox delivery.
+- Firebase is an optional deployment adapter: Backend requires `FIREBASE_PUSH_ENABLED=true` plus Application Default Credentials, while Mobile receives its public Firebase options through `--dart-define`. Without these settings, the inbox remains functional and the UI reports that push is not configured.
+- Because W39 remains unanswered, C7 does not add attachments, images, urgency levels, scheduling or expiration/retention automation.
+
+### Mobile completion — UX and Android package
+
+- App renders immediately into a branded bootstrap state while secure-session restoration and Backend verification continue asynchronously; credentials are never prefilled in the login form.
+- Login exposes local validation, Android autofill and keyboard-safe scrolling. Shared Material theme standardizes app bars, controls, navigation, snackbar feedback and touch targets across the five employee tabs.
+- Android uses a branded launch drawable, disables forced dark-mode distortion and enables predictive-back integration. The debug APK remains intended for internal device verification through local HTTP/ADB reverse, not Play Store distribution.
+- Real-device acceptance covers cold session restore, logout/login validation, all five tabs, detail/form navigation, pull-to-refresh, read/acknowledgement state and absence of Flutter layout/runtime exceptions.
 
 ## Repository layout
 

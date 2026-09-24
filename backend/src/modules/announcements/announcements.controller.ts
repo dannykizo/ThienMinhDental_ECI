@@ -5,7 +5,13 @@ import { CurrentUser } from '../auth/presentation/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/presentation/jwt-auth.guard.js';
 import { Roles } from '../auth/presentation/roles.decorator.js';
 import { RolesGuard } from '../auth/presentation/roles.guard.js';
-import { CreateAnnouncementDto, TransitionAnnouncementDto, UpdateAnnouncementDto } from './announcements.dto.js';
+import {
+  CreateAnnouncementDto,
+  RegisterPushDeviceDto,
+  TransitionAnnouncementDto,
+  UnregisterPushDeviceDto,
+  UpdateAnnouncementDto,
+} from './announcements.dto.js';
 import { AnnouncementsService } from './announcements.service.js';
 
 @Controller('announcements')
@@ -15,6 +21,8 @@ export class AnnouncementsController {
   @Get() @Roles(RoleCode.Admin) list(): Promise<unknown> { return this.service.list(); }
   @Get('managed') @Roles(RoleCode.Admin, RoleCode.AreaManager, RoleCode.Manager) managed(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.managed(user); }
   @Get('mine') mine(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.mine(user); }
+  @Post('push-devices') registerPushDevice(@CurrentUser() user: AuthenticatedUserView, @Body() input: RegisterPushDeviceDto): Promise<unknown> { return this.service.registerPushDevice(user, input); }
+  @Post('push-devices/unregister') unregisterPushDevice(@CurrentUser() user: AuthenticatedUserView, @Body() input: UnregisterPushDeviceDto): Promise<unknown> { return this.service.unregisterPushDevice(user, input); }
   @Post() @Roles(RoleCode.Admin) create(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateAnnouncementDto): Promise<unknown> { return this.service.create(user, input); }
   @Post(':id/read') markRead(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string): Promise<unknown> { return this.service.markRead(user, id); }
   @Post(':id/acknowledge') acknowledge(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string): Promise<unknown> { return this.service.acknowledge(user, id); }

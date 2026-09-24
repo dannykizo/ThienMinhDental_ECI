@@ -36,16 +36,16 @@ import { RolesGuard } from './presentation/roles.guard.js';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const sessionDays = Number(
-          config.get<string>('AUTH_SESSION_DAYS', '30'),
+        const accessTokenMinutes = Number(
+          config.get<string>('AUTH_ACCESS_TOKEN_MINUTES', '15'),
         );
-        if (!Number.isFinite(sessionDays) || sessionDays <= 0) {
-          throw new Error('AUTH_SESSION_DAYS must be a positive number');
+        if (!Number.isFinite(accessTokenMinutes) || accessTokenMinutes <= 0) {
+          throw new Error('AUTH_ACCESS_TOKEN_MINUTES must be a positive number');
         }
 
         return {
           secret: config.getOrThrow<string>('JWT_SECRET'),
-          signOptions: { expiresIn: sessionDays * 24 * 60 * 60 },
+          signOptions: { expiresIn: accessTokenMinutes * 60 },
         };
       },
     }),

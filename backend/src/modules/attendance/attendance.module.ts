@@ -4,10 +4,11 @@ import { AttendanceAdjustmentEntity, AttendanceEventEntity, AttendanceExplanatio
 import { AuthModule } from '../auth/auth.module.js';
 import { AttendanceController } from './attendance.controller.js';
 import { AttendanceService } from './attendance.service.js';
+import { AttendanceEvidenceStorage } from './infrastructure/attendance-evidence.storage.js';
 
 @Module({
   imports: [AuthModule, TypeOrmModule.forFeature([AttendanceEventEntity, AttendanceAdjustmentEntity, AttendanceExplanationEntity, OfficeLocationEntity])],
   controllers: [AttendanceController],
-  providers: [AttendanceService],
+  providers: [AttendanceService, AttendanceEvidenceStorage],
 })
 export class AttendanceModule {}

@@ -33,6 +33,7 @@ logs/
 
 # Local attendance evidence captured during development
 CHECK_IN_IMAGE/
+backend/storage/
 
 # GitNexus local index (generated, never architecture source-of-truth)
 .gitnexus/

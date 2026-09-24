@@ -49,3 +49,7 @@ export class CompleteBusinessTripDto extends StartBusinessTripDto {
   @IsOptional() @IsString() @MaxLength(500) evidenceImageReference?: string;
   @IsOptional() @IsDateString() evidenceCapturedAt?: string;
 }
+
+export class UploadBusinessTripEvidenceDto {
+  @IsUUID() evidenceId!: string;
+}

@@ -22,3 +22,13 @@ export class TransitionAnnouncementDto {
   @IsIn(['PUBLISHED', 'CANCELLED', 'WITHDRAWN']) status!: 'PUBLISHED' | 'CANCELLED' | 'WITHDRAWN';
   @IsOptional() @IsString() @MaxLength(2000) reason?: string;
 }
+
+export class RegisterPushDeviceDto {
+  @IsString() @MinLength(8) @MaxLength(200) deviceId!: string;
+  @IsIn(['ANDROID']) platform!: 'ANDROID';
+  @IsString() @MinLength(20) @MaxLength(4096) token!: string;
+}
+
+export class UnregisterPushDeviceDto {
+  @IsString() @MinLength(8) @MaxLength(200) deviceId!: string;
+}

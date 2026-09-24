@@ -24,6 +24,9 @@ export interface AuthSessionRecord extends LoginContext {
   userId: string;
   signedInAt: Date;
   expiresAt: Date;
+  lastSeenAt: Date;
+  refreshTokenHash: string | null;
+  previousRefreshTokenHash: string | null;
   revokedAt: Date | null;
   revokeReason: string | null;
   loginAlertStatus: LoginAlertStatus;
@@ -41,8 +44,18 @@ export interface AuthSessionRepository {
     userId: string,
     context: LoginContext,
     expiresAt: Date,
+    refreshTokenHash: string,
   ): Promise<AuthSessionRecord>;
-  isActive(sessionId: string, userId: string): Promise<boolean>;
+  findActive(
+    sessionId: string,
+    userId?: string,
+  ): Promise<AuthSessionRecord | null>;
+  rotateRefreshToken(
+    sessionId: string,
+    expectedHash: string,
+    nextHash: string,
+  ): Promise<boolean>;
+  touch(sessionId: string): Promise<void>;
   revoke(sessionId: string, reason: string): Promise<boolean>;
   listAll(limit: number): Promise<AuthSessionAuditRecord[]>;
   markLoginAlert(

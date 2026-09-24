@@ -55,6 +55,15 @@ export class AuthSessionEntity {
   @Column({ name: 'expires_at', type: 'timestamptz' })
   expiresAt!: Date;
 
+  @Column({ name: 'last_seen_at', type: 'timestamptz', default: () => 'now()' })
+  lastSeenAt!: Date;
+
+  @Column({ name: 'refresh_token_hash', type: 'varchar', length: 64, nullable: true })
+  refreshTokenHash!: string | null;
+
+  @Column({ name: 'previous_refresh_token_hash', type: 'varchar', length: 64, nullable: true })
+  previousRefreshTokenHash!: string | null;
+
   @Column({ name: 'revoked_at', type: 'timestamptz', nullable: true })
   revokedAt!: Date | null;
 

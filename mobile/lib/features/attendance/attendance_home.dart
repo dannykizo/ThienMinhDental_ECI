@@ -19,8 +19,12 @@ class AttendanceHome extends StatefulWidget {
 class _AttendanceHomeState extends State<AttendanceHome> {
   TodayAttendance? _today;
   String? _error;
+  String? _success;
   bool _loading = true;
-  bool _submitting = false;
+  bool _retryAttendance = false;
+  double? _lastAccuracyMeters;
+  _AttendanceActionState _actionState = _AttendanceActionState.idle;
+  _LocationRecovery? _locationRecovery;
 
   @override
   void initState() {
@@ -28,10 +32,13 @@ class _AttendanceHomeState extends State<AttendanceHome> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool clearFeedback = true}) async {
     setState(() {
       _error = null;
+      if (clearFeedback) _success = null;
       _loading = true;
+      _retryAttendance = false;
+      _locationRecovery = null;
     });
     try {
       final TodayAttendance today = await widget.session.api.today();
@@ -52,24 +59,42 @@ class _AttendanceHomeState extends State<AttendanceHome> {
     if (today == null || today.status == 'CHECKED_OUT') return;
     setState(() {
       _error = null;
-      _submitting = true;
+      _success = null;
+      _retryAttendance = true;
+      _locationRecovery = null;
+      _actionState = _AttendanceActionState.locating;
     });
     try {
       final bool enabled = await Geolocator.isLocationServiceEnabled();
       if (!enabled) {
-        throw const ApiException(
-            'Hãy bật dịch vụ vị trí trên điện thoại để chấm công.');
+        if (mounted) {
+          setState(() {
+            _error = 'Hãy bật dịch vụ vị trí trên điện thoại để chấm công.';
+            _locationRecovery = _LocationRecovery.locationSettings;
+          });
+        }
+        return;
       }
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.denied) {
-        throw const ApiException('Bạn chưa cấp quyền vị trí cho ứng dụng.');
+        if (mounted) {
+          setState(() => _error =
+              'Bạn cần cấp quyền vị trí chính xác để chấm công tại văn phòng.');
+        }
+        return;
       }
       if (permission == LocationPermission.deniedForever) {
-        throw const ApiException(
-            'Quyền vị trí đã bị từ chối vĩnh viễn. Hãy mở Cài đặt ứng dụng để cấp lại.');
+        if (mounted) {
+          setState(() {
+            _error =
+                'Quyền vị trí đang bị tắt. Hãy mở Cài đặt ứng dụng để cấp lại.';
+            _locationRecovery = _LocationRecovery.appSettings;
+          });
+        }
+        return;
       }
       final Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -77,30 +102,74 @@ class _AttendanceHomeState extends State<AttendanceHome> {
           timeLimit: Duration(seconds: 20),
         ),
       );
-      await widget.session.api.recordOfficeEvent(
+      if (mounted) {
+        setState(() {
+          _actionState = _AttendanceActionState.sending;
+          _lastAccuracyMeters = position.accuracy;
+        });
+      }
+      final RecordedAttendanceEvent event =
+          await widget.session.api.recordOfficeEvent(
         accuracyMeters: position.accuracy,
         eventType: today.status == 'NOT_CHECKED_IN' ? 'CHECK_IN' : 'CHECK_OUT',
         latitude: position.latitude,
         longitude: position.longitude,
         mockLocationSignal: position.isMocked,
       );
-      await _load();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Đã ghi nhận bằng thời gian máy chủ.'),
-              behavior: SnackBarBehavior.floating),
-        );
+        setState(() {
+          _success = event.eventType == 'CHECK_IN'
+              ? 'Check-in thành công lúc ${DateFormat('HH:mm').format(event.serverTime)}.'
+              : 'Check-out thành công lúc ${DateFormat('HH:mm').format(event.serverTime)}.';
+          _retryAttendance = false;
+        });
       }
+      await _load(clearFeedback: false);
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() => _error = error.code == 'OFFICE_LOCATION_NOT_CONFIGURED'
+            ? 'Chi nhánh của bạn chưa có tọa độ văn phòng chính thức. Vui lòng liên hệ Admin cấu hình trước khi chấm công.'
+            : error.message);
+      }
     } on TimeoutException {
       if (mounted) {
         setState(() => _error =
             'Không lấy được vị trí đủ nhanh. Hãy ra khu vực thoáng và thử lại.');
       }
+    } on LocationServiceDisabledException {
+      if (mounted) {
+        setState(() {
+          _error = 'Dịch vụ vị trí vừa bị tắt. Hãy bật lại để tiếp tục.';
+          _locationRecovery = _LocationRecovery.locationSettings;
+        });
+      }
+    } on PermissionDeniedException {
+      if (mounted) {
+        setState(() {
+          _error = 'Ứng dụng chưa được phép lấy vị trí để chấm công.';
+          _locationRecovery = _LocationRecovery.appSettings;
+        });
+      }
+    } on Object {
+      if (mounted) {
+        setState(() => _error =
+            'Không thể lấy vị trí lúc này. Hãy kiểm tra GPS và thử lại.');
+      }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() => _actionState = _AttendanceActionState.idle);
+      }
+    }
+  }
+
+  Future<void> _recoverLocation() async {
+    switch (_locationRecovery) {
+      case _LocationRecovery.locationSettings:
+        await Geolocator.openLocationSettings();
+      case _LocationRecovery.appSettings:
+        await Geolocator.openAppSettings();
+      case null:
+        break;
     }
   }
 
@@ -150,12 +219,21 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                       height: 1.12,
                       letterSpacing: -0.7)),
               const SizedBox(height: 7),
-              Text(DateFormat('dd/MM/yyyy').format(DateTime.now()),
+              Text(_formatDate(_today?.date),
                   style:
                       const TextStyle(color: Color(0xFF807482), fontSize: 13)),
               const SizedBox(height: 24),
+              if (_success != null) ...<Widget>[
+                _SuccessBanner(message: _success!),
+                const SizedBox(height: 16),
+              ],
               if (_error != null) ...<Widget>[
-                _ErrorBanner(message: _error!, onRetry: _load),
+                _ErrorBanner(
+                  message: _error!,
+                  onRecover:
+                      _locationRecovery == null ? null : _recoverLocation,
+                  onRetry: _retryAttendance ? _record : _load,
+                ),
                 const SizedBox(height: 16),
               ],
               if (_loading && _today == null)
@@ -165,7 +243,14 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                         child: CircularProgressIndicator(color: brandPurple)))
               else if (_today != null)
                 _AttendanceCard(
-                    today: _today!, submitting: _submitting, onRecord: _record),
+                  actionState: _actionState,
+                  onRecord: _record,
+                  today: _today!,
+                ),
+              if (_lastAccuracyMeters != null) ...<Widget>[
+                const SizedBox(height: 12),
+                _GpsSampleNotice(accuracyMeters: _lastAccuracyMeters!),
+              ],
               const SizedBox(height: 18),
               Container(
                 padding: const EdgeInsets.all(18),
@@ -211,15 +296,32 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       ),
     );
   }
+
+  static String _formatDate(String? date) {
+    final DateTime value =
+        (date == null ? null : DateTime.tryParse(date)) ?? DateTime.now();
+    const List<String> weekdays = <String>[
+      'Thứ Hai',
+      'Thứ Ba',
+      'Thứ Tư',
+      'Thứ Năm',
+      'Thứ Sáu',
+      'Thứ Bảy',
+      'Chủ Nhật',
+    ];
+    return '${weekdays[value.weekday - 1]}, ${DateFormat('dd/MM/yyyy').format(value)}';
+  }
 }
 
 class _AttendanceCard extends StatelessWidget {
   const _AttendanceCard(
-      {required this.onRecord, required this.submitting, required this.today});
+      {required this.actionState, required this.onRecord, required this.today});
 
+  final _AttendanceActionState actionState;
   final VoidCallback onRecord;
-  final bool submitting;
   final TodayAttendance today;
+
+  bool get _submitting => actionState != _AttendanceActionState.idle;
 
   String get _title => switch (today.status) {
         'CHECKED_IN' => 'Đang trong ca',
@@ -230,6 +332,18 @@ class _AttendanceCard extends StatelessWidget {
   String get _button => today.status == 'CHECKED_IN'
       ? 'Check-out tại văn phòng'
       : 'Check-in tại văn phòng';
+
+  String get _statusLabel => switch (today.status) {
+        'CHECKED_IN' => 'ĐANG TRONG CA',
+        'CHECKED_OUT' => 'ĐÃ CHECK-OUT',
+        _ => 'CHƯA CHECK-IN',
+      };
+
+  String get _progressLabel => switch (actionState) {
+        _AttendanceActionState.locating => 'Đang lấy vị trí…',
+        _AttendanceActionState.sending => 'Đang ghi nhận…',
+        _AttendanceActionState.idle => _button,
+      };
 
   @override
   Widget build(BuildContext context) => Container(
@@ -262,7 +376,7 @@ class _AttendanceCard extends StatelessWidget {
                                   : brandOrange,
                               shape: BoxShape.circle)),
                       const SizedBox(width: 8),
-                      Text(today.status,
+                      Text(_statusLabel,
                           style: const TextStyle(
                               color: Color(0xFFF2EAF5),
                               fontSize: 10,
@@ -307,12 +421,75 @@ class _AttendanceCard extends StatelessWidget {
                               value: _formatTime(today.checkedOutAt))),
                     ],
                   ),
+                  const SizedBox(height: 18),
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFAF8FA),
+                      border: Border.all(color: const Color(0xFFEDE7EE)),
+                    ),
+                    child: Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: _MetricCell(
+                            label: 'ĐÃ LÀM',
+                            value: today.status == 'CHECKED_OUT'
+                                ? _formatDuration(today.workedMinutes)
+                                : '—',
+                          ),
+                        ),
+                        Expanded(
+                          child: _MetricCell(
+                            label: 'ĐỊNH MỨC',
+                            value: _formatDuration(today.requiredWorkMinutes),
+                          ),
+                        ),
+                        Expanded(
+                          child: _MetricCell(
+                            label: 'TĂNG CA',
+                            value: today.status == 'CHECKED_OUT'
+                                ? _formatDuration(today.overtimeMinutes)
+                                : '—',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (today.status == 'CHECKED_OUT') ...<Widget>[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: <Widget>[
+                        Icon(
+                          today.isFullWorkday
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.info_outline_rounded,
+                          color: today.isFullWorkday
+                              ? const Color(0xFF338865)
+                              : brandOrange,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            today.isFullWorkday
+                                ? 'Đã đạt định mức ngày công.'
+                                : 'Chưa đạt định mức ngày công; Backend sẽ đưa vào đối soát.',
+                            style: const TextStyle(
+                              color: Color(0xFF746A77),
+                              fontSize: 11,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
                     height: 54,
                     child: FilledButton.icon(
-                      onPressed: submitting || today.status == 'CHECKED_OUT'
+                      onPressed: _submitting || today.status == 'CHECKED_OUT'
                           ? null
                           : onRecord,
                       style: FilledButton.styleFrom(
@@ -320,7 +497,7 @@ class _AttendanceCard extends StatelessWidget {
                           disabledBackgroundColor: const Color(0xFFE3DCE5),
                           shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(5))),
-                      icon: submitting
+                      icon: _submitting
                           ? const SizedBox.square(
                               dimension: 18,
                               child: CircularProgressIndicator(
@@ -331,8 +508,8 @@ class _AttendanceCard extends StatelessWidget {
                       label: Text(
                           today.status == 'CHECKED_OUT'
                               ? 'Ngày công đã hoàn tất'
-                              : submitting
-                                  ? 'Đang lấy vị trí…'
+                              : _submitting
+                                  ? _progressLabel
                                   : _button,
                           style: const TextStyle(fontWeight: FontWeight.w800)),
                     ),
@@ -350,6 +527,14 @@ class _AttendanceCard extends StatelessWidget {
   static String _formatTime(DateTime? time) =>
       time == null ? '—' : DateFormat('HH:mm').format(time);
 
+  static String _formatDuration(int minutes) {
+    final int hours = minutes ~/ 60;
+    final int remainder = minutes % 60;
+    if (hours == 0) return '${remainder}p';
+    if (remainder == 0) return '${hours}h';
+    return '${hours}h ${remainder}p';
+  }
+
   static String _riskLabel(String flag) => switch (flag) {
         'LATE' => 'đi muộn',
         'EARLY_LEAVE' => 'về sớm',
@@ -358,6 +543,29 @@ class _AttendanceCard extends StatelessWidget {
         'MOCK_LOCATION_SIGNAL' => 'thiết bị báo vị trí mô phỏng',
         _ => flag,
       };
+}
+
+class _MetricCell extends StatelessWidget {
+  const _MetricCell({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: <Widget>[
+          Text(label,
+              style: const TextStyle(
+                  color: Color(0xFF948997),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8)),
+          const SizedBox(height: 5),
+          Text(value,
+              style: const TextStyle(
+                  color: brandInk, fontSize: 13, fontWeight: FontWeight.w800)),
+        ],
+      );
 }
 
 class _TimeCell extends StatelessWidget {
@@ -386,9 +594,14 @@ class _TimeCell extends StatelessWidget {
 }
 
 class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message, required this.onRetry});
+  const _ErrorBanner({
+    required this.message,
+    required this.onRetry,
+    this.onRecover,
+  });
 
   final String message;
+  final Future<void> Function()? onRecover;
   final Future<void> Function() onRetry;
 
   @override
@@ -398,14 +611,87 @@ class _ErrorBanner extends StatelessWidget {
             color: Color(0xFFFFEFEC),
             border:
                 Border(left: BorderSide(color: Color(0xFFB85D50), width: 3))),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Expanded(
-                child: Text(message,
-                    style: const TextStyle(
-                        color: Color(0xFF8E3D33), fontSize: 12, height: 1.4))),
-            TextButton(onPressed: onRetry, child: const Text('Thử lại')),
+            Text(message,
+                style: const TextStyle(
+                    color: Color(0xFF8E3D33), fontSize: 12, height: 1.4)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              children: <Widget>[
+                TextButton(onPressed: onRetry, child: const Text('Thử lại')),
+                if (onRecover != null)
+                  TextButton(
+                    onPressed: onRecover,
+                    child: const Text('Mở cài đặt'),
+                  ),
+              ],
+            ),
           ],
         ),
       );
 }
+
+class _SuccessBanner extends StatelessWidget {
+  const _SuccessBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: const BoxDecoration(
+          color: Color(0xFFEAF7F1),
+          border: Border(left: BorderSide(color: Color(0xFF338865), width: 3)),
+        ),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.check_circle_outline_rounded,
+                size: 18, color: Color(0xFF338865)),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(message,
+                  style: const TextStyle(
+                      color: Color(0xFF286E52),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+}
+
+class _GpsSampleNotice extends StatelessWidget {
+  const _GpsSampleNotice({required this.accuracyMeters});
+
+  final double accuracyMeters;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7EA),
+          border: Border.all(color: const Color(0xFFF1DEC1)),
+        ),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.gps_fixed_rounded, size: 17, color: brandOrange),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                'Mẫu GPS vừa dùng có độ chính xác khoảng ±${accuracyMeters.round()} m. Tọa độ không hiển thị trên màn hình.',
+                style: const TextStyle(
+                    color: Color(0xFF77582F), fontSize: 11, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+enum _AttendanceActionState { idle, locating, sending }
+
+enum _LocationRecovery { locationSettings, appSettings }

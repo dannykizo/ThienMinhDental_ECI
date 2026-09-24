@@ -1,15 +1,30 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, type EntityManager } from 'typeorm';
+import { PushDeviceTokenEntity } from '../../database/entities/push-device-token.entity.js';
 import { AnnouncementEntity, AnnouncementRecipientEntity, ConfigurationAuditLogEntity } from '../../database/entities/workforce.entity.js';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { RoleCode } from '../auth/domain/role-code.js';
+import {
+  ANNOUNCEMENT_PUSH_SENDER,
+  type AnnouncementPushSender,
+} from './application/announcement-push.sender.js';
 import { canAcknowledgeAnnouncement, canTransitionAnnouncement } from './domain/announcement-status.js';
-import type { CreateAnnouncementDto, TransitionAnnouncementDto, UpdateAnnouncementDto } from './announcements.dto.js';
+import type {
+  CreateAnnouncementDto,
+  RegisterPushDeviceDto,
+  TransitionAnnouncementDto,
+  UnregisterPushDeviceDto,
+  UpdateAnnouncementDto,
+} from './announcements.dto.js';
 
 @Injectable()
 export class AnnouncementsService {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    @Inject(ANNOUNCEMENT_PUSH_SENDER)
+    private readonly pushSender: AnnouncementPushSender,
+  ) {}
 
   list(): Promise<unknown[]> {
     return this.dataSource.query(`SELECT a.id,a.title,a.body,a.status,a.audience_type AS "audienceType",a.department_id AS "departmentId",a.employee_id AS "employeeId",a.requires_acknowledgement AS "requiresAcknowledgement",COALESCE(d.name,target.full_name,CASE WHEN a.audience_type='ALL' THEN 'Toàn bộ nhân viên (dữ liệu cũ)' END) AS "targetName",a.created_at AS "createdAt",a.published_at AS "publishedAt",a.withdrawn_at AS "withdrawnAt",a.withdraw_reason AS "withdrawReason",COALESCE(creator.full_name,cu.email) AS "createdByName",COUNT(ar.employee_id)::int AS "recipientCount",COUNT(ar.read_at)::int AS "readCount",COUNT(ar.acknowledged_at)::int AS "acknowledgedCount" FROM announcements a LEFT JOIN departments d ON d.id=a.department_id LEFT JOIN employees target ON target.id=a.employee_id JOIN users cu ON cu.id=a.created_by LEFT JOIN employees creator ON creator.user_id=cu.id LEFT JOIN announcement_recipients ar ON ar.announcement_id=a.id GROUP BY a.id,d.name,target.full_name,creator.full_name,cu.email ORDER BY a.created_at DESC`);
@@ -24,6 +39,67 @@ export class AnnouncementsService {
   mine(user: AuthenticatedUserView): Promise<unknown[]> {
     if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
     return this.dataSource.query(`SELECT a.id,a.title,a.body,a.requires_acknowledgement AS "requiresAcknowledgement",a.published_at AS "publishedAt",ar.delivered_at AS "deliveredAt",ar.read_at AS "readAt",ar.acknowledged_at AS "acknowledgedAt" FROM announcement_recipients ar JOIN announcements a ON a.id=ar.announcement_id WHERE ar.employee_id=$1 AND a.status='PUBLISHED' ORDER BY a.published_at DESC`, [user.employeeId]);
+  }
+
+  async registerPushDevice(
+    user: AuthenticatedUserView,
+    input: RegisterPushDeviceDto,
+  ): Promise<{ pushConfigured: boolean; registered: true }> {
+    if (!user.employeeId) {
+      throw new BadRequestException({
+        code: 'EMPLOYEE_PROFILE_REQUIRED',
+        message: 'Tài khoản chưa liên kết nhân viên.',
+      });
+    }
+    const employeeId = user.employeeId;
+    await this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(PushDeviceTokenEntity);
+      const sameToken = await repository.findOne({
+        where: { token: input.token },
+      });
+      if (
+        sameToken &&
+        (sameToken.userId !== user.id || sameToken.deviceId !== input.deviceId)
+      ) {
+        await repository.remove(sameToken);
+      }
+
+      let device = await repository.findOne({
+        where: { deviceId: input.deviceId, userId: user.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      device ??= repository.create({
+        deviceId: input.deviceId,
+        employeeId,
+        userId: user.id,
+      });
+      Object.assign(device, {
+        employeeId,
+        isActive: true,
+        lastError: null,
+        lastRegisteredAt: new Date(),
+        platform: input.platform,
+        token: input.token,
+      });
+      await repository.save(device);
+    });
+    return {
+      pushConfigured: this.pushSender.isConfigured(),
+      registered: true,
+    };
+  }
+
+  async unregisterPushDevice(
+    user: AuthenticatedUserView,
+    input: UnregisterPushDeviceDto,
+  ): Promise<{ unregistered: true }> {
+    await this.dataSource
+      .getRepository(PushDeviceTokenEntity)
+      .update(
+        { deviceId: input.deviceId, userId: user.id },
+        { isActive: false, lastError: null },
+      );
+    return { unregistered: true };
   }
 
   async markRead(user: AuthenticatedUserView, announcementId: string): Promise<AnnouncementRecipientEntity> {
@@ -87,7 +163,8 @@ export class AnnouncementsService {
   }
 
   async transition(user: AuthenticatedUserView, id: string, input: TransitionAnnouncementDto): Promise<AnnouncementEntity> {
-    return this.dataSource.transaction(async (manager) => {
+    const recipientIds: string[] = [];
+    const saved = await this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(AnnouncementEntity);
       const announcement = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!announcement) throw new NotFoundException({ code: 'ANNOUNCEMENT_NOT_FOUND', message: 'Không tìm thấy thông báo.' });
@@ -98,6 +175,7 @@ export class AnnouncementsService {
         if (recipientRows.length === 0) throw new ConflictException({ code: 'ANNOUNCEMENT_HAS_NO_RECIPIENTS', message: 'Không có nhân viên đang hoạt động phù hợp với đối tượng nhận.' });
         const recipientRepository = manager.getRepository(AnnouncementRecipientEntity);
         await recipientRepository.save(recipientRows.map(({ id: employeeId }) => recipientRepository.create({ announcementId: id, employeeId, deliveredAt: new Date() })));
+        recipientIds.push(...recipientRows.map((recipient) => recipient.id));
         announcement.publishedAt = new Date();
       }
       if (input.status === 'WITHDRAWN') {
@@ -110,6 +188,16 @@ export class AnnouncementsService {
       await this.audit(manager, user.id, id, input.status, oldValue, this.summary(saved));
       return saved;
     });
+    if (input.status === 'PUBLISHED') {
+      await this.pushSender.sendAnnouncement({
+        announcementId: saved.id,
+        body: saved.body,
+        employeeIds: recipientIds,
+        requiresAcknowledgement: saved.requiresAcknowledgement,
+        title: saved.title,
+      });
+    }
+    return saved;
   }
 
   async recipients(user: AuthenticatedUserView, id: string): Promise<unknown[]> {

@@ -21,6 +21,7 @@ export class TypeOrmAuthSessionRepository implements AuthSessionRepository {
     userId: string,
     context: LoginContext,
     expiresAt: Date,
+    refreshTokenHash: string,
   ): Promise<AuthSessionRecord> {
     return this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(AuthSessionEntity);
@@ -38,6 +39,9 @@ export class TypeOrmAuthSessionRepository implements AuthSessionRepository {
           ipAddress: context.ipAddress,
           userAgent: context.userAgent,
           expiresAt,
+          lastSeenAt: new Date(),
+          refreshTokenHash,
+          previousRefreshTokenHash: null,
           revokedAt: null,
           revokeReason: null,
           loginAlertStatus: LoginAlertStatus.Pending,
@@ -50,16 +54,47 @@ export class TypeOrmAuthSessionRepository implements AuthSessionRepository {
     });
   }
 
-  async isActive(sessionId: string, userId: string): Promise<boolean> {
-    const count = await this.dataSource.getRepository(AuthSessionEntity).count({
+  async findActive(
+    sessionId: string,
+    userId?: string,
+  ): Promise<AuthSessionRecord | null> {
+    const entity = await this.dataSource.getRepository(AuthSessionEntity).findOne({
       where: {
         id: sessionId,
-        userId,
+        ...(userId ? { userId } : {}),
         revokedAt: IsNull(),
         expiresAt: MoreThan(new Date()),
       },
     });
-    return count === 1;
+    return entity ? this.toRecord(entity) : null;
+  }
+
+  async rotateRefreshToken(
+    sessionId: string,
+    expectedHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    const result = await this.dataSource
+      .createQueryBuilder()
+      .update(AuthSessionEntity)
+      .set({
+        previousRefreshTokenHash: expectedHash,
+        refreshTokenHash: nextHash,
+        lastSeenAt: new Date(),
+      })
+      .where('id = :sessionId', { sessionId })
+      .andWhere('refresh_token_hash = :expectedHash', { expectedHash })
+      .andWhere('revoked_at IS NULL')
+      .andWhere('expires_at > now()')
+      .execute();
+    return (result.affected ?? 0) === 1;
+  }
+
+  async touch(sessionId: string): Promise<void> {
+    await this.dataSource.getRepository(AuthSessionEntity).update(
+      { id: sessionId, revokedAt: IsNull() },
+      { lastSeenAt: new Date() },
+    );
   }
 
   async revoke(sessionId: string, reason: string): Promise<boolean> {
@@ -110,6 +145,9 @@ export class TypeOrmAuthSessionRepository implements AuthSessionRepository {
       userAgent: session.userAgent,
       signedInAt: session.signedInAt,
       expiresAt: session.expiresAt,
+      lastSeenAt: session.lastSeenAt,
+      refreshTokenHash: session.refreshTokenHash,
+      previousRefreshTokenHash: session.previousRefreshTokenHash,
       revokedAt: session.revokedAt,
       revokeReason: session.revokeReason,
       loginAlertStatus: session.loginAlertStatus,

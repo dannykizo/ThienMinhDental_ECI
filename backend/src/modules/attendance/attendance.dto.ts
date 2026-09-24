@@ -36,6 +36,10 @@ export class RespondAttendanceExplanationDto {
   @IsOptional() @IsLongitude() evidenceLongitude?: number;
 }
 
+export class UploadAttendanceEvidenceDto {
+  @IsUUID() evidenceId!: string;
+}
+
 export class ReviewAttendanceExplanationDto {
   @IsIn(['APPROVED', 'REJECTED']) status!: 'APPROVED' | 'REJECTED';
   @IsOptional() @IsString() @MinLength(5) reviewNote?: string;

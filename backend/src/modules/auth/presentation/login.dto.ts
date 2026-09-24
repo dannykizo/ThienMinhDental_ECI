@@ -1,4 +1,4 @@
-import { IsIn, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsString()
@@ -23,4 +23,12 @@ export class LoginDto {
 
   @IsIn(['WEB', 'MOBILE'])
   clientType!: 'WEB' | 'MOBILE';
+}
+
+export class RefreshSessionDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(40)
+  @MaxLength(256)
+  refreshToken?: string;
 }

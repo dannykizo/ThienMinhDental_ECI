@@ -10,6 +10,8 @@ import { AttendanceReconciliation1790294400000 } from './migrations/179029440000
 import { BusinessTripOperations1790380800000 } from './migrations/1790380800000-business-trip-operations.js';
 import { LeaveOperations1790467200000 } from './migrations/1790467200000-leave-operations.js';
 import { AnnouncementAlignment1790553600000 } from './migrations/1790553600000-announcement-alignment.js';
+import { RefreshTokenSessions1790640000000 } from './migrations/1790640000000-refresh-token-sessions.js';
+import { PushNotificationDevices1790726400000 } from './migrations/1790726400000-push-notification-devices.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -31,6 +33,8 @@ export const applicationDataSource = new DataSource({
     BusinessTripOperations1790380800000,
     LeaveOperations1790467200000,
     AnnouncementAlignment1790553600000,
+    RefreshTokenSessions1790640000000,
+    PushNotificationDevices1790726400000,
   ],
   migrationsTableName: 'schema_migrations',
 });

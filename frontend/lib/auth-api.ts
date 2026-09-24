@@ -26,6 +26,7 @@ export interface LoginSessionAudit {
   ipAddress: string | null;
   signedInAt: string;
   expiresAt: string;
+  lastSeenAt: string;
   revokedAt: string | null;
   revokeReason: string | null;
   status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
@@ -54,6 +55,7 @@ export class ApiError extends Error {
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.ok) {
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
 
@@ -64,8 +66,28 @@ async function parseResponse<T>(response: Response): Promise<T> {
   throw new ApiError(message, response.status, body.code ?? 'REQUEST_FAILED');
 }
 
+let refreshRequest: Promise<boolean> | null = null;
+
+async function refreshWebSession(): Promise<boolean> {
+  if (!refreshRequest) {
+    refreshRequest = fetch(`${apiUrl}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+      cache: 'no-store',
+    })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshRequest = null;
+      });
+  }
+  return refreshRequest;
+}
+
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiUrl}${path}`, {
+  const request = (): Promise<Response> => fetch(`${apiUrl}${path}`, {
     ...init,
     credentials: 'include',
     headers: {
@@ -74,6 +96,10 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     },
     cache: 'no-store',
   });
+  let response = await request();
+  if (response.status === 401 && (await refreshWebSession())) {
+    response = await request();
+  }
   return parseResponse<T>(response);
 }
 
@@ -113,19 +139,9 @@ export async function revokeLoginSession(sessionId: string): Promise<void> {
 }
 
 export async function getAdminSession(): Promise<SessionUser> {
-  const response = await fetch(`${apiUrl}/auth/admin-session`, {
-    credentials: 'include',
-    cache: 'no-store',
-  });
-  return (await parseResponse<SessionResponse>(response)).user;
+  return (await apiRequest<SessionResponse>('/auth/admin-session')).user;
 }
 
 export async function logout(): Promise<void> {
-  const response = await fetch(`${apiUrl}/auth/logout`, {
-    method: 'POST',
-    credentials: 'include',
-  });
-  if (!response.ok) {
-    throw new ApiError('Không thể đăng xuất.', response.status, 'LOGOUT_FAILED');
-  }
+  await apiRequest<void>('/auth/logout', { method: 'POST' });
 }
