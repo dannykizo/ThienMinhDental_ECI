@@ -2,6 +2,15 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import {
+  CarFront,
+  ClipboardPenLine,
+  Clock3,
+  Megaphone,
+  TriangleAlert,
+  UsersRound,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LoadingState, Notice, PageHeader } from '@/components/admin-ui';
 import { apiRequest } from '@/lib/auth-api';
@@ -19,49 +28,49 @@ const metrics: Array<{
   key: keyof DashboardSummary;
   label: string;
   note: string;
-  icon: string;
+  icon: LucideIcon;
   href: string;
 }> = [
   {
     key: 'activeEmployees',
     label: 'Nhân viên hoạt động',
     note: 'Hồ sơ đang sử dụng',
-    icon: '👥',
+    icon: UsersRound,
     href: '/dashboard/employees',
   },
   {
     key: 'attendanceToday',
     label: 'Đã ghi nhận hôm nay',
     note: 'Có ít nhất một sự kiện chấm công',
-    icon: '⏰',
+    icon: Clock3,
     href: '/dashboard/attendance',
   },
   {
     key: 'reviewRequired',
     label: 'Cần đối soát & điều chỉnh',
     note: 'Sự kiện có cảnh báo / bất thường',
-    icon: '⚠️',
+    icon: TriangleAlert,
     href: '/dashboard/attendance',
   },
   {
     key: 'activeTrips',
     label: 'Công tác đang mở',
     note: 'Đã giao việc hoặc đang thực hiện',
-    icon: '🚗',
+    icon: CarFront,
     href: '/dashboard/business-trips',
   },
   {
     key: 'pendingLeave',
     label: 'Đơn nghỉ chờ duyệt',
     note: 'Cần quản lý xem xét và phê duyệt',
-    icon: '📝',
+    icon: ClipboardPenLine,
     href: '/dashboard/leave',
   },
   {
     key: 'publishedAnnouncements',
     label: 'Thông báo nội bộ',
     note: 'Nội dung đang phát hành',
-    icon: '📢',
+    icon: Megaphone,
     href: '/dashboard/announcements',
   },
 ];
@@ -100,7 +109,12 @@ export default function DashboardPage() {
               >
                 <div className="metric-card-top">
                   <p>{metric.label}</p>
-                  <span style={{ fontSize: '1.25rem' }}>{metric.icon}</span>
+                  <metric.icon
+                    aria-hidden="true"
+                    className="metric-card-icon"
+                    size={20}
+                    strokeWidth={1.9}
+                  />
                 </div>
                 <strong>{summary[metric.key]}</strong>
                 <span>{metric.note}</span>

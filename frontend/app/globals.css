@@ -697,6 +697,14 @@ button, a { -webkit-tap-highlight-color: transparent; }
   font-size: 0.76rem;
 }
 
+.topbar-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .topbar-right {
   display: flex;
   align-items: center;
@@ -770,6 +778,15 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.metric-card-icon {
+  flex: 0 0 auto;
+  color: var(--brand-primary);
+}
+
+.metric-card-icon.success-icon {
+  color: var(--emerald);
 }
 
 .metric-card p {
@@ -1068,6 +1085,16 @@ tbody tr:hover {
   background: var(--surface);
   transition: background 160ms ease;
   user-select: none;
+}
+
+.summary-label, .assignment-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-label svg, .assignment-line svg {
+  flex: 0 0 auto;
 }
 
 .editor-panel summary:hover {

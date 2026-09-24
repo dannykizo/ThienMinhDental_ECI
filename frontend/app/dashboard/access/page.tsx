@@ -1,5 +1,6 @@
 'use client';
 
+import { CircleAlert, History } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -151,7 +152,9 @@ export default function AccessPage() {
 
       {state === 'error' && (
         <div className="empty-state">
-          <span aria-hidden="true">!</span>
+          <span aria-hidden="true">
+            <CircleAlert size={34} strokeWidth={1.6} />
+          </span>
           <h3>Không thể tải dữ liệu</h3>
           <p>{message}</p>
           <button className="secondary-button" onClick={() => void load()} type="button">
@@ -162,7 +165,9 @@ export default function AccessPage() {
 
       {state === 'ready' && sessions.length === 0 && (
         <div className="empty-state">
-          <span aria-hidden="true">◇</span>
+          <span aria-hidden="true">
+            <History size={34} strokeWidth={1.6} />
+          </span>
           <h3>Chưa có lịch sử đăng nhập</h3>
           <p>Dữ liệu sẽ xuất hiện từ lần đăng nhập tiếp theo.</p>
         </div>

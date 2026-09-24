@@ -1,5 +1,6 @@
 'use client';
 
+import { Pencil, Plus } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
 import { apiRequest } from '@/lib/auth-api';
@@ -95,7 +96,7 @@ export default function LocationsPage() {
       </section>
 
       <details className="editor-panel" open>
-        <summary>{editing ? `Chỉnh sửa · ${editing.name}` : '+ Thêm vị trí làm việc'}</summary>
+        <summary><span className="summary-label">{editing ? <Pencil aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}{editing ? `Chỉnh sửa · ${editing.name}` : 'Thêm vị trí làm việc'}</span></summary>
         <form className="form-grid" key={editing?.id ?? 'new'} onSubmit={save}>
           <label>Tên địa điểm<input defaultValue={editing?.name ?? ''} name="name" placeholder="VD: Văn phòng TP.HCM" required /></label>
           <label>Loại vị trí<select defaultValue={editing?.locationType ?? 'OFFICE'} name="locationType" onChange={(event) => setLocationType(event.target.value as Location['locationType'])}><option value="OFFICE">Văn phòng</option><option value="EXTERNAL_WORKPLACE">Địa điểm làm việc bên ngoài</option></select></label>

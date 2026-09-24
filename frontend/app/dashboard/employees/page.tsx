@@ -1,5 +1,6 @@
 'use client';
 
+import { Check, Plus } from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   EmptyState,
@@ -212,7 +213,12 @@ export default function EmployeesPage() {
         <article className="metric-card">
           <div className="metric-card-top">
             <p>Đang hoạt động</p>
-            <span style={{ color: 'var(--emerald)' }}>✓</span>
+            <Check
+              aria-hidden="true"
+              className="metric-card-icon success-icon"
+              size={20}
+              strokeWidth={2.1}
+            />
           </div>
           <strong style={{ color: 'var(--emerald-dark)' }}>
             {activeEmployees}
@@ -237,7 +243,7 @@ export default function EmployeesPage() {
       </section>
 
       {canManage && <details className="editor-panel" open>
-        <summary>+ Thêm hồ sơ nhân viên mới</summary>
+        <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Thêm hồ sơ nhân viên mới</span></summary>
         <form className="form-grid" onSubmit={submit}>
           <label>
             Mã nhân viên
@@ -362,7 +368,7 @@ export default function EmployeesPage() {
 
       {canManage && <div className="split-editors">
         <details className="editor-panel">
-          <summary>+ Thêm phòng ban mới</summary>
+          <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Thêm phòng ban mới</span></summary>
           <form
             className="inline-form"
             onSubmit={(event) => void createLookup(event, 'departments')}
@@ -378,7 +384,7 @@ export default function EmployeesPage() {
         </details>
 
         <details className="editor-panel">
-          <summary>+ Thêm chức vụ mới</summary>
+          <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Thêm chức vụ mới</span></summary>
           <form
             className="inline-form"
             onSubmit={(event) => void createLookup(event, 'positions')}
@@ -394,7 +400,7 @@ export default function EmployeesPage() {
         </details>
 
         <details className="editor-panel">
-          <summary>+ Thêm chi nhánh mới</summary>
+          <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Thêm chi nhánh mới</span></summary>
           <form
             className="inline-form"
             onSubmit={(event) => void createLookup(event, 'branches')}

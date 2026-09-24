@@ -1,5 +1,6 @@
 'use client';
 
+import { CornerDownRight, Pencil, Plus } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
 import { apiRequest } from '@/lib/auth-api';
@@ -141,7 +142,7 @@ export default function SchedulesPage() {
 
       <div className="split-editors">
         <details className="editor-panel" open>
-          <summary>{editing ? `Chỉnh sửa · ${editing.name}` : '+ Tạo khung lịch mới'}</summary>
+          <summary><span className="summary-label">{editing ? <Pencil aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}{editing ? `Chỉnh sửa · ${editing.name}` : 'Tạo khung lịch mới'}</span></summary>
           <form className="form-grid compact" key={editing?.id ?? 'new'} onSubmit={saveSchedule}>
             <label className="span-2">Tên lịch<input defaultValue={editing?.name ?? ''} name="name" placeholder="VD: Ca hành chính" required /></label>
             <fieldset className="span-2 weekday-field"><legend>Ngày làm việc</legend>
@@ -158,7 +159,7 @@ export default function SchedulesPage() {
         </details>
 
         <details className="editor-panel" open>
-          <summary>+ Áp dụng theo phòng ban</summary>
+          <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Áp dụng theo phòng ban</span></summary>
           <form className="form-grid compact" onSubmit={assignDepartment}>
             <label>Chi nhánh<select name="branchId" required><option value="">Chọn chi nhánh</option>{branches.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
             <label>Phòng ban<select name="departmentId" required><option value="">Chọn phòng ban</option>{departments.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
@@ -171,7 +172,7 @@ export default function SchedulesPage() {
       </div>
 
       <details className="editor-panel" style={{ marginBottom: 24 }}>
-        <summary>+ Tạo ngoại lệ lịch cho một nhân viên</summary>
+        <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Tạo ngoại lệ lịch cho một nhân viên</span></summary>
         <form className="form-grid compact" onSubmit={assignEmployee}>
           <label>Nhân viên<select name="employeeId" required><option value="">Chọn nhân viên</option>{employees.map((row) => <option key={row.id} value={row.id}>{row.employeeCode} · {row.fullName}</option>)}</select></label>
           <label>Lịch áp dụng<select name="scheduleId" required><option value="">Chọn lịch</option>{items?.filter((row) => row.isActive).map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
@@ -185,7 +186,7 @@ export default function SchedulesPage() {
         <div className="card-list">{items.map((item) => <article className="list-card" key={item.id}>
           <div><h3>{item.name}</h3><p><strong>{item.weekdays.map((day) => dayNames[day]).join(', ')}</strong> · {item.startTime.slice(0, 5)}–{item.endTime.slice(0, 5)}</p>
             <small>Đi muộn sau {item.lateToleranceMinutes} phút · Đủ công {item.requiredWorkMinutes} phút · Ngoại lệ cá nhân: {item.employeeAssignmentCount}</small>
-            {item.departmentAssignments.map((row) => <p key={row.id} style={{ margin: '6px 0 0' }}>↳ {row.branchName} / {row.departmentName} · từ {formatDate(row.effectiveFrom)}{row.effectiveTo ? ` đến ${formatDate(row.effectiveTo)}` : ''}</p>)}
+            {item.departmentAssignments.map((row) => <p className="assignment-line" key={row.id} style={{ margin: '6px 0 0' }}><CornerDownRight aria-hidden="true" size={15} />{row.branchName} / {row.departmentName} · từ {formatDate(row.effectiveFrom)}{row.effectiveTo ? ` đến ${formatDate(row.effectiveTo)}` : ''}</p>)}
           </div>
           <div><StatusBadge value={item.isActive ? 'ACTIVE' : 'INACTIVE'} /><button className="table-action" onClick={() => setEditing(item)} type="button">Sửa</button><button className="table-action" onClick={() => void toggle(item)} type="button">{item.isActive ? 'Tạm ngưng' : 'Kích hoạt'}</button></div>
         </article>)}</div>

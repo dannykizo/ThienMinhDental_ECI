@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { CircleAlert, CircleCheck, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
 import { ApiError, login } from '@/lib/auth-api';
@@ -57,7 +58,9 @@ export default function LoginPage() {
           </p>
         </div>
         <div className="security-note">
-          <span aria-hidden="true">✓</span>
+          <span aria-hidden="true">
+            <ShieldCheck size={15} strokeWidth={2.2} />
+          </span>
           Phiên làm việc được bảo mật an toàn với xác thực JWT HttpOnly.
         </div>
       </section>
@@ -99,14 +102,18 @@ export default function LoginPage() {
 
           {state === 'error' && (
             <div className="form-message error-message" role="alert">
-              <span aria-hidden="true">!</span>
+              <span aria-hidden="true">
+                <CircleAlert size={14} strokeWidth={2.2} />
+              </span>
               {error}
             </div>
           )}
 
           {state === 'success' && (
             <div className="form-message success-message" role="status">
-              <span aria-hidden="true">✓</span>
+              <span aria-hidden="true">
+                <CircleCheck size={14} strokeWidth={2.2} />
+              </span>
               Đăng nhập thành công. Đang chuyển hướng…
             </div>
           )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { Plus } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
 import { apiRequest } from '@/lib/auth-api';
@@ -95,7 +96,7 @@ export default function LeavePage() {
     </section>
 
     <details className="editor-panel">
-      <summary>+ Ghi nhận đơn nghỉ cho nhân viên</summary>
+      <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Ghi nhận đơn nghỉ cho nhân viên</span></summary>
       <form className="form-grid" onSubmit={create}>
         <label>Nhân viên<select name="employeeId" required><option value="">Chọn nhân viên</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.employeeCode} · {item.fullName}</option>)}</select></label>
         <label>Loại nghỉ<select name="leaveType"><option value="ANNUAL">Phép năm</option><option value="SICK">Nghỉ bệnh</option><option value="UNPAID">Không lương</option><option value="OTHER">Khác</option></select></label>

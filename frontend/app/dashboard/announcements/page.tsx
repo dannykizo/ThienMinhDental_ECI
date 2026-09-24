@@ -1,5 +1,6 @@
 'use client';
 
+import { Pencil, Plus } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
 import { apiRequest, getAdminSession, type SessionUser } from '@/lib/auth-api';
@@ -125,7 +126,7 @@ export default function AnnouncementsPage() {
     </section>
 
     {isAdmin && <details className="editor-panel" open={Boolean(editing)}>
-      <summary>{editing ? `Chỉnh sửa bản nháp · ${editing.title}` : '+ Soạn thông báo mới'}</summary>
+      <summary><span className="summary-label">{editing ? <Pencil aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}{editing ? `Chỉnh sửa bản nháp · ${editing.title}` : 'Soạn thông báo mới'}</span></summary>
       <form className="form-grid" key={editing?.id ?? 'new'} onSubmit={saveDraft}>
         <label className="span-2">Tiêu đề<input defaultValue={editing?.title ?? ''} maxLength={200} minLength={3} name="title" required /></label>
         <label>Đối tượng<select name="audienceType" value={audienceType} onChange={(event) => setAudienceType(event.target.value as 'DEPARTMENT' | 'EMPLOYEE')}><option value="DEPARTMENT">Theo phòng ban</option><option value="EMPLOYEE">Theo cá nhân</option></select></label>

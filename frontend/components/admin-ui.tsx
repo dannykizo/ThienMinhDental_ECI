@@ -1,3 +1,4 @@
+import { Inbox } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 export function PageHeader({
@@ -49,7 +50,9 @@ export function EmptyState({
 }) {
   return (
     <div className="empty-state">
-      <span aria-hidden="true">∅</span>
+      <span aria-hidden="true">
+        <Inbox size={34} strokeWidth={1.6} />
+      </span>
       <h3>{title}</h3>
       <p>{description}</p>
     </div>
