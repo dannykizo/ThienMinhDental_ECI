@@ -100,6 +100,8 @@ Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migrat
 
 Android platform shell đã được tạo trong `mobile/`. Xem hướng dẫn chạy USB/Wi-Fi debugging và vị trí APK tại `mobile/README.md`.
 
+Triển khai vận hành thật dùng Docker Compose production, HTTPS tự động và health/readiness check theo [`DEPLOYMENT.md`](DEPLOYMENT.md). Không dùng `compose.yaml`, development seed hoặc APK debug cho production.
+
 ```bash
 cd mobile
 flutter pub get

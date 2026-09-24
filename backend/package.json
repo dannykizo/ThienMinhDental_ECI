@@ -10,6 +10,7 @@
     "migration:run": "tsx --env-file=.env src/database/run-migrations.ts",
     "migration:revert": "tsx --env-file=.env src/database/revert-migration.ts",
     "seed:dev": "tsx --env-file=.env src/database/seed-development.ts",
+    "admin:bootstrap": "tsx --env-file=.env src/database/bootstrap-production-admin.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

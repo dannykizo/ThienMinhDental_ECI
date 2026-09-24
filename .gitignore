@@ -9,6 +9,7 @@ coverage/
 .env
 .env.*
 !.env.example
+!deploy/.env.production.example
 *.local
 
 # Flutter/Dart
@@ -27,6 +28,9 @@ Thumbs.db
 
 # Local infrastructure
 postgres-data/
+deploy/.env.production
+deploy/backups/
+deploy/secrets/
 
 # Local dev launcher logs
 logs/

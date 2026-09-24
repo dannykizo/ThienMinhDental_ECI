@@ -106,6 +106,14 @@
 - Android uses a branded launch drawable, disables forced dark-mode distortion and enables predictive-back integration. The debug APK remains intended for internal device verification through local HTTP/ADB reverse, not Play Store distribution.
 - Real-device acceptance covers cold session restore, logout/login validation, all five tabs, detail/form navigation, pull-to-refresh, read/acknowledgement state and absence of Flutter layout/runtime exceptions.
 
+### Production operation baseline
+
+- Production runs as one modular-monolith stack on a Linux VPS: Caddy is the only public entry point, while Admin Web, Backend API and PostgreSQL stay on a private Docker network.
+- Caddy terminates HTTPS and proxies `/api/*` to Backend; Backend exposes separate liveness and database-readiness endpoints. Containers run as non-root where supported, use read-only filesystems where practical and persist PostgreSQL/evidence data in named volumes.
+- Production environment validation rejects placeholder JWT secrets, non-HTTPS CORS origins and missing evidence paths before the API accepts traffic. Database migrations run before Backend startup.
+- Migration `1790812800000-canonical-roles` provisions the canonical role catalogue. The first production Admin is created once through `scripts/prod/bootstrap-admin.sh`; the development seed remains prohibited outside development.
+- Operational commands, backup requirements, Firebase credential mounting and release-APK prerequisites are canonicalized in `DEPLOYMENT.md`.
+
 ## Repository layout
 
 ```text
@@ -113,6 +121,8 @@ backend/       NestJS API, domain and data access
 frontend/      Next.js Admin Web
 mobile/        Flutter employee app
 scripts/dev/   Local bootstrap helpers
+scripts/prod/  Production deployment and backup helpers
+deploy/        Production proxy and environment templates
 ```
 
 Không tạo microservice, `architecture/` tree hoặc shared framework mới nếu chưa có nhu cầu được duyệt. API contract sẽ được công bố bằng OpenAPI từ backend; client không sao chép business rule.

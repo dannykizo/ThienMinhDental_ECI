@@ -12,10 +12,11 @@ import { LeaveModule } from './modules/leave/leave.module.js';
 import { OfficeLocationsModule } from './modules/office-locations/office-locations.module.js';
 import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { WorkSchedulesModule } from './modules/work-schedules/work-schedules.module.js';
+import { validateEnvironment } from './config/validate-environment.js';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment }),
     DatabaseModule,
     HealthModule,
     AuthModule,
