@@ -104,7 +104,24 @@ sh scripts/prod/deploy.sh
 
 Không chạy `seed:dev` trên production. Không chạy `migration:revert` nếu chưa có backup và kế hoạch phục hồi đã được duyệt.
 
-## 7. APK production
+## 7. Demo miễn phí bằng Cloudflare Pages
+
+Admin Web có thể được export tĩnh lên Cloudflare Pages để khách hàng dùng thử tại `https://thienminh-workforce.pages.dev`. Đây là môi trường demo, không thay thế hạ tầng production.
+
+Build và deploy frontend từ PowerShell:
+
+```powershell
+$env:NEXT_STATIC_EXPORT='true'
+$env:NEXT_PUBLIC_API_URL='/api'
+corepack pnpm --dir frontend build
+corepack pnpm dlx wrangler@latest pages deploy frontend/out --project-name thienminh-workforce --branch main
+```
+
+Pages Function tại `frontend/functions/api/[[path]].ts` chuyển tiếp request cùng origin từ `/api/*` tới origin được cấu hình bằng secret `BACKEND_ORIGIN`. Trong bản demo cục bộ, origin này có thể là URL HTTPS do Cloudflare Quick Tunnel cấp cho Backend đang chạy ở `http://127.0.0.1:3001`.
+
+Quick Tunnel không có cam kết uptime, URL thay đổi sau mỗi lần khởi động và máy phát triển phải tiếp tục chạy PostgreSQL, Backend cùng tiến trình `cloudflared`. Sau khi URL thay đổi, cập nhật `BACKEND_ORIGIN` và deploy lại Pages Functions. Không dùng credential seed đã công khai trong repository; mật khẩu database demo phải được đổi riêng và không ghi vào Git.
+
+## 8. APK production
 
 APK hiện tại là debug build dùng ADB reverse. Trước khi phát hành nội bộ cần:
 
@@ -114,7 +131,7 @@ APK hiện tại là debug build dùng ADB reverse. Trước khi phát hành n�
 4. Build với `API_BASE_URL=https://<APP_DOMAIN>/api` và Firebase dart-defines thật.
 5. Tăng `version`/`versionCode`, lưu checksum và kiểm thử cài mới/nâng cấp.
 
-## 8. Checklist go-live
+## 9. Checklist go-live
 
 - DNS và TLS hợp lệ.
 - `/api/health/live` và `/api/health/ready` trả `200`.
