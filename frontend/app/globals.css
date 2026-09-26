@@ -1586,6 +1586,13 @@ tbody tr:hover {
   font-size: 0.78rem;
 }
 
+.list-card .block-note {
+  display: flex;
+  margin-top: 8px;
+  align-items: center;
+  gap: 6px;
+}
+
 .list-card > div:last-child {
   display: flex;
   align-items: flex-end;

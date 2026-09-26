@@ -16,6 +16,7 @@ import type {
 } from '../application/announcement-push.sender.js';
 
 interface PushTokenRow {
+  employeeId: string;
   id: string;
   token: string;
 }
@@ -65,25 +66,42 @@ export class FirebaseAnnouncementPushSender
     title: string;
   }): Promise<AnnouncementPushResult> {
     if (!this.app) {
-      return { attempted: 0, delivered: 0, failed: 0, status: 'SKIPPED' };
+      return this.skippedResult(input.employeeIds, 'PUSH_NOT_CONFIGURED');
     }
 
-    const tokens = await this.dataSource
-      .getRepository(PushDeviceTokenEntity)
-      .createQueryBuilder('device')
-      .select(['device.id AS id', 'device.token AS token'])
-      .where('device.is_active = true')
-      .andWhere('device.employee_id IN (:...employeeIds)', {
-        employeeIds: input.employeeIds,
-      })
-      .getRawMany<PushTokenRow>();
+    let tokens: PushTokenRow[];
+    try {
+      tokens = await this.dataSource
+        .getRepository(PushDeviceTokenEntity)
+        .createQueryBuilder('device')
+        .select([
+          'device.id AS id',
+          'device.employee_id AS "employeeId"',
+          'device.token AS token',
+        ])
+        .where('device.is_active = true')
+        .andWhere('device.employee_id IN (:...employeeIds)', {
+          employeeIds: input.employeeIds,
+        })
+        .getRawMany<PushTokenRow>();
+    } catch (error) {
+      this.logger.error(`Unable to load FCM devices: ${this.errorMessage(error)}`);
+      return this.failedResult(input.employeeIds, 'PUSH_DEVICE_LOOKUP_FAILED');
+    }
 
     if (tokens.length === 0) {
-      return { attempted: 0, delivered: 0, failed: 0, status: 'SKIPPED' };
+      return this.skippedResult(input.employeeIds, 'NO_ACTIVE_DEVICE');
     }
 
     let delivered = 0;
     let failed = 0;
+    const employeeOutcomes = new Map<
+      string,
+      { delivered: number; errors: string[] }
+    >();
+    input.employeeIds.forEach((employeeId) =>
+      employeeOutcomes.set(employeeId, { delivered: 0, errors: [] }),
+    );
     try {
       for (let offset = 0; offset < tokens.length; offset += 500) {
         const chunk = tokens.slice(offset, offset + 500);
@@ -107,6 +125,8 @@ export class FirebaseAnnouncementPushSender
             const token = chunk[index];
             if (result.success) {
               delivered += 1;
+              const outcome = employeeOutcomes.get(token.employeeId);
+              if (outcome) outcome.delivered += 1;
               await this.dataSource.query(
                 `UPDATE push_device_tokens SET last_push_at=$2,last_error=NULL,updated_at=$2 WHERE id=$1`,
                 [token.id, now],
@@ -116,6 +136,7 @@ export class FirebaseAnnouncementPushSender
 
             failed += 1;
             const code = result.error?.code ?? 'messaging/unknown-error';
+            employeeOutcomes.get(token.employeeId)?.errors.push(code);
             const invalid =
               code === 'messaging/invalid-registration-token' ||
               code === 'messaging/registration-token-not-registered';
@@ -131,21 +152,77 @@ export class FirebaseAnnouncementPushSender
       this.logger.error(`FCM send failed: ${message}`);
       await this.dataSource.query(
         `UPDATE push_device_tokens SET last_error=$2,updated_at=now() WHERE id = ANY($1::uuid[])`,
-        [tokens.map((item) => item.id), message],
+        [tokens.map((item) => item.id), 'FCM_SEND_FAILED'],
       );
-      return {
-        attempted: tokens.length,
-        delivered,
-        failed: tokens.length - delivered,
-        status: 'FAILED',
-      };
+      return this.failedResult(input.employeeIds, 'FCM_SEND_FAILED', tokens.length);
     }
 
+    const recipients = input.employeeIds.map((employeeId) => {
+      const tokenCount = tokens.filter(
+        (token) => token.employeeId === employeeId,
+      ).length;
+      const outcome = employeeOutcomes.get(employeeId);
+      if (tokenCount === 0) {
+        return {
+          employeeId,
+          failureCode: 'NO_ACTIVE_DEVICE',
+          status: 'SKIPPED' as const,
+        };
+      }
+      if ((outcome?.delivered ?? 0) > 0) {
+        return { employeeId, status: 'SENT' as const };
+      }
+      return {
+        employeeId,
+        failureCode: outcome?.errors[0] ?? 'messaging/unknown-error',
+        status: 'FAILED' as const,
+      };
+    });
+    const skipped = recipients.filter((item) => item.status === 'SKIPPED').length;
     return {
       attempted: tokens.length,
       delivered,
       failed,
-      status: failed === 0 ? 'SENT' : 'FAILED',
+      recipients,
+      skipped,
+      status: failed === 0 && skipped === 0 ? 'SENT' : 'FAILED',
+    };
+  }
+
+  private failedResult(
+    employeeIds: string[],
+    failureCode: string,
+    attempted = 0,
+  ): AnnouncementPushResult {
+    return {
+      attempted,
+      delivered: 0,
+      failed: employeeIds.length,
+      recipients: employeeIds.map((employeeId) => ({
+        employeeId,
+        failureCode,
+        status: 'FAILED',
+      })),
+      skipped: 0,
+      status: 'FAILED',
+    };
+  }
+
+  private skippedResult(
+    employeeIds: string[],
+    failureCode: string,
+  ): AnnouncementPushResult {
+    return {
+      attempted: 0,
+      delivered: 0,
+      failed: 0,
+      recipients: employeeIds.map((employeeId) => ({
+        employeeId,
+        failureCode,
+        status: 'SKIPPED',
+      })),
+      skipped: employeeIds.length,
+      status: 'SKIPPED',
     };
   }
 

@@ -109,6 +109,14 @@
 - Firebase is an optional deployment adapter: Backend requires `FIREBASE_PUSH_ENABLED=true` plus Application Default Credentials, while Mobile receives its public Firebase options through `--dart-define`. Without these settings, the inbox remains functional and the UI reports that push is not configured.
 - Because W39 remains unanswered, C7 does not add attachments, images, urgency levels, scheduling or expiration/retention automation.
 
+### Customer review CR4 — company announcements and push delivery
+
+- Migration `1791158400000-announcement-company-push-delivery` adds per-recipient push status, attempt count, timestamps and a safe failure code. Existing recipients are backfilled as `SKIPPED/LEGACY_NOT_TRACKED` instead of claiming historical delivery.
+- `ALL` is now a supported write audience. Publication resolves every active employee at that moment, while department and individual resolution keep the existing rules.
+- Inbox recipient creation remains transactional and authoritative. FCM runs afterward; missing credentials, missing active devices and provider errors are persisted without rolling back inbox delivery.
+- Admin Web shows Firebase/device diagnostics, aggregate and per-recipient push status, and can retry only unresolved recipients while the announcement is still `PUBLISHED`.
+- Mobile distinguishes missing Firebase configuration, denied notification permission and a pending device token. Real push delivery still requires environment-owned Firebase credentials and matching Android public options; no credential is stored in Git.
+
 ### Mobile completion — UX and Android package
 
 - App renders immediately into a branded bootstrap state while secure-session restoration and Backend verification continue asynchronously; credentials are never prefilled in the login form.
@@ -197,7 +205,7 @@ Chỉ tạo các thư mục con này khi module bắt đầu có code thật; kh
 - Field photo/file attachment with configurable requirement.
 - [x] KPI Lite operational counts on Admin Web.
 - Advanced Excel templates and organization-specific reconciliation rules.
-- Push notification reliability and delivery tracking.
+- [x] Push notification reliability and delivery tracking.
 - [x] Multi-branch organization assignments and branch-scoped employee directory.
 
 ### Phase 3 — only after new approval

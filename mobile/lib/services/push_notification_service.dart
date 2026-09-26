@@ -50,6 +50,8 @@ class PushNotificationService {
   StreamSubscription<String>? _tokenSubscription;
 
   bool configured = false;
+  AuthorizationStatus authorizationStatus = AuthorizationStatus.notDetermined;
+  String? initializationError;
   String? currentToken;
   void Function(RemoteMessage message)? onForegroundAnnouncement;
   void Function()? onInboxRequested;
@@ -59,39 +61,56 @@ class PushNotificationService {
     final FirebaseOptions? options = firebaseOptions;
     if (options == null) return;
 
-    await Firebase.initializeApp(options: options);
-    configured = true;
-    FirebaseMessaging.onBackgroundMessage(
-      firebaseMessagingBackgroundHandler,
-    );
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(options: options);
+      }
+      configured = true;
+      FirebaseMessaging.onBackgroundMessage(
+        firebaseMessagingBackgroundHandler,
+      );
 
-    final FirebaseMessaging messaging = FirebaseMessaging.instance;
-    await messaging.setAutoInitEnabled(true);
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
+      final FirebaseMessaging messaging = FirebaseMessaging.instance;
+      await messaging.setAutoInitEnabled(true);
+      final NotificationSettings settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+      authorizationStatus = settings.authorizationStatus;
 
-    _foregroundSubscription = FirebaseMessaging.onMessage.listen(
-      (RemoteMessage message) {
-        if (_isAnnouncement(message)) onForegroundAnnouncement?.call(message);
-      },
-    );
-    _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
-      (RemoteMessage message) {
-        if (_isAnnouncement(message)) onInboxRequested?.call();
-      },
-    );
-    _tokenSubscription = messaging.onTokenRefresh.listen(
-      (String token) async {
-        currentToken = token;
-        await onTokenChanged?.call(token);
-      },
-    );
+      _foregroundSubscription = FirebaseMessaging.onMessage.listen(
+        (RemoteMessage message) {
+          if (_isAnnouncement(message)) {
+            onForegroundAnnouncement?.call(message);
+          }
+        },
+      );
+      _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen(
+        (RemoteMessage message) {
+          if (_isAnnouncement(message)) onInboxRequested?.call();
+        },
+      );
+      _tokenSubscription = messaging.onTokenRefresh.listen(
+        (String token) async {
+          currentToken = token;
+          await onTokenChanged?.call(token);
+        },
+      );
 
-    currentToken = await messaging.getToken();
-    final RemoteMessage? initialMessage = await messaging.getInitialMessage();
-    if (initialMessage != null && _isAnnouncement(initialMessage)) {
-      onInboxRequested?.call();
+      currentToken = await messaging.getToken();
+      final RemoteMessage? initialMessage = await messaging.getInitialMessage();
+      if (initialMessage != null && _isAnnouncement(initialMessage)) {
+        onInboxRequested?.call();
+      }
+    } on Object {
+      initializationError = 'FIREBASE_INITIALIZATION_FAILED';
     }
   }
+
+  bool get permissionGranted =>
+      authorizationStatus == AuthorizationStatus.authorized ||
+      authorizationStatus == AuthorizationStatus.provisional;
 
   Future<void> syncCurrentToken() async {
     final String? token = currentToken;

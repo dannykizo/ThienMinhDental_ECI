@@ -21,11 +21,13 @@ export class AnnouncementsController {
   @Get() @Roles(RoleCode.Admin) list(): Promise<unknown> { return this.service.list(); }
   @Get('managed') @Roles(RoleCode.Admin, RoleCode.AreaManager, RoleCode.Manager) managed(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.managed(user); }
   @Get('mine') mine(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.mine(user); }
+  @Get('push-status') @Roles(RoleCode.Admin) pushStatus(): Promise<unknown> { return this.service.pushStatus(); }
   @Post('push-devices') registerPushDevice(@CurrentUser() user: AuthenticatedUserView, @Body() input: RegisterPushDeviceDto): Promise<unknown> { return this.service.registerPushDevice(user, input); }
   @Post('push-devices/unregister') unregisterPushDevice(@CurrentUser() user: AuthenticatedUserView, @Body() input: UnregisterPushDeviceDto): Promise<unknown> { return this.service.unregisterPushDevice(user, input); }
   @Post() @Roles(RoleCode.Admin) create(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateAnnouncementDto): Promise<unknown> { return this.service.create(user, input); }
   @Post(':id/read') markRead(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string): Promise<unknown> { return this.service.markRead(user, id); }
   @Post(':id/acknowledge') acknowledge(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string): Promise<unknown> { return this.service.acknowledge(user, id); }
+  @Post(':id/push/retry') @Roles(RoleCode.Admin) retryPush(@Param('id') id: string): Promise<unknown> { return this.service.retryPush(id); }
   @Get(':id/recipients') @Roles(RoleCode.Admin, RoleCode.AreaManager, RoleCode.Manager) recipients(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string): Promise<unknown> { return this.service.recipients(user, id); }
   @Get(':id/history') @Roles(RoleCode.Admin) history(@Param('id') id: string): Promise<unknown> { return this.service.history(id); }
   @Patch(':id') @Roles(RoleCode.Admin) update(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string, @Body() input: UpdateAnnouncementDto): Promise<unknown> { return this.service.update(user, id, input); }

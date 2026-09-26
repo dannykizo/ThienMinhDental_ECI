@@ -16,7 +16,7 @@ Tab `Công tác` hiển thị các phiếu được giao cho nhân viên hiện 
 
 Tab `Nghỉ phép` chỉ hiển thị đơn của tài khoản nhân viên hiện tại và cho phép gửi đơn nghỉ nguyên ngày hoặc theo khoảng ngày. Trùng ngày, kỳ công đã khóa và trạng thái duyệt/từ chối đều do Backend quyết định. App chưa suy diễn số dư phép, nghỉ nửa ngày/theo giờ hoặc quyền hủy đơn.
 
-Tab `Hộp thư` đồng bộ thông báo theo tài khoản, hiển thị badge chưa đọc, ghi nhận thời điểm mở và yêu cầu nhân viên xác nhận riêng với tin quan trọng. Chạm push sẽ điều hướng về hộp thư; khi app đang mở, tin mới được báo bằng snackbar và danh sách được làm mới.
+Tab `Hộp thư` đồng bộ thông báo theo tài khoản, bao gồm tin gửi toàn công ty, hiển thị badge chưa đọc, ghi nhận thời điểm mở và yêu cầu nhân viên xác nhận riêng với tin quan trọng. Chạm push sẽ điều hướng về hộp thư; khi app đang mở, tin mới được báo bằng snackbar và danh sách được làm mới. App hiển thị riêng trường hợp chưa cấu hình Firebase, chưa cấp quyền thông báo hoặc chưa nhận được token thiết bị.
 
 ## Cấu hình Firebase Cloud Messaging
 

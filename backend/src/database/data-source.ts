@@ -16,6 +16,7 @@ import { CanonicalRoles1790812800000 } from './migrations/1790812800000-canonica
 import { EmployeeLifecycle1790899200000 } from './migrations/1790899200000-employee-lifecycle.js';
 import { GeofenceRadiusAlignment1790985600000 } from './migrations/1790985600000-geofence-radius-alignment.js';
 import { BusinessTripCustomerManagement1791072000000 } from './migrations/1791072000000-business-trip-customer-management.js';
+import { AnnouncementCompanyPushDelivery1791158400000 } from './migrations/1791158400000-announcement-company-push-delivery.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -43,6 +44,7 @@ export const applicationDataSource = new DataSource({
     EmployeeLifecycle1790899200000,
     GeofenceRadiusAlignment1790985600000,
     BusinessTripCustomerManagement1791072000000,
+    AnnouncementCompanyPushDelivery1791158400000,
   ],
   migrationsTableName: 'schema_migrations',
 });

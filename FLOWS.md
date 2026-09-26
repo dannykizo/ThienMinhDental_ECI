@@ -135,13 +135,14 @@ DRAFT -> PUBLISHED -> WITHDRAWN
 Per recipient: DELIVERED -> READ -> ACKNOWLEDGED (chỉ tin quan trọng)
 ```
 
-1. Chỉ Admin tạo và sửa bản nháp, chọn đúng một cá nhân hoặc một phòng ban rồi xuất bản.
-2. Khi xuất bản, Backend chốt danh sách nhân viên đang hoạt động. Đối tượng phòng ban dùng mọi phân công tổ chức còn hiệu lực, không chỉ projection phòng ban chính.
+1. Chỉ Admin tạo và sửa bản nháp, chọn toàn công ty, đúng một cá nhân hoặc một phòng ban rồi xuất bản.
+2. Khi xuất bản, Backend chốt danh sách nhân viên đang hoạt động. Đối tượng toàn công ty lấy toàn bộ nhân viên đang hoạt động; đối tượng phòng ban dùng mọi phân công tổ chức còn hiệu lực, không chỉ projection phòng ban chính.
 3. Mở thông báo ghi `READ`; tin quan trọng chỉ hoàn tất khi nhân viên chủ động xác nhận và Backend ghi `ACKNOWLEDGED`.
 4. Admin xem toàn bộ trạng thái. Trưởng phòng chỉ xem nhân viên có phân công hiện hành trỏ tới mình tại `manager_employee_id`.
 5. Admin có thể thu hồi tin đã đăng; nội dung không còn xuất hiện trong `/announcements/mine`, nhưng lịch sử người nhận và audit được giữ nguyên.
+6. Sau khi inbox được tạo thành công, Backend gửi push và lưu trạng thái riêng cho từng người nhận. Push lỗi, chưa cấu hình hoặc chưa có thiết bị không làm rollback inbox; Admin xem được trạng thái và gửi lại khi thông báo còn đang phát hành.
 
-**Trạng thái hiện tại:** Customer alignment C7 đã triển khai Admin Web, Backend API và hộp thư Mobile cho nháp/chỉnh sửa/xuất bản/thu hồi, đối tượng cá nhân hoặc phòng ban, badge chưa đọc, chi tiết tin, xác nhận tin quan trọng, thống kê người chưa đọc/chưa xác nhận và phạm vi Trưởng phòng. Backend và Mobile đã có adapter FCM, đăng ký token theo tài khoản/thiết bị và điều hướng về hộp thư khi chạm push; môi trường chỉ gửi push thật sau khi cấu hình Firebase deployment. File/ảnh, mức khẩn cấp, hẹn giờ, thời hạn hiển thị và lưu trữ tự động vẫn là `NOT_IMPLEMENTED` do W39 chưa được khách hàng giải thích.
+**Trạng thái hiện tại:** Customer review CR4 đã triển khai Admin Web, Backend API và hộp thư Mobile cho nháp/chỉnh sửa/xuất bản/thu hồi, đối tượng toàn công ty/cá nhân/phòng ban, badge chưa đọc, chi tiết tin, xác nhận tin quan trọng, thống kê người chưa đọc/chưa xác nhận và phạm vi Trưởng phòng. Backend lưu trạng thái push theo từng người nhận, cung cấp chẩn đoán cấu hình/thiết bị và cho Admin gửi lại; Mobile báo rõ tình trạng thiếu cấu hình, quyền thông báo hoặc token. Môi trường chỉ gửi push thật sau khi cấu hình Firebase deployment. File/ảnh, mức khẩn cấp, hẹn giờ, thời hạn hiển thị và lưu trữ tự động vẫn là `NOT_IMPLEMENTED` do W39 chưa được khách hàng giải thích.
 
 ## Admin Web — monthly report
 

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource, type EntityManager } from 'typeorm';
 import { PushDeviceTokenEntity } from '../../database/entities/push-device-token.entity.js';
@@ -7,8 +7,13 @@ import type { AuthenticatedUserView } from '../auth/application/auth.service.js'
 import { RoleCode } from '../auth/domain/role-code.js';
 import {
   ANNOUNCEMENT_PUSH_SENDER,
+  type AnnouncementPushResult,
   type AnnouncementPushSender,
 } from './application/announcement-push.sender.js';
+import {
+  type AnnouncementAudienceType,
+  resolveAnnouncementTarget,
+} from './domain/announcement-audience.js';
 import { canAcknowledgeAnnouncement, canTransitionAnnouncement } from './domain/announcement-status.js';
 import type {
   CreateAnnouncementDto,
@@ -20,6 +25,8 @@ import type {
 
 @Injectable()
 export class AnnouncementsService {
+  private readonly logger = new Logger(AnnouncementsService.name);
+
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @Inject(ANNOUNCEMENT_PUSH_SENDER)
@@ -27,13 +34,34 @@ export class AnnouncementsService {
   ) {}
 
   list(): Promise<unknown[]> {
-    return this.dataSource.query(`SELECT a.id,a.title,a.body,a.status,a.audience_type AS "audienceType",a.department_id AS "departmentId",a.employee_id AS "employeeId",a.requires_acknowledgement AS "requiresAcknowledgement",COALESCE(d.name,target.full_name,CASE WHEN a.audience_type='ALL' THEN 'Toàn bộ nhân viên (dữ liệu cũ)' END) AS "targetName",a.created_at AS "createdAt",a.published_at AS "publishedAt",a.withdrawn_at AS "withdrawnAt",a.withdraw_reason AS "withdrawReason",COALESCE(creator.full_name,cu.email) AS "createdByName",COUNT(ar.employee_id)::int AS "recipientCount",COUNT(ar.read_at)::int AS "readCount",COUNT(ar.acknowledged_at)::int AS "acknowledgedCount" FROM announcements a LEFT JOIN departments d ON d.id=a.department_id LEFT JOIN employees target ON target.id=a.employee_id JOIN users cu ON cu.id=a.created_by LEFT JOIN employees creator ON creator.user_id=cu.id LEFT JOIN announcement_recipients ar ON ar.announcement_id=a.id GROUP BY a.id,d.name,target.full_name,creator.full_name,cu.email ORDER BY a.created_at DESC`);
+    return this.dataSource.query(`SELECT a.id,a.title,a.body,a.status,a.audience_type AS "audienceType",a.department_id AS "departmentId",a.employee_id AS "employeeId",a.requires_acknowledgement AS "requiresAcknowledgement",COALESCE(d.name,target.full_name,CASE WHEN a.audience_type='ALL' THEN 'Toàn công ty' END) AS "targetName",a.created_at AS "createdAt",a.published_at AS "publishedAt",a.withdrawn_at AS "withdrawnAt",a.withdraw_reason AS "withdrawReason",COALESCE(creator.full_name,cu.email) AS "createdByName",COUNT(ar.employee_id)::int AS "recipientCount",COUNT(ar.read_at)::int AS "readCount",COUNT(ar.acknowledged_at)::int AS "acknowledgedCount",COUNT(ar.employee_id) FILTER (WHERE ar.push_status='SENT')::int AS "pushSentCount",COUNT(ar.employee_id) FILTER (WHERE ar.push_status='SKIPPED')::int AS "pushSkippedCount",COUNT(ar.employee_id) FILTER (WHERE ar.push_status='FAILED')::int AS "pushFailedCount",COUNT(ar.employee_id) FILTER (WHERE ar.push_status='PENDING')::int AS "pushPendingCount" FROM announcements a LEFT JOIN departments d ON d.id=a.department_id LEFT JOIN employees target ON target.id=a.employee_id JOIN users cu ON cu.id=a.created_by LEFT JOIN employees creator ON creator.user_id=cu.id LEFT JOIN announcement_recipients ar ON ar.announcement_id=a.id GROUP BY a.id,d.name,target.full_name,creator.full_name,cu.email ORDER BY a.created_at DESC`);
   }
 
   async managed(user: AuthenticatedUserView): Promise<unknown[]> {
     if (user.roles.includes(RoleCode.Admin)) return this.list();
     if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
-    return this.dataSource.query(`SELECT a.id,a.title,a.body,a.status,a.audience_type AS "audienceType",a.requires_acknowledgement AS "requiresAcknowledgement",a.published_at AS "publishedAt",COUNT(DISTINCT ar.employee_id)::int AS "recipientCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.read_at IS NOT NULL)::int AS "readCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.acknowledged_at IS NOT NULL)::int AS "acknowledgedCount" FROM announcements a JOIN announcement_recipients ar ON ar.announcement_id=a.id JOIN employee_organization_assignments oa ON oa.employee_id=ar.employee_id AND oa.effective_to IS NULL AND oa.manager_employee_id=$1 WHERE a.status IN ('PUBLISHED','WITHDRAWN') GROUP BY a.id ORDER BY a.published_at DESC`, [user.employeeId]);
+    return this.dataSource.query(`SELECT a.id,a.title,a.body,a.status,a.audience_type AS "audienceType",a.requires_acknowledgement AS "requiresAcknowledgement",a.published_at AS "publishedAt",COUNT(DISTINCT ar.employee_id)::int AS "recipientCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.read_at IS NOT NULL)::int AS "readCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.acknowledged_at IS NOT NULL)::int AS "acknowledgedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='SENT')::int AS "pushSentCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='SKIPPED')::int AS "pushSkippedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='FAILED')::int AS "pushFailedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='PENDING')::int AS "pushPendingCount" FROM announcements a JOIN announcement_recipients ar ON ar.announcement_id=a.id JOIN employee_organization_assignments oa ON oa.employee_id=ar.employee_id AND oa.effective_to IS NULL AND oa.manager_employee_id=$1 WHERE a.status IN ('PUBLISHED','WITHDRAWN') GROUP BY a.id ORDER BY a.published_at DESC`, [user.employeeId]);
+  }
+
+  async pushStatus(): Promise<{
+    activeDeviceCount: number;
+    configured: boolean;
+    devicesWithErrorCount: number;
+    lastPushAt: Date | null;
+  }> {
+    const [status] = await this.dataSource.query<
+      Array<{
+        activeDeviceCount: number;
+        devicesWithErrorCount: number;
+        lastPushAt: Date | null;
+      }>
+    >(`SELECT COUNT(*) FILTER (WHERE is_active=true)::int AS "activeDeviceCount",COUNT(*) FILTER (WHERE is_active=true AND last_error IS NOT NULL)::int AS "devicesWithErrorCount",MAX(last_push_at) AS "lastPushAt" FROM push_device_tokens`);
+    return {
+      activeDeviceCount: status?.activeDeviceCount ?? 0,
+      configured: this.pushSender.isConfigured(),
+      devicesWithErrorCount: status?.devicesWithErrorCount ?? 0,
+      lastPushAt: status?.lastPushAt ?? null,
+    };
   }
 
   mine(user: AuthenticatedUserView): Promise<unknown[]> {
@@ -151,7 +179,7 @@ export class AnnouncementsService {
       if (!announcement) throw new NotFoundException({ code: 'ANNOUNCEMENT_NOT_FOUND', message: 'Không tìm thấy thông báo.' });
       if (announcement.status !== 'DRAFT') throw new ConflictException({ code: 'ANNOUNCEMENT_NOT_DRAFT', message: 'Chỉ thông báo nháp mới được chỉnh sửa.' });
       const oldValue = { ...this.summary(announcement), bodyChanged: false };
-      const audienceType = input.audienceType ?? announcement.audienceType as 'DEPARTMENT' | 'EMPLOYEE';
+      const audienceType = input.audienceType ?? announcement.audienceType as AnnouncementAudienceType;
       const target = this.target(audienceType, input.departmentId ?? announcement.departmentId ?? undefined, input.employeeId ?? announcement.employeeId ?? undefined);
       await this.assertTarget(manager, audienceType, target.departmentId, target.employeeId);
       const bodyChanged = input.body !== undefined && input.body.trim() !== announcement.body;
@@ -189,41 +217,74 @@ export class AnnouncementsService {
       return saved;
     });
     if (input.status === 'PUBLISHED') {
-      await this.pushSender.sendAnnouncement({
-        announcementId: saved.id,
-        body: saved.body,
-        employeeIds: recipientIds,
-        requiresAcknowledgement: saved.requiresAcknowledgement,
-        title: saved.title,
-      });
+      await this.deliverPush(saved, recipientIds);
     }
     return saved;
+  }
+
+  async retryPush(id: string): Promise<AnnouncementPushResult> {
+    const announcement = await this.dataSource
+      .getRepository(AnnouncementEntity)
+      .findOne({ where: { id } });
+    if (!announcement) {
+      throw new NotFoundException({
+        code: 'ANNOUNCEMENT_NOT_FOUND',
+        message: 'Không tìm thấy thông báo.',
+      });
+    }
+    if (announcement.status !== 'PUBLISHED') {
+      throw new ConflictException({
+        code: 'ANNOUNCEMENT_PUSH_RETRY_NOT_AVAILABLE',
+        message: 'Chỉ có thể gửi lại push cho thông báo đang phát hành.',
+      });
+    }
+    const rows = await this.dataSource.query<Array<{ employeeId: string }>>(
+      `SELECT employee_id AS "employeeId" FROM announcement_recipients WHERE announcement_id=$1 AND push_status IN ('PENDING','SKIPPED','FAILED')`,
+      [id],
+    );
+    if (rows.length === 0) {
+      return {
+        attempted: 0,
+        delivered: 0,
+        failed: 0,
+        recipients: [],
+        skipped: 0,
+        status: 'SENT',
+      };
+    }
+    return this.deliverPush(
+      announcement,
+      rows.map((row) => row.employeeId),
+    );
   }
 
   async recipients(user: AuthenticatedUserView, id: string): Promise<unknown[]> {
     const [announcement] = await this.dataSource.query<Array<{ id: string }>>('SELECT id FROM announcements WHERE id=$1', [id]);
     if (!announcement) throw new NotFoundException({ code: 'ANNOUNCEMENT_NOT_FOUND', message: 'Không tìm thấy thông báo.' });
     if (user.roles.includes(RoleCode.Admin)) {
-      return this.dataSource.query(`SELECT e.id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",ar.delivered_at AS "deliveredAt",ar.read_at AS "readAt",ar.acknowledged_at AS "acknowledgedAt" FROM announcement_recipients ar JOIN employees e ON e.id=ar.employee_id LEFT JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.is_primary=true AND oa.effective_to IS NULL LEFT JOIN departments d ON d.id=oa.department_id WHERE ar.announcement_id=$1 ORDER BY e.full_name`, [id]);
+      return this.dataSource.query(`SELECT e.id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",ar.delivered_at AS "deliveredAt",ar.read_at AS "readAt",ar.acknowledged_at AS "acknowledgedAt",ar.push_status AS "pushStatus",ar.push_attempt_count AS "pushAttemptCount",ar.push_last_attempt_at AS "pushLastAttemptAt",ar.push_sent_at AS "pushSentAt",ar.push_failure_code AS "pushFailureCode" FROM announcement_recipients ar JOIN employees e ON e.id=ar.employee_id LEFT JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.is_primary=true AND oa.effective_to IS NULL LEFT JOIN departments d ON d.id=oa.department_id WHERE ar.announcement_id=$1 ORDER BY e.full_name`, [id]);
     }
     if (!user.employeeId) throw new ForbiddenException({ code: 'ANNOUNCEMENT_TRACKING_FORBIDDEN', message: 'Bạn không có phạm vi nhân viên để theo dõi.' });
-    return this.dataSource.query(`SELECT DISTINCT e.id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",ar.delivered_at AS "deliveredAt",ar.read_at AS "readAt",ar.acknowledged_at AS "acknowledgedAt" FROM announcement_recipients ar JOIN employees e ON e.id=ar.employee_id JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.effective_to IS NULL AND oa.manager_employee_id=$2 JOIN departments d ON d.id=oa.department_id WHERE ar.announcement_id=$1 ORDER BY e.full_name`, [id, user.employeeId]);
+    return this.dataSource.query(`SELECT DISTINCT e.id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",ar.delivered_at AS "deliveredAt",ar.read_at AS "readAt",ar.acknowledged_at AS "acknowledgedAt",ar.push_status AS "pushStatus",ar.push_attempt_count AS "pushAttemptCount",ar.push_last_attempt_at AS "pushLastAttemptAt",ar.push_sent_at AS "pushSentAt",ar.push_failure_code AS "pushFailureCode" FROM announcement_recipients ar JOIN employees e ON e.id=ar.employee_id JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.effective_to IS NULL AND oa.manager_employee_id=$2 JOIN departments d ON d.id=oa.department_id WHERE ar.announcement_id=$1 ORDER BY e.full_name`, [id, user.employeeId]);
   }
 
   history(id: string): Promise<unknown[]> {
     return this.dataSource.query(`SELECT l.id,l.action,l.old_value AS "oldValue",l.new_value AS "newValue",l.created_at AS "createdAt",COALESCE(e.full_name,u.email) AS "actorName" FROM configuration_audit_logs l JOIN users u ON u.id=l.created_by LEFT JOIN employees e ON e.user_id=u.id WHERE l.resource_type='ANNOUNCEMENT' AND l.resource_id=$1 ORDER BY l.created_at DESC`, [id]);
   }
 
-  private target(audienceType: 'DEPARTMENT' | 'EMPLOYEE', departmentId?: string, employeeId?: string): { departmentId: string | null; employeeId: string | null } {
-    if (audienceType === 'DEPARTMENT') {
-      if (!departmentId) throw new BadRequestException({ code: 'DEPARTMENT_REQUIRED', message: 'Phải chọn phòng ban nhận thông báo.' });
-      return { departmentId, employeeId: null };
-    }
-    if (!employeeId) throw new BadRequestException({ code: 'EMPLOYEE_REQUIRED', message: 'Phải chọn nhân viên nhận thông báo.' });
-    return { departmentId: null, employeeId };
+  private target(audienceType: AnnouncementAudienceType, departmentId?: string, employeeId?: string): { departmentId: string | null; employeeId: string | null } {
+    const target = resolveAnnouncementTarget(audienceType, departmentId, employeeId);
+    if (target.ok) return target;
+    throw new BadRequestException({
+      code: target.code,
+      message: target.code === 'DEPARTMENT_REQUIRED'
+        ? 'Phải chọn phòng ban nhận thông báo.'
+        : 'Phải chọn nhân viên nhận thông báo.',
+    });
   }
 
-  private async assertTarget(manager: EntityManager, audienceType: 'DEPARTMENT' | 'EMPLOYEE', departmentId: string | null, employeeId: string | null): Promise<void> {
+  private async assertTarget(manager: EntityManager, audienceType: AnnouncementAudienceType, departmentId: string | null, employeeId: string | null): Promise<void> {
+    if (audienceType === 'ALL') return;
     if (audienceType === 'DEPARTMENT') {
       const [department] = await manager.query<Array<{ id: string }>>('SELECT id FROM departments WHERE id=$1 AND is_active=true', [departmentId]);
       if (!department) throw new BadRequestException({ code: 'ANNOUNCEMENT_DEPARTMENT_INVALID', message: 'Phòng ban không tồn tại hoặc đã bị khóa.' });
@@ -245,6 +306,57 @@ export class AnnouncementsService {
 
   private summary(announcement: AnnouncementEntity): Record<string, unknown> {
     return { title: announcement.title, status: announcement.status, audienceType: announcement.audienceType, departmentId: announcement.departmentId ?? null, employeeId: announcement.employeeId ?? null, requiresAcknowledgement: announcement.requiresAcknowledgement, publishedAt: announcement.publishedAt ?? null, withdrawnAt: announcement.withdrawnAt ?? null, withdrawReason: announcement.withdrawReason ?? null };
+  }
+
+  private async deliverPush(
+    announcement: AnnouncementEntity,
+    employeeIds: string[],
+  ): Promise<AnnouncementPushResult> {
+    let result: AnnouncementPushResult;
+    try {
+      result = await this.pushSender.sendAnnouncement({
+        announcementId: announcement.id,
+        body: announcement.body,
+        employeeIds,
+        requiresAcknowledgement: announcement.requiresAcknowledgement,
+        title: announcement.title,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Unexpected announcement push failure for ${announcement.id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      result = {
+        attempted: 0,
+        delivered: 0,
+        failed: employeeIds.length,
+        recipients: employeeIds.map((employeeId) => ({
+          employeeId,
+          failureCode: 'PUSH_DELIVERY_ERROR',
+          status: 'FAILED',
+        })),
+        skipped: 0,
+        status: 'FAILED',
+      };
+    }
+
+    const attemptedAt = new Date();
+    await this.dataSource.transaction(async (manager) => {
+      await Promise.all(
+        result.recipients.map((recipient) =>
+          manager.query(
+            `UPDATE announcement_recipients SET push_status=$3,push_attempt_count=push_attempt_count+1,push_last_attempt_at=$4,push_sent_at=CASE WHEN $3='SENT' THEN $4 ELSE push_sent_at END,push_failure_code=$5 WHERE announcement_id=$1 AND employee_id=$2`,
+            [
+              announcement.id,
+              recipient.employeeId,
+              recipient.status,
+              attemptedAt,
+              recipient.failureCode ?? null,
+            ],
+          ),
+        ),
+      );
+    });
+    return result;
   }
 
   private audit(manager: EntityManager, userId: string, resourceId: string, action: string, oldValue: unknown, newValue: unknown): Promise<ConfigurationAuditLogEntity> {

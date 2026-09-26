@@ -3,7 +3,7 @@ import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } f
 export class CreateAnnouncementDto {
   @IsString() @MinLength(3) @MaxLength(200) title!: string;
   @IsString() @MinLength(3) @MaxLength(10000) body!: string;
-  @IsIn(['DEPARTMENT', 'EMPLOYEE']) audienceType!: 'DEPARTMENT' | 'EMPLOYEE';
+  @IsIn(['ALL', 'DEPARTMENT', 'EMPLOYEE']) audienceType!: 'ALL' | 'DEPARTMENT' | 'EMPLOYEE';
   @IsOptional() @IsUUID() departmentId?: string;
   @IsOptional() @IsUUID() employeeId?: string;
   @IsBoolean() requiresAcknowledgement!: boolean;
@@ -12,7 +12,7 @@ export class CreateAnnouncementDto {
 export class UpdateAnnouncementDto {
   @IsOptional() @IsString() @MinLength(3) @MaxLength(200) title?: string;
   @IsOptional() @IsString() @MinLength(3) @MaxLength(10000) body?: string;
-  @IsOptional() @IsIn(['DEPARTMENT', 'EMPLOYEE']) audienceType?: 'DEPARTMENT' | 'EMPLOYEE';
+  @IsOptional() @IsIn(['ALL', 'DEPARTMENT', 'EMPLOYEE']) audienceType?: 'ALL' | 'DEPARTMENT' | 'EMPLOYEE';
   @IsOptional() @IsUUID() departmentId?: string;
   @IsOptional() @IsUUID() employeeId?: string;
   @IsOptional() @IsBoolean() requiresAcknowledgement?: boolean;

@@ -139,6 +139,12 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
               if (!widget.session.pushNotifications.configured) ...<Widget>[
                 const SizedBox(height: 16),
                 const _PushNotConfigured(),
+              ] else if (!widget.session.pushNotifications.permissionGranted) ...<Widget>[
+                const SizedBox(height: 16),
+                const _PushPermissionRequired(),
+              ] else if (widget.session.pushNotifications.currentToken == null) ...<Widget>[
+                const SizedBox(height: 16),
+                const _PushTokenPending(),
               ],
               if (_error != null) ...<Widget>[
                 const SizedBox(height: 16),
@@ -510,6 +516,58 @@ class _PushNotConfigured extends StatelessWidget {
             Expanded(
               child: Text(
                 'Bản build này chưa có cấu hình Firebase. Hộp thư vẫn đồng bộ đầy đủ khi bạn mở ứng dụng.',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PushPermissionRequired extends StatelessWidget {
+  const _PushPermissionRequired();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFF6E7),
+          border: Border(left: BorderSide(color: brandOrange, width: 3)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(Icons.notifications_paused_outlined, color: brandOrange),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Thông báo hệ thống đang bị tắt. Hãy cho phép thông báo trong Cài đặt của điện thoại; Hộp thư trong ứng dụng vẫn hoạt động bình thường.',
+                style: TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _PushTokenPending extends StatelessWidget {
+  const _PushTokenPending();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFF6E7),
+          border: Border(left: BorderSide(color: brandOrange, width: 3)),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(Icons.sync_problem_outlined, color: brandOrange),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Thiết bị chưa nhận được mã push. Hãy kiểm tra Internet và mở lại ứng dụng; Hộp thư vẫn có thể làm mới thủ công.',
                 style: TextStyle(fontSize: 12, height: 1.4),
               ),
             ),

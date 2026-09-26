@@ -227,4 +227,9 @@ export class AnnouncementRecipientEntity {
   @Column({ type: 'timestamptz', name: 'delivered_at', nullable: true }) deliveredAt?: Date | null;
   @Column({ type: 'timestamptz', name: 'read_at', nullable: true }) readAt?: Date | null;
   @Column({ type: 'timestamptz', name: 'acknowledged_at', nullable: true }) acknowledgedAt?: Date | null;
+  @Column({ type: 'varchar', length: 20, name: 'push_status', default: 'PENDING' }) pushStatus!: string;
+  @Column({ type: 'integer', name: 'push_attempt_count', default: 0 }) pushAttemptCount!: number;
+  @Column({ type: 'timestamptz', name: 'push_last_attempt_at', nullable: true }) pushLastAttemptAt?: Date | null;
+  @Column({ type: 'timestamptz', name: 'push_sent_at', nullable: true }) pushSentAt?: Date | null;
+  @Column({ type: 'varchar', length: 200, name: 'push_failure_code', nullable: true }) pushFailureCode?: string | null;
 }

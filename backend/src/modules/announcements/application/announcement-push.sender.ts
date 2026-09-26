@@ -2,10 +2,18 @@ export const ANNOUNCEMENT_PUSH_SENDER = Symbol(
   'ANNOUNCEMENT_PUSH_SENDER',
 );
 
+export interface AnnouncementPushRecipientResult {
+  employeeId: string;
+  failureCode?: string;
+  status: 'SENT' | 'SKIPPED' | 'FAILED';
+}
+
 export interface AnnouncementPushResult {
   attempted: number;
   delivered: number;
   failed: number;
+  recipients: AnnouncementPushRecipientResult[];
+  skipped: number;
   status: 'SENT' | 'SKIPPED' | 'FAILED';
 }
 
