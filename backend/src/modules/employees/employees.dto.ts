@@ -41,7 +41,7 @@ export class CreateEmployeeDto {
   @Type(() => OrganizationAssignmentDto)
   organizationAssignments!: OrganizationAssignmentDto[];
   @IsOptional() @IsEmail() email?: string;
-  @IsOptional() @IsString() @MinLength(8) @MaxLength(128) temporaryPassword?: string;
+  @IsOptional() @IsString() @MinLength(12) @MaxLength(128) temporaryPassword?: string;
   @IsOptional() @IsIn(['ADMIN', 'CHIEF_ACCOUNTANT', 'AREA_MANAGER', 'MANAGER', 'EMPLOYEE']) role?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID(undefined, { each: true }) scopeBranchIds?: string[];
 }

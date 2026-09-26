@@ -170,4 +170,11 @@ DRAFT -> ISSUED -> REVOKED
 3. Hệ thống trả summary và các ngày cần đối soát.
 4. Chỉ cho xuất bản công “final” khi không còn lỗi blocking; cảnh báo không blocking phải hiện trong file.
 
-**Web-first status:** Đã triển khai đối soát theo tháng, lọc nhân viên/phòng ban, cảnh báo và Excel. Export final bị chặn khi còn `INCOMPLETE`; template nâng cao theo biểu mẫu doanh nghiệp chưa được chốt.
+**Trạng thái CR7:** Đã triển khai đối soát theo tháng, lọc nhân viên/phòng ban, tổng giờ làm/giờ chuẩn/OT, cảnh báo và Excel gồm sheet tổng hợp nhân viên + chi tiết ngày. Backend chặn khóa kỳ khi còn ngày `INCOMPLETE`, giải trình đang mở hoặc đơn nghỉ đang chờ; Admin Web dùng cùng summary blocker nên không tự suy diễn. Biểu mẫu payroll đặc thù doanh nghiệp vẫn ngoài phạm vi.
+
+## Admin Web — production operations
+
+1. Chỉ Admin truy cập tổng quan vận hành và audit tập trung.
+2. Backend chỉ trả chỉ số kỹ thuật an toàn: phiên hoạt động, workflow tồn, lỗi email/push, migration, release và uptime; không trả secret hay đường dẫn nhạy cảm.
+3. Mỗi request production có request ID và log metadata tối thiểu để tra lỗi; body, token, GPS và mật khẩu không được ghi log.
+4. Trước mỗi deploy đang vận hành phải tạo backup; deploy chỉ hoàn tất sau khi health check đạt yêu cầu. Restore được kiểm tra trong database tạm biệt lập.

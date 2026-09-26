@@ -5,6 +5,7 @@ import { RoleEntity } from './entities/role.entity.js';
 import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserEntity } from './entities/user.entity.js';
 import { RoleCode } from '../modules/auth/domain/role-code.js';
+import { validateStrongPassword } from '../modules/auth/domain/password-policy.js';
 
 function requiredEnvironment(key: string): string {
   const value = process.env[key]?.trim();
@@ -13,18 +14,8 @@ function requiredEnvironment(key: string): string {
 }
 
 function validatePassword(password: string): void {
-  const isStrong =
-    password.length >= 12 &&
-    password.length <= 128 &&
-    /[a-z]/.test(password) &&
-    /[A-Z]/.test(password) &&
-    /\d/.test(password) &&
-    /[^A-Za-z0-9]/.test(password);
-  if (!isStrong) {
-    throw new Error(
-      'BOOTSTRAP_ADMIN_PASSWORD must be 12-128 characters and include uppercase, lowercase, number and symbol',
-    );
-  }
+  const error = validateStrongPassword(password);
+  if (error) throw new Error(`BOOTSTRAP_ADMIN_PASSWORD: ${error}`);
 }
 
 async function bootstrapProductionAdmin(): Promise<void> {

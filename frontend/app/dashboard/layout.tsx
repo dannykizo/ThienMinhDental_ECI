@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import {
+  Activity,
   Bell,
   BriefcaseBusiness,
   CalendarCheck2,
@@ -109,6 +110,12 @@ const navigation: NavItem[] = [
     ready: true,
     icon: Gauge,
   },
+  {
+    label: 'Vận hành hệ thống',
+    href: '/dashboard/operations',
+    ready: true,
+    icon: Activity,
+  },
 ];
 
 const chiefAccountantRoutes = new Set([
@@ -124,6 +131,8 @@ const scopedManagerRoutes = new Set([
   '/dashboard/employees',
   '/dashboard/announcements',
 ]);
+
+const environmentLabel = process.env.NEXT_PUBLIC_APP_ENV?.toUpperCase() || 'DEVELOPMENT';
 
 function canAccessNavigation(item: NavItem, roles: RoleCode[]): boolean {
   if (roles.includes('ADMIN')) return true;
@@ -326,7 +335,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="topbar-right">
             <div className="environment-badge">
               <span />
-              DEVELOPMENT
+              {environmentLabel}
             </div>
           </div>
         </header>

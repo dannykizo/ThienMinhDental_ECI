@@ -4,11 +4,13 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
 import { apiRequest, apiUrl, getAdminSession, type SessionUser } from '@/lib/auth-api';
 
-interface ReportRow { employeeId: string; employeeCode: string; fullName: string; departmentName: string | null; workDate: string; checkedInAt: string | null; checkedOutAt: string | null; status: string; riskFlags: string[]; adjustmentCount: number; }
+interface ReportRow { employeeId: string; employeeCode: string; fullName: string; departmentName: string | null; workDate: string; checkedInAt: string | null; checkedOutAt: string | null; status: string; riskFlags: string[]; adjustmentCount: number; workedMinutes: number; requiredWorkMinutes: number; overtimeMinutes: number; isFullWorkday: boolean; }
+interface ReportSummary { scheduledDays: number; employeeCount: number; presentDays: number; businessTripDays: number; leaveDays: number; partialLeaveDays: number; incompleteDays: number; absentDays: number; reviewDays: number; totalWorkedMinutes: number; totalOvertimeMinutes: number; openExplanationCount: number; pendingLeaveCount: number; incompleteBlockerCount: number; blockerCount: number; }
 interface Employee { id: string; employeeCode: string; fullName: string; }
 interface Department { id: string; name: string; }
 interface AttendancePeriod { id: string | null; periodMonth: string; status: 'OPEN' | 'LOCKED'; lockedAt: string | null; lockedByName: string | null; reopenedAt: string | null; reopenedByName: string | null; reopenReason: string | null; }
 const currentMonth = new Date().toLocaleDateString('en-CA').slice(0, 7);
+const hours = (minutes: number) => `${(minutes / 60).toFixed(1)} giờ`;
 
 export default function ReportsPage() {
   const [month, setMonth] = useState(currentMonth);
@@ -17,6 +19,7 @@ export default function ReportsPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [rows, setRows] = useState<ReportRow[] | null>(null);
+  const [summary, setSummary] = useState<ReportSummary | null>(null);
   const [period, setPeriod] = useState<AttendancePeriod | null>(null);
   const [session, setSession] = useState<SessionUser | null>(null);
   const [error, setError] = useState('');
@@ -30,20 +33,22 @@ export default function ReportsPage() {
     return params.toString();
   }
   async function load(selected = month): Promise<void> {
-    const [reportRows, periodState] = await Promise.all([
-      apiRequest<ReportRow[]>(`/reporting/monthly?${query(selected)}`),
+    const params = query(selected);
+    const [reportRows, reportSummary, periodState] = await Promise.all([
+      apiRequest<ReportRow[]>(`/reporting/monthly?${params}`),
+      apiRequest<ReportSummary>(`/reporting/monthly/summary?${params}`),
       apiRequest<AttendancePeriod>(`/reporting/periods/${selected}`),
     ]);
-    setRows(reportRows); setPeriod(periodState);
+    setRows(reportRows); setSummary(reportSummary); setPeriod(periodState);
   }
   useEffect(() => {
-    Promise.all([apiRequest<ReportRow[]>(`/reporting/monthly?month=${currentMonth}`), apiRequest<AttendancePeriod>(`/reporting/periods/${currentMonth}`), apiRequest<Employee[]>('/employees'), apiRequest<Department[]>('/employees/lookups/departments'), getAdminSession()])
-      .then(([reportRows, periodState, employeeRows, departmentRows, user]) => { setRows(reportRows); setPeriod(periodState); setEmployees(employeeRows); setDepartments(departmentRows); setSession(user); })
+    Promise.all([apiRequest<ReportRow[]>(`/reporting/monthly?month=${currentMonth}`), apiRequest<ReportSummary>(`/reporting/monthly/summary?month=${currentMonth}`), apiRequest<AttendancePeriod>(`/reporting/periods/${currentMonth}`), apiRequest<Employee[]>('/employees'), apiRequest<Department[]>('/employees/lookups/departments'), getAdminSession()])
+      .then(([reportRows, reportSummary, periodState, employeeRows, departmentRows, user]) => { setRows(reportRows); setSummary(reportSummary); setPeriod(periodState); setEmployees(employeeRows); setDepartments(departmentRows); setSession(user); })
       .catch(() => setError('Không thể tổng hợp báo cáo tháng.'));
   }, []);
 
   async function filter(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault(); setError(''); setRows(null);
+    event.preventDefault(); setError(''); setRows(null); setSummary(null);
     try { await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể tải báo cáo.'); }
   }
   async function lockPeriod(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -63,16 +68,16 @@ export default function ReportsPage() {
     finally { setSaving(false); }
   }
 
-  const blockers = rows?.filter((row) => row.status === 'INCOMPLETE').length ?? 0;
+  const blockers = summary?.blockerCount ?? 0;
   const canReopen = session?.roles.includes('CHIEF_ACCOUNTANT') ?? false;
-
   return <div className="module-page">
-    <PageHeader eyebrow="C4 / CHỐT KỲ CÔNG" title="Báo cáo & khóa sổ tháng" description="Đối soát dữ liệu, xuất bảng công và khóa kỳ. Chỉ Kế toán trưởng được mở lại kỳ đã chốt." action={blockers === 0 ? <a className="export-link" href={`${apiUrl}/reporting/monthly/export?${query()}`}>Xuất Excel {period?.status === 'LOCKED' ? 'đã chốt' : 'tạm tính'}</a> : <span className="secondary-button disabled-button" aria-disabled="true">Còn dữ liệu cần xử lý</span>} />
+    <PageHeader eyebrow="CR7 / CHỐT KỲ CÔNG" title="Báo cáo & khóa sổ tháng" description="Giờ làm và OT được tính tại Backend từ lịch hiệu lực. File Excel gồm bảng tổng hợp nhân viên và chi tiết từng ngày." action={summary !== null && blockers === 0 ? <a className="export-link" href={`${apiUrl}/reporting/monthly/export?${query()}`}>Xuất Excel {period?.status === 'LOCKED' ? 'đã chốt' : 'tạm tính'}</a> : <span className="secondary-button disabled-button" aria-disabled="true">{summary === null ? 'Đang tổng hợp…' : 'Còn dữ liệu cần xử lý'}</span>} />
     {message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
     {period && <Notice kind={period.status === 'LOCKED' ? 'success' : 'info'}><strong>Kỳ {month}: {period.status === 'LOCKED' ? 'Đã chốt' : 'Đang mở'}.</strong>{period.lockedAt && ` Chốt bởi ${period.lockedByName ?? 'người dùng hệ thống'} lúc ${formatDate(period.lockedAt)}.`}{period.reopenedAt && period.status === 'OPEN' && ` Mở lại bởi ${period.reopenedByName ?? 'Kế toán trưởng'} lúc ${formatDate(period.reopenedAt)}: ${period.reopenReason}.`}</Notice>}
-    {rows && blockers > 0 && <Notice kind="error">Còn {blockers} ngày thiếu check-out. Phải xử lý trước khi chốt kỳ công.</Notice>}
+    {summary && blockers > 0 && <Notice kind="error">Chưa thể chốt kỳ: {summary.incompleteBlockerCount} ngày thiếu check-out, {summary.openExplanationCount} giải trình và {summary.pendingLeaveCount} đơn nghỉ đang chờ xử lý. Blocker luôn tính trên toàn công ty, kể cả khi bảng đang lọc.</Notice>}
     <form className="toolbar" onSubmit={filter}><label>Tháng<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><label>Phòng ban<select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}><option value="">Tất cả</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Nhân viên<select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}><option value="">Tất cả</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.employeeCode} · {item.fullName}</option>)}</select></label><button className="secondary-button">Tổng hợp</button></form>
-    {period === null ? null : period.status === 'OPEN' ? <details className="editor-panel"><summary>Chốt kỳ công {month}</summary><form className="form-grid compact" onSubmit={lockPeriod}><label>Lý do / ghi chú (không bắt buộc)<input name="reason" minLength={5} placeholder="Ví dụ: Đã hoàn tất đối soát tháng" /></label><button className="primary-button form-action" disabled={saving || blockers > 0}>{saving ? 'Đang xử lý…' : 'Xác nhận chốt kỳ'}</button></form></details> : canReopen ? <details className="editor-panel"><summary>Mở lại kỳ công — chỉ Kế toán trưởng</summary><form className="form-grid compact" onSubmit={reopenPeriod}><label>Lý do mở lại (bắt buộc)<textarea name="reason" minLength={5} required placeholder="Nêu rõ lý do cần điều chỉnh sau chốt…" /></label><button className="primary-button form-action" disabled={saving}>{saving ? 'Đang xử lý…' : 'Mở lại kỳ công'}</button></form></details> : <Notice kind="info">Kỳ đã khóa. Admin cần liên hệ Kế toán trưởng nếu phải điều chỉnh thêm.</Notice>}
-    {rows === null ? <LoadingState /> : rows.length === 0 ? <EmptyState title="Chưa có dữ liệu báo cáo" description="Cần phân lịch làm việc cho nhân viên; hệ thống không tự tạo số liệu chấm công." /> : <div className="table-wrap"><table><thead><tr><th>Ngày</th><th>Nhân viên</th><th>Phòng ban</th><th>Vào</th><th>Ra</th><th>Trạng thái</th><th>Cảnh báo / audit</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.employeeId}-${row.workDate}`}><td>{row.workDate}</td><td><strong>{row.employeeCode}</strong><br />{row.fullName}</td><td>{row.departmentName ?? '—'}</td><td>{formatDate(row.checkedInAt)}</td><td>{formatDate(row.checkedOutAt)}</td><td><StatusBadge value={row.status} /></td><td>{row.riskFlags.join(', ') || '—'}{row.adjustmentCount ? ` · ${row.adjustmentCount} điều chỉnh` : ''}</td></tr>)}</tbody></table></div>}
+    {summary && <section className="metric-grid" aria-label="Tổng hợp báo cáo"><div className="metric-card"><p>Nhân viên</p><strong>{summary.employeeCount}</strong><span>{summary.scheduledDays} ngày theo lịch</span></div><div className="metric-card"><p>Tổng giờ làm</p><strong>{hours(summary.totalWorkedMinutes)}</strong><span>{summary.presentDays} ngày hiện diện</span></div><div className="metric-card"><p>Giờ OT</p><strong>{hours(summary.totalOvertimeMinutes)}</strong><span>Tính sau giờ kết thúc ca</span></div><div className="metric-card"><p>Cần xem lại</p><strong>{summary.reviewDays}</strong><span>Có cảnh báo hoặc điều chỉnh</span></div></section>}
+    {period === null ? null : period.status === 'OPEN' ? <details className="editor-panel"><summary>Chốt kỳ công {month}</summary><form className="form-grid compact" onSubmit={lockPeriod}><label>Lý do / ghi chú (không bắt buộc)<input name="reason" minLength={5} placeholder="Ví dụ: Đã hoàn tất đối soát tháng" /></label><button className="primary-button form-action" disabled={saving || blockers > 0}>{saving ? 'Đang xử lý…' : 'Xác nhận chốt kỳ'}</button></form></details> : canReopen ? <details className="editor-panel"><summary>Mở lại kỳ công — chỉ Kế toán trưởng</summary><form className="form-grid compact" onSubmit={reopenPeriod}><label>Lý do mở lại (bắt buộc)<textarea name="reason" minLength={5} required /></label><button className="primary-button form-action" disabled={saving}>{saving ? 'Đang xử lý…' : 'Mở lại kỳ công'}</button></form></details> : <Notice kind="info">Kỳ đã khóa. Admin cần liên hệ Kế toán trưởng nếu phải điều chỉnh thêm.</Notice>}
+    {rows === null ? <LoadingState /> : rows.length === 0 ? <EmptyState title="Chưa có dữ liệu báo cáo" description="Cần phân lịch làm việc cho nhân viên; hệ thống không tự tạo số liệu chấm công." /> : <div className="table-wrap"><table><thead><tr><th>Ngày</th><th>Nhân viên</th><th>Phòng ban</th><th>Vào / Ra</th><th>Giờ làm</th><th>OT</th><th>Trạng thái</th><th>Cảnh báo / audit</th></tr></thead><tbody>{rows.map((row) => <tr key={`${row.employeeId}-${row.workDate}`}><td>{row.workDate}</td><td><strong>{row.employeeCode}</strong><br />{row.fullName}</td><td>{row.departmentName ?? '—'}</td><td>{formatDate(row.checkedInAt)}<br />{formatDate(row.checkedOutAt)}</td><td>{hours(row.workedMinutes)} / {hours(row.requiredWorkMinutes)}</td><td>{hours(row.overtimeMinutes)}</td><td><StatusBadge value={row.status} /></td><td>{row.riskFlags.join(', ') || '—'}{row.adjustmentCount ? ` · ${row.adjustmentCount} điều chỉnh` : ''}</td></tr>)}</tbody></table></div>}
   </div>;
 }

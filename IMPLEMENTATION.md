@@ -165,6 +165,14 @@ deploy/        Production proxy and environment templates
 
 Không tạo microservice, `architecture/` tree hoặc shared framework mới nếu chưa có nhu cầu được duyệt. API contract sẽ được công bố bằng OpenAPI từ backend; client không sao chép business rule.
 
+## CR7 — Production operations baseline
+
+- Endpoint xác thực có rate limit hữu hạn; cookie mutation production chỉ nhận exact Origin trong allow-list. Request log chỉ chứa request ID, method, path, status và thời lượng.
+- Mật khẩu tạm và Admin bootstrap dùng chung policy mạnh 12–128 ký tự, có hoa/thường/số/ký hiệu.
+- Admin có trang vận hành riêng để xem migration, release, uptime, lỗi email/push, workflow tồn và audit tập trung; endpoint không trả secret.
+- Báo cáo tháng tính giờ làm, giờ chuẩn và OT tại Backend, dùng cùng blocker cho UI/khóa kỳ và xuất Excel hai sheet.
+- Production vẫn là modular monolith một VPS. Preflight, backup trước deploy, health-gated startup, checksum và restore drill biệt lập nằm trong `scripts/prod/` và `DEPLOYMENT.md`.
+
 ## Backend module boundaries
 
 ```text
@@ -207,7 +215,7 @@ Chỉ tạo các thư mục con này khi module bắt đầu có code thật; kh
 - [x] Login, JWT authentication, current-user endpoint and basic RBAC.
 - [x] Protected Admin Web shell and foundation dashboard.
 - [ ] Initialize Flutter Android/iOS platform folders.
-- [ ] Establish CI after first install succeeds.
+- [x] Establish CI quality gate for pull requests and manual production checks.
 
 ### Phase 1 — Core MVP
 
@@ -224,7 +232,7 @@ Chỉ tạo các thư mục con này khi module bắt đầu có code thật; kh
 
 - Field photo/file attachment with configurable requirement.
 - [x] KPI Lite operational counts on Admin Web.
-- Advanced Excel templates and organization-specific reconciliation rules.
+- [x] Excel tổng hợp nhân viên + chi tiết ngày, giờ làm/giờ chuẩn/OT và blocker đối soát thống nhất.
 - [x] Push notification reliability and delivery tracking.
 - [x] Multi-branch organization assignments and branch-scoped employee directory.
 

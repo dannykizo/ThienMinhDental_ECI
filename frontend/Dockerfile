@@ -10,7 +10,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY frontend frontend
 ARG NEXT_PUBLIC_API_URL=/api
+ARG NEXT_PUBLIC_APP_ENV=production
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
 RUN pnpm --dir frontend build
 RUN pnpm --filter @thien-minh-dental/frontend deploy --prod --legacy /output/frontend
 

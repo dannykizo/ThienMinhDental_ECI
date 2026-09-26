@@ -4,6 +4,7 @@ import ExcelJS from 'exceljs';
 import { DataSource } from 'typeorm';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { RoleCode } from '../auth/domain/role-code.js';
+import { calculateWorkSummary } from '../attendance/domain/schedule-policy.js';
 
 export interface MonthlyRow {
   employeeId: string;
@@ -16,6 +17,36 @@ export interface MonthlyRow {
   status: string;
   riskFlags: string[];
   adjustmentCount: number;
+  workedMinutes: number;
+  requiredWorkMinutes: number;
+  overtimeMinutes: number;
+  isFullWorkday: boolean;
+}
+
+export interface MonthlySummary {
+  scheduledDays: number;
+  employeeCount: number;
+  presentDays: number;
+  businessTripDays: number;
+  leaveDays: number;
+  partialLeaveDays: number;
+  incompleteDays: number;
+  absentDays: number;
+  reviewDays: number;
+  totalWorkedMinutes: number;
+  totalOvertimeMinutes: number;
+  openExplanationCount: number;
+  pendingLeaveCount: number;
+  incompleteBlockerCount: number;
+  blockerCount: number;
+}
+
+interface MonthlyRawRow extends Omit<MonthlyRow, 'workedMinutes' | 'requiredWorkMinutes' | 'overtimeMinutes' | 'isFullWorkday'> {
+  scheduleStartTime: string;
+  scheduleEndTime: string;
+  lateToleranceMinutes: number;
+  earlyLeaveToleranceMinutes: number;
+  scheduleRequiredWorkMinutes: number;
 }
 
 interface AttendancePeriodView {
@@ -58,15 +89,17 @@ export class ReportingService {
 
   async monthly(month: string, employeeId?: string, departmentId?: string): Promise<MonthlyRow[]> {
     this.validateMonth(month);
-    return this.dataSource.query<MonthlyRow[]>(`WITH bounds AS (
+    const rows = await this.dataSource.query<MonthlyRawRow[]>(`WITH bounds AS (
       SELECT $1::date AS month_start, LEAST(($1::date + INTERVAL '1 month - 1 day')::date, (now() AT TIME ZONE 'Asia/Bangkok')::date) AS month_end
     ), scheduled AS (
-      SELECT e.id employee_id, e.employee_code, e.full_name, d.name department_name, day::date work_date
+      SELECT e.id employee_id, e.employee_code, e.full_name, d.name department_name, day::date work_date,
+        selected_schedule.start_time, selected_schedule.end_time, selected_schedule.late_tolerance_minutes,
+        selected_schedule.early_leave_tolerance_minutes, selected_schedule.required_work_minutes
       FROM employees e
       LEFT JOIN departments d ON d.id=e.department_id
       CROSS JOIN bounds b CROSS JOIN LATERAL generate_series(b.month_start,b.month_end,'1 day') day
       JOIN LATERAL (
-        SELECT ws.id
+        SELECT ws.id,ws.start_time,ws.end_time,ws.late_tolerance_minutes,ws.early_leave_tolerance_minutes,ws.required_work_minutes
         FROM (
           SELECT es.schedule_id, es.effective_from, 1 AS priority
           FROM employee_schedules es
@@ -102,8 +135,44 @@ export class ReportingService {
         WHEN EXISTS(SELECT 1 FROM leave_requests l WHERE l.employee_id=s.employee_id AND l.status='APPROVED' AND l.duration_type IN ('HALF_DAY','HOURS') AND s.work_date=l.start_date) THEN 'PARTIAL_LEAVE'
         WHEN EXISTS(SELECT 1 FROM business_trip_members btm JOIN business_trips bt ON bt.id=btm.business_trip_id WHERE btm.employee_id=s.employee_id AND bt.status IN ('ASSIGNED','IN_PROGRESS','COMPLETED') AND s.work_date BETWEEN (bt.start_at AT TIME ZONE 'Asia/Bangkok')::date AND (bt.end_at AT TIME ZONE 'Asia/Bangkok')::date) THEN 'BUSINESS_TRIP'
         WHEN er.checked_out_at IS NOT NULL THEN 'PRESENT' WHEN er.checked_in_at IS NOT NULL THEN 'INCOMPLETE' ELSE 'ABSENT' END) AS status,
-      COALESCE(er.risk_flags,'{}') AS "riskFlags",(SELECT COUNT(*)::int FROM attendance_adjustments aa WHERE aa.employee_id=s.employee_id AND aa.work_date=s.work_date) AS "adjustmentCount"
+      COALESCE(er.risk_flags,'{}') AS "riskFlags",(SELECT COUNT(*)::int FROM attendance_adjustments aa WHERE aa.employee_id=s.employee_id AND aa.work_date=s.work_date) AS "adjustmentCount",
+      s.start_time AS "scheduleStartTime",s.end_time AS "scheduleEndTime",s.late_tolerance_minutes AS "lateToleranceMinutes",
+      s.early_leave_tolerance_minutes AS "earlyLeaveToleranceMinutes",s.required_work_minutes AS "scheduleRequiredWorkMinutes"
       FROM scheduled s LEFT JOIN event_rollup er ON er.employee_id=s.employee_id AND er.work_date=s.work_date ORDER BY s.work_date,s.full_name`, [`${month}-01`, employeeId ?? null, departmentId ?? null]);
+    return rows.map(({ scheduleStartTime, scheduleEndTime, lateToleranceMinutes, earlyLeaveToleranceMinutes, scheduleRequiredWorkMinutes, ...row }) => ({
+      ...row,
+      ...calculateWorkSummary(row.checkedInAt, row.checkedOutAt, {
+        startTime: scheduleStartTime,
+        endTime: scheduleEndTime,
+        lateToleranceMinutes,
+        earlyLeaveToleranceMinutes,
+        requiredWorkMinutes: scheduleRequiredWorkMinutes,
+      }),
+    }));
+  }
+
+  async monthlySummary(month: string, employeeId?: string, departmentId?: string): Promise<MonthlySummary> {
+    const rows = await this.monthly(month, employeeId, departmentId);
+    const blockers = await this.periodBlockers(month);
+    const incompleteBlockerCount = employeeId || departmentId
+      ? (await this.monthly(month)).filter((row) => row.status === 'INCOMPLETE').length
+      : rows.filter((row) => row.status === 'INCOMPLETE').length;
+    return {
+      scheduledDays: rows.length,
+      employeeCount: new Set(rows.map((row) => row.employeeId)).size,
+      presentDays: rows.filter((row) => row.status === 'PRESENT').length,
+      businessTripDays: rows.filter((row) => row.status === 'BUSINESS_TRIP').length,
+      leaveDays: rows.filter((row) => row.status === 'LEAVE').length,
+      partialLeaveDays: rows.filter((row) => row.status === 'PARTIAL_LEAVE').length,
+      incompleteDays: rows.filter((row) => row.status === 'INCOMPLETE').length,
+      absentDays: rows.filter((row) => row.status === 'ABSENT').length,
+      reviewDays: rows.filter((row) => row.riskFlags.length > 0 || row.adjustmentCount > 0).length,
+      totalWorkedMinutes: rows.reduce((sum, row) => sum + row.workedMinutes, 0),
+      totalOvertimeMinutes: rows.reduce((sum, row) => sum + row.overtimeMinutes, 0),
+      ...blockers,
+      incompleteBlockerCount,
+      blockerCount: blockers.openExplanationCount + blockers.pendingLeaveCount + incompleteBlockerCount,
+    };
   }
 
   async kpi(month: string): Promise<unknown[]> {
@@ -131,15 +200,43 @@ export class ReportingService {
       throw new ConflictException({ code: 'REPORT_HAS_BLOCKERS', message: `Còn ${blockers.length} ngày thiếu check-out; chưa thể phát hành bảng công cuối.` });
     }
     const workbook = new ExcelJS.Workbook();
+    const summarySheet = workbook.addWorksheet('Tong hop nhan vien');
+    summarySheet.columns = [
+      { header: 'Ma NV', key: 'employeeCode', width: 14 }, { header: 'Ho ten', key: 'fullName', width: 28 },
+      { header: 'Phong ban', key: 'departmentName', width: 22 }, { header: 'Ngay theo lich', key: 'scheduledDays', width: 16 },
+      { header: 'Hien dien', key: 'presentDays', width: 13 }, { header: 'Cong tac', key: 'businessTripDays', width: 12 },
+      { header: 'Nghi phep', key: 'leaveDays', width: 13 }, { header: 'Thieu cong', key: 'incompleteDays', width: 13 },
+      { header: 'Vang', key: 'absentDays', width: 10 }, { header: 'Gio lam', key: 'workedHours', width: 12 },
+      { header: 'Gio OT', key: 'overtimeHours', width: 10 }, { header: 'Ngay can xem', key: 'reviewDays', width: 15 },
+    ];
+    const byEmployee = new Map<string, { employeeCode: string; fullName: string; departmentName: string | null; scheduledDays: number; presentDays: number; businessTripDays: number; leaveDays: number; incompleteDays: number; absentDays: number; workedMinutes: number; overtimeMinutes: number; reviewDays: number }>();
+    for (const row of rows) {
+      const value = byEmployee.get(row.employeeId) ?? { employeeCode: row.employeeCode, fullName: row.fullName, departmentName: row.departmentName, scheduledDays: 0, presentDays: 0, businessTripDays: 0, leaveDays: 0, incompleteDays: 0, absentDays: 0, workedMinutes: 0, overtimeMinutes: 0, reviewDays: 0 };
+      value.scheduledDays += 1;
+      if (row.status === 'PRESENT') value.presentDays += 1;
+      if (row.status === 'BUSINESS_TRIP') value.businessTripDays += 1;
+      if (row.status === 'LEAVE' || row.status === 'PARTIAL_LEAVE') value.leaveDays += 1;
+      if (row.status === 'INCOMPLETE') value.incompleteDays += 1;
+      if (row.status === 'ABSENT') value.absentDays += 1;
+      value.workedMinutes += row.workedMinutes;
+      value.overtimeMinutes += row.overtimeMinutes;
+      if (row.riskFlags.length || row.adjustmentCount) value.reviewDays += 1;
+      byEmployee.set(row.employeeId, value);
+    }
+    for (const value of byEmployee.values()) summarySheet.addRow({ ...value, workedHours: Number((value.workedMinutes / 60).toFixed(2)), overtimeHours: Number((value.overtimeMinutes / 60).toFixed(2)) });
+    summarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    summarySheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183F35' } };
+    summarySheet.autoFilter = { from: 'A1', to: 'L1' };
+    summarySheet.views = [{ state: 'frozen', ySplit: 1 }];
     workbook.creator = 'Thiên Minh Dental Workforce';
     const sheet = workbook.addWorksheet(`Bang cong ${month}`);
     sheet.columns = [
-      { header: 'Ngày', key: 'workDate', width: 13 }, { header: 'Mã NV', key: 'employeeCode', width: 14 }, { header: 'Họ tên', key: 'fullName', width: 28 }, { header: 'Phòng ban', key: 'departmentName', width: 22 }, { header: 'Check-in', key: 'checkedInAt', width: 24 }, { header: 'Check-out', key: 'checkedOutAt', width: 24 }, { header: 'Trạng thái', key: 'status', width: 18 }, { header: 'Cảnh báo', key: 'riskFlags', width: 30 }, { header: 'Số điều chỉnh', key: 'adjustmentCount', width: 14 },
+      { header: 'Ngày', key: 'workDate', width: 13 }, { header: 'Mã NV', key: 'employeeCode', width: 14 }, { header: 'Họ tên', key: 'fullName', width: 28 }, { header: 'Phòng ban', key: 'departmentName', width: 22 }, { header: 'Check-in', key: 'checkedInAt', width: 24 }, { header: 'Check-out', key: 'checkedOutAt', width: 24 }, { header: 'Phút làm', key: 'workedMinutes', width: 12 }, { header: 'Phút chuẩn', key: 'requiredWorkMinutes', width: 12 }, { header: 'Phút OT', key: 'overtimeMinutes', width: 10 }, { header: 'Đủ công', key: 'isFullWorkday', width: 10 }, { header: 'Trạng thái', key: 'status', width: 18 }, { header: 'Cảnh báo', key: 'riskFlags', width: 30 }, { header: 'Số điều chỉnh', key: 'adjustmentCount', width: 14 },
     ];
-    rows.forEach((row) => sheet.addRow({ ...row, riskFlags: row.riskFlags.join(', ') }));
+    rows.forEach((row) => sheet.addRow({ ...row, isFullWorkday: row.isFullWorkday ? 'Có' : 'Không', riskFlags: row.riskFlags.join(', ') }));
     sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
     sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF183F35' } };
-    sheet.autoFilter = { from: 'A1', to: 'I1' };
+    sheet.autoFilter = { from: 'A1', to: 'M1' };
     sheet.views = [{ state: 'frozen', ySplit: 1 }];
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
@@ -155,10 +252,9 @@ export class ReportingService {
     const rows = await this.monthly(month);
     if (rows.length === 0) throw new ConflictException({ code: 'REPORT_HAS_NO_DATA', message: 'Chưa có dữ liệu lịch làm việc để chốt kỳ công.' });
     const incomplete = rows.filter((row) => row.status === 'INCOMPLETE').length;
-    const [openExplanations] = await this.dataSource.query<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM attendance_explanation_requests WHERE work_date >= $1::date AND work_date < ($1::date + INTERVAL '1 month') AND status IN ('REQUESTED','SUBMITTED')`, [`${month}-01`]);
-    const [pendingLeave] = await this.dataSource.query<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM leave_requests WHERE status='SUBMITTED' AND start_date < ($1::date + INTERVAL '1 month') AND end_date >= $1::date`, [`${month}-01`]);
-    if (incomplete > 0 || (openExplanations?.count ?? 0) > 0 || (pendingLeave?.count ?? 0) > 0) {
-      throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: `Còn ${incomplete} ngày thiếu check-out, ${openExplanations?.count ?? 0} giải trình và ${pendingLeave?.count ?? 0} đơn nghỉ chưa hoàn tất.` });
+    const blockers = await this.periodBlockers(month);
+    if (incomplete > 0 || blockers.openExplanationCount > 0 || blockers.pendingLeaveCount > 0) {
+      throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: `Còn ${incomplete} ngày thiếu check-out, ${blockers.openExplanationCount} giải trình và ${blockers.pendingLeaveCount} đơn nghỉ chưa hoàn tất.` });
     }
     await this.dataSource.transaction(async (manager) => {
       const [current] = await manager.query<Array<{ id: string; status: string }>>('SELECT id,status FROM attendance_periods WHERE period_month=$1::date FOR UPDATE', [`${month}-01`]);
@@ -182,5 +278,13 @@ export class ReportingService {
 
   private validateMonth(month: string): void {
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new BadRequestException({ code: 'INVALID_REPORT_MONTH', message: 'Tháng phải có định dạng YYYY-MM.' });
+  }
+
+  private async periodBlockers(month: string): Promise<{ openExplanationCount: number; pendingLeaveCount: number }> {
+    const [[openExplanations], [pendingLeave]] = await Promise.all([
+      this.dataSource.query<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM attendance_explanation_requests WHERE work_date >= $1::date AND work_date < ($1::date + INTERVAL '1 month') AND status IN ('REQUESTED','SUBMITTED')`, [`${month}-01`]),
+      this.dataSource.query<Array<{ count: number }>>(`SELECT COUNT(*)::int AS count FROM leave_requests WHERE status='SUBMITTED' AND start_date < ($1::date + INTERVAL '1 month') AND end_date >= $1::date`, [`${month}-01`]),
+    ]);
+    return { openExplanationCount: openExplanations?.count ?? 0, pendingLeaveCount: pendingLeave?.count ?? 0 };
   }
 }

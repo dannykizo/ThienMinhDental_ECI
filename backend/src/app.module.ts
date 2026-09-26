@@ -14,6 +14,7 @@ import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { WorkSchedulesModule } from './modules/work-schedules/work-schedules.module.js';
 import { DisciplinaryActionsModule } from './modules/disciplinary-actions/disciplinary-actions.module.js';
 import { validateEnvironment } from './config/validate-environment.js';
+import { OperationsModule } from './modules/operations/operations.module.js';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { validateEnvironment } from './config/validate-environment.js';
     DisciplinaryActionsModule,
     ReportingModule,
     KpiModule,
+    OperationsModule,
   ],
 })
 export class AppModule {}

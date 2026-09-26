@@ -19,7 +19,9 @@
     "prod:up": "docker compose --env-file deploy/.env.production -f compose.production.yaml up -d --build",
     "prod:down": "docker compose --env-file deploy/.env.production -f compose.production.yaml down",
     "prod:logs": "docker compose --env-file deploy/.env.production -f compose.production.yaml logs -f --tail=200",
+    "prod:preflight": "sh scripts/prod/preflight.sh",
     "prod:backup": "sh scripts/prod/backup.sh",
+    "prod:verify-restore": "sh scripts/prod/verify-restore.sh",
     "prod:bootstrap-admin": "sh scripts/prod/bootstrap-admin.sh"
   }
 }

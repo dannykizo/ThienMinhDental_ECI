@@ -739,9 +739,9 @@ export default function EmployeesPage() {
           <label>
             Mật khẩu tạm
             <input
-              minLength={8}
+              minLength={12}
               name="temporaryPassword"
-              placeholder="Tối thiểu 8 ký tự"
+              placeholder="12+ ký tự, có hoa, thường, số và ký hiệu"
               type="password"
             />
           </label>

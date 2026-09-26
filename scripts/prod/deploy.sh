@@ -10,6 +10,11 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-docker compose --env-file "$ENV_FILE" -f compose.production.yaml config --quiet
-docker compose --env-file "$ENV_FILE" -f compose.production.yaml up -d --build
+sh scripts/prod/preflight.sh "$ENV_FILE"
+if docker compose --env-file "$ENV_FILE" -f compose.production.yaml ps --status running --services | grep -qx postgres; then
+  sh scripts/prod/backup.sh
+fi
+RELEASE_SHA=$(git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+export RELEASE_SHA
+docker compose --env-file "$ENV_FILE" -f compose.production.yaml up -d --build --wait --wait-timeout 180
 docker compose --env-file "$ENV_FILE" -f compose.production.yaml ps

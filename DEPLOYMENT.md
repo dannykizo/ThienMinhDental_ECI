@@ -38,11 +38,11 @@ openssl rand -base64 48 | tr -d '\n' | tr '/+' '_-'
 ## 3. Kiểm tra và khởi động
 
 ```sh
-docker compose --env-file deploy/.env.production -f compose.production.yaml config --quiet
+sh scripts/prod/preflight.sh
 sh scripts/prod/deploy.sh
 ```
 
-Backend tự chạy migration trước khi nhận traffic. Caddy tự xin và gia hạn TLS certificate sau khi DNS/cổng mạng hợp lệ.
+Preflight từ chối domain/secret mẫu và kiểm tra cấu hình Compose. Nếu hệ thống đang chạy, lệnh deploy tự backup trước khi build, chờ toàn bộ health check đạt yêu cầu và ghi mã commit vào trang Vận hành. Backend tự chạy migration trước khi nhận traffic. Caddy tự xin và gia hạn TLS certificate sau khi DNS/cổng mạng hợp lệ.
 
 Với database production mới, tạo đúng một tài khoản Admin đầu tiên bằng lệnh tương tác sau. Lệnh không lưu mật khẩu vào file hoặc Git, từ chối chạy ngoài production và từ chối tạo thêm khi đã có Admin:
 
@@ -90,7 +90,13 @@ Tạo backup PostgreSQL thủ công trước migration/deploy và theo lịch h�
 sh scripts/prod/backup.sh
 ```
 
-Lệnh tạo đồng thời một file PostgreSQL `thien-minh-*.dump` và một file ảnh bằng chứng `thien-minh-evidence-*.tar.gz` trong `deploy/backups/`; permission mặc định chỉ cho owner. Phải sao chép cả hai file sang một nơi khác VPS và định kỳ thử phục hồi trên môi trường riêng.
+Lệnh tạo đồng thời một file PostgreSQL `thien-minh-*.dump`, một file ảnh bằng chứng `thien-minh-evidence-*.tar.gz` có cùng mã thời gian và manifest SHA-256 trong `deploy/backups/`. Script kiểm tra cấu trúc cả hai file trước khi báo thành công và tự xóa bộ cũ hơn `BACKUP_RETENTION_DAYS` (mặc định 14 ngày). Phải sao chép cả bộ sang một nơi khác VPS.
+
+Thử phục hồi vào PostgreSQL tạm biệt lập, không đụng database production:
+
+```sh
+sh scripts/prod/verify-restore.sh deploy/backups/thien-minh-<timestamp>.dump deploy/backups/thien-minh-evidence-<timestamp>.tar.gz
+```
 
 Không phục hồi trực tiếp lên production khi chưa dừng ghi dữ liệu và xác nhận đúng bộ backup. Cách an toàn là dựng một project Compose/database tách biệt, dùng `pg_restore` cho file `.dump`, giải nén file evidence vào volume riêng, rồi kiểm tra đăng nhập, báo cáo và các ảnh trước khi lập kế hoạch phục hồi production.
 
@@ -142,3 +148,13 @@ APK hiện tại là debug build dùng ADB reverse. Trước khi phát hành n�
 - Đã gửi thử email cảnh báo và push notification nếu bật.
 - Đã tạo, tải ra ngoài VPS và thử phục hồi backup.
 - Đã lưu keystore, secret và runbook ở nơi quản lý bí mật phù hợp.
+- Trang **Vận hành & bảo mật** không báo migration chờ chạy; lỗi email/push đã được xử lý hoặc chấp nhận có ghi chú.
+
+## 10. Kiểm soát bảo mật và vận hành CR7
+
+- API giới hạn đăng nhập/refresh theo cửa sổ thời gian; các ngưỡng nằm trong `.env.production`.
+- Request dùng cookie và thay đổi dữ liệu phải có `Origin` đúng allow-list HTTPS, giảm rủi ro CSRF.
+- Log production là JSON tối thiểu gồm request ID, method, path, status và thời lượng; không ghi body, token, tọa độ hoặc mật khẩu.
+- Caddy bật security headers, CSP và chỉ cấp quyền geolocation cho chính Admin Web để lấy tọa độ văn phòng.
+- Admin xem trạng thái phiên, email/push, workflow đang mở, migration và audit tập trung tại `/dashboard/operations`.
+- `quality.yml` chỉ chạy khi có pull request hoặc được kích hoạt thủ công, tránh tiêu tốn CI cho mỗi lần chỉnh giao diện nhỏ.

@@ -106,12 +106,15 @@ Seed sẽ từ chối chạy ngoài `NODE_ENV=development`. Credential demo khô
 - `/api/business-trips`, `/api/leave-requests`, `/api/announcements` — công tác, nghỉ phép và truyền thông nội bộ. Công tác dùng endpoint riêng `mine`, `start`, `complete` cùng danh bạ `/api/business-trips/customers`; nghỉ phép có `mine`, `policies`, `balances`, `review` và `cancel`; thông báo dùng `mine`, `read`, `acknowledge`, `managed`, đăng ký push device và danh sách người nhận theo quyền.
 - `/api/disciplinary-actions` — hồ sơ cảnh cáo/đình chỉ/xử lý vi phạm chỉ Admin, gồm tạo/chỉnh sửa nháp, ban hành, thu hồi và lịch sử audit.
 - `/api/reporting`, `/api/kpi` — dashboard, đối soát tháng, Excel và KPI Lite không chấm điểm.
+- `/api/operations/overview`, `/api/operations/audit` — sức khỏe vận hành và audit tập trung, chỉ role `ADMIN`.
 
 Migration `1726444800000-web-mvp` bổ sung schema nghiệp vụ W2–W9; migration `1790035200000-customer-organization-rbac` bổ sung cơ cấu đa chi nhánh và RBAC; migration `1790121600000-auth-sessions` bổ sung phiên và lịch sử thiết bị; migration `1790208000000-schedule-location-alignment` bổ sung lịch theo phòng ban, giới hạn vị trí và audit cấu hình; migration `1790294400000-attendance-reconciliation` bổ sung giải trình và khóa kỳ công; migration `1790380800000-business-trip-operations` bổ sung vận hành công tác theo từng thành viên; migration `1790467200000-leave-operations` bổ sung vận hành đơn nghỉ; migration `1790553600000-announcement-alignment` bổ sung đối tượng cá nhân, xác nhận tin quan trọng và thu hồi thông báo; migration `1790640000000-refresh-token-sessions` bổ sung refresh token xoay vòng và thời điểm hoạt động gần nhất; migration `1790726400000-push-notification-devices` lưu FCM token theo tài khoản/thiết bị; migration `1790899200000-employee-lifecycle` bổ sung vòng đời nhân viên có lý do/audit và thu hồi phiên; migration `1790985600000-geofence-radius-alignment` nâng giới hạn bán kính geofence lên 100 m; migration `1791072000000-business-trip-customer-management` bổ sung counter mã phiếu và vòng đời khách hàng; migration `1791158400000-announcement-company-push-delivery` bổ sung trạng thái giao push theo người nhận; migration `1791244800000-employee-disciplinary-actions` bổ sung hồ sơ kỷ luật và liên kết thông báo; migration `1791331200000-leave-policies-balances` bổ sung chính sách nghỉ, số dư năm, điều chỉnh bất biến và thời lượng/hủy đơn. Mọi migration chạy với `synchronize=false`.
 
 Android platform shell đã được tạo trong `mobile/`. Xem hướng dẫn chạy USB/Wi-Fi debugging và vị trí APK tại `mobile/README.md`.
 
 Triển khai vận hành thật dùng Docker Compose production, HTTPS tự động và health/readiness check theo [`DEPLOYMENT.md`](DEPLOYMENT.md). Không dùng `compose.yaml`, development seed hoặc APK debug cho production.
+
+CR7 bổ sung chống brute-force cho endpoint xác thực, kiểm tra Origin đối với cookie mutation, request ID/log an toàn, mật khẩu tạm mạnh, trang vận hành chỉ Admin, báo cáo giờ làm/OT và Excel hai sheet. Bộ production có preflight, backup đồng bộ kèm checksum, kiểm tra restore biệt lập và quality gate thủ công/PR.
 
 ```bash
 cd mobile

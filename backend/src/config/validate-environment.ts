@@ -66,6 +66,10 @@ export function validateEnvironment(
   positiveInteger(config, 'AUTH_WEB_SESSION_HOURS', 24);
   positiveInteger(config, 'AUTH_WEB_IDLE_MINUTES', 30);
   positiveInteger(config, 'AUTH_MOBILE_SESSION_DAYS', 30);
+  positiveInteger(config, 'AUTH_LOGIN_RATE_LIMIT', 10);
+  positiveInteger(config, 'AUTH_LOGIN_RATE_WINDOW_SECONDS', 900);
+  positiveInteger(config, 'AUTH_REFRESH_RATE_LIMIT', 60);
+  positiveInteger(config, 'AUTH_REFRESH_RATE_WINDOW_SECONDS', 900);
 
   if (nodeEnvironment === 'production') {
     const jwtSecret = required(config, 'JWT_SECRET');
@@ -79,8 +83,20 @@ export function validateEnvironment(
       );
     }
     validateProductionOrigins(required(config, 'CORS_ORIGIN'));
+    if (stringValue(config.TRUST_PROXY).toLowerCase() !== 'true') {
+      throw new Error('TRUST_PROXY must be true in production');
+    }
     required(config, 'EVIDENCE_STORAGE_DIR');
     required(config, 'BUSINESS_TRIP_EVIDENCE_STORAGE_DIR');
+  }
+
+  const smtpHost = stringValue(config.SMTP_HOST);
+  const smtpFrom = stringValue(config.SMTP_FROM);
+  const alertRecipients = stringValue(config.ADMIN_LOGIN_ALERT_EMAILS);
+  if ((smtpHost || alertRecipients) && !(smtpHost && smtpFrom && alertRecipients)) {
+    throw new Error(
+      'SMTP_HOST, SMTP_FROM and ADMIN_LOGIN_ALERT_EMAILS must be configured together',
+    );
   }
 
   const pushEnabled =

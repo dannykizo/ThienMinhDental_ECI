@@ -25,6 +25,7 @@ import {
 } from '../auth/application/auth.ports.js';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { RoleCode } from '../auth/domain/role-code.js';
+import { validateStrongPassword } from '../auth/domain/password-policy.js';
 import {
   canChangeEmployeeStatus,
   hasValidLifecycleReason,
@@ -172,6 +173,12 @@ export class EmployeesService {
         code: 'ACCOUNT_FIELDS_INCOMPLETE',
         message: 'Email và mật khẩu tạm phải được nhập cùng nhau.',
       });
+    }
+    if (input.temporaryPassword) {
+      const passwordError = validateStrongPassword(input.temporaryPassword);
+      if (passwordError) {
+        throw new BadRequestException({ code: 'WEAK_TEMPORARY_PASSWORD', message: passwordError });
+      }
     }
 
     try {

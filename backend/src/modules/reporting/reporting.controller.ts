@@ -19,6 +19,9 @@ export class ReportingController {
   @Get('monthly')
   @Roles(RoleCode.Admin, RoleCode.ChiefAccountant)
   monthly(@Query('month') month: string, @Query('employeeId') employeeId?: string, @Query('departmentId') departmentId?: string): Promise<unknown> { return this.service.monthly(month, employeeId, departmentId); }
+  @Get('monthly/summary')
+  @Roles(RoleCode.Admin, RoleCode.ChiefAccountant)
+  monthlySummary(@Query('month') month: string, @Query('employeeId') employeeId?: string, @Query('departmentId') departmentId?: string): Promise<unknown> { return this.service.monthlySummary(month, employeeId, departmentId); }
   @Get('monthly/export')
   @Roles(RoleCode.Admin, RoleCode.ChiefAccountant)
   async export(@Query('month') month: string, @Res() response: Response, @Query('employeeId') employeeId?: string, @Query('departmentId') departmentId?: string): Promise<void> {
