@@ -1,15 +1,24 @@
 import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class CreateCustomerDto {
-  @IsString() @MaxLength(180) name!: string;
-  @IsString() @MaxLength(300) address!: string;
-  @IsOptional() @IsString() contactName?: string;
-  @IsOptional() @IsString() contactPhone?: string;
+  @IsString() @MinLength(1) @MaxLength(180) name!: string;
+  @IsString() @MinLength(1) @MaxLength(300) address!: string;
+  @IsOptional() @IsString() @MaxLength(120) contactName?: string;
+  @IsOptional() @IsString() @MaxLength(30) contactPhone?: string;
+}
+
+export class UpdateCustomerDto {
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(180) name?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(300) address?: string;
+  @IsOptional() @IsString() @MaxLength(120) contactName?: string | null;
+  @IsOptional() @IsString() @MaxLength(30) contactPhone?: string | null;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 export class CreateBusinessTripDto {
-  @IsString() @MaxLength(30) code!: string;
-  @IsOptional() @IsUUID() customerId?: string;
+  // Backward-compatible input for older Admin Web builds; Backend always ignores it.
+  @IsOptional() @IsString() @MaxLength(30) code?: string;
+  @IsOptional() @IsUUID() customerId?: string | null;
   @IsString() siteName!: string;
   @IsString() siteAddress!: string;
   @IsDateString() startAt!: string;
@@ -21,7 +30,7 @@ export class CreateBusinessTripDto {
 }
 
 export class UpdateBusinessTripDto {
-  @IsOptional() @IsUUID() customerId?: string;
+  @IsOptional() @IsUUID() customerId?: string | null;
   @IsOptional() @IsString() @MaxLength(180) siteName?: string;
   @IsOptional() @IsString() @MaxLength(300) siteAddress?: string;
   @IsOptional() @IsDateString() startAt?: string;

@@ -6,7 +6,7 @@ import { CurrentUser } from '../auth/presentation/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/presentation/jwt-auth.guard.js';
 import { Roles } from '../auth/presentation/roles.decorator.js';
 import { RolesGuard } from '../auth/presentation/roles.guard.js';
-import { CompleteBusinessTripDto, CreateBusinessTripDto, CreateCustomerDto, StartBusinessTripDto, TransitionBusinessTripDto, UpdateBusinessTripDto, UploadBusinessTripEvidenceDto } from './business-trips.dto.js';
+import { CompleteBusinessTripDto, CreateBusinessTripDto, CreateCustomerDto, StartBusinessTripDto, TransitionBusinessTripDto, UpdateBusinessTripDto, UpdateCustomerDto, UploadBusinessTripEvidenceDto } from './business-trips.dto.js';
 import { BusinessTripsService } from './business-trips.service.js';
 import { BusinessTripEvidenceStorage, type BusinessTripEvidenceUpload } from './infrastructure/business-trip-evidence.storage.js';
 
@@ -19,7 +19,8 @@ export class BusinessTripsController {
   ) {}
   @Get() @Roles(RoleCode.Admin) list(): Promise<unknown> { return this.service.list(); }
   @Get('mine') mine(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.listMine(user); }
-  @Get('lookups/customers') @Roles(RoleCode.Admin) customers(): Promise<unknown> { return this.service.listCustomers(); }
+  @Get('lookups/customers') @Roles(RoleCode.Admin) customerOptions(): Promise<unknown> { return this.service.listCustomerOptions(); }
+  @Get('customers') @Roles(RoleCode.Admin) customers(): Promise<unknown> { return this.service.listCustomers(); }
   @Post('evidence')
   @UseInterceptors(FileInterceptor('file', { limits: { files: 1, fileSize: 5 * 1024 * 1024 } }))
   uploadEvidence(
@@ -34,7 +35,9 @@ export class BusinessTripsController {
     const file = await this.evidenceStorage.read(filename);
     return new StreamableFile(file.buffer, { type: file.contentType, disposition: 'inline' });
   }
-  @Post('lookups/customers') @Roles(RoleCode.Admin) createCustomer(@Body() input: CreateCustomerDto): Promise<unknown> { return this.service.createCustomer(input); }
+  @Post('lookups/customers') @Roles(RoleCode.Admin) createCustomerLegacy(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateCustomerDto): Promise<unknown> { return this.service.createCustomer(user, input); }
+  @Post('customers') @Roles(RoleCode.Admin) createCustomer(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateCustomerDto): Promise<unknown> { return this.service.createCustomer(user, input); }
+  @Patch('customers/:id') @Roles(RoleCode.Admin) updateCustomer(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string, @Body() input: UpdateCustomerDto): Promise<unknown> { return this.service.updateCustomer(user, id, input); }
   @Post() @Roles(RoleCode.Admin) create(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateBusinessTripDto): Promise<unknown> { return this.service.create(user, input); }
   @Patch(':id') @Roles(RoleCode.Admin) update(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string, @Body() input: UpdateBusinessTripDto): Promise<unknown> { return this.service.update(user, id, input); }
   @Patch(':id/status') @Roles(RoleCode.Admin) transition(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string, @Body() input: TransitionBusinessTripDto): Promise<unknown> { return this.service.transition(user, id, input); }

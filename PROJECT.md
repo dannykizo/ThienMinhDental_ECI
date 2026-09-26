@@ -44,6 +44,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Lịch làm việc do Admin cấu hình theo chi nhánh và phòng ban; ngoại lệ theo nhân viên được ưu tiên và mọi lần thay đổi cấu hình phải có lịch sử chỉ Admin xem.
 - Mặc định đủ công khi tổng thời gian check-in đến check-out đạt 480 phút. Cho phép check-in sớm; đi muộn khi quá giờ bắt đầu hơn 3 phút; về trước giờ kết thúc là về sớm và thời gian sau giờ kết thúc được ghi nhận là tăng ca.
 - Hệ thống hỗ trợ hai văn phòng HCM/HN và địa điểm làm việc bên ngoài. Bán kính geofence cấu hình được nhưng không vượt quá 100 m; ngưỡng sai số GPS cấu hình được nhưng không vượt quá 50 m. Không điền tọa độ giả khi chưa có dữ liệu chính thức.
+- Mã phiếu công tác do Backend tự sinh theo tháng tạo phiếu với định dạng `CT-YYYYMM-NNNN`; Admin không nhập hoặc sửa mã. Khách hàng/phòng khám đã phát sinh phiếu chỉ được ngừng sử dụng, không xóa vật lý khỏi lịch sử.
 
 ## Explicit non-goals for MVP
 

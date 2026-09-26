@@ -3,7 +3,8 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { AttendanceEventEntity, BusinessTripEntity, BusinessTripMemberEntity, ConfigurationAuditLogEntity, CustomerEntity } from '../../database/entities/workforce.entity.js';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
-import type { CompleteBusinessTripDto, CreateBusinessTripDto, CreateCustomerDto, StartBusinessTripDto, TransitionBusinessTripDto, UpdateBusinessTripDto } from './business-trips.dto.js';
+import type { CompleteBusinessTripDto, CreateBusinessTripDto, CreateCustomerDto, StartBusinessTripDto, TransitionBusinessTripDto, UpdateBusinessTripDto, UpdateCustomerDto } from './business-trips.dto.js';
+import { businessTripPeriod, formatBusinessTripCode } from './domain/business-trip-code.js';
 import { canCompleteBusinessTripMember, canStartBusinessTripMember, canTransitionBusinessTrip, hasValidBusinessTripEvidence, shouldCompleteBusinessTrip } from './domain/business-trip-status.js';
 
 @Injectable()
@@ -17,8 +18,103 @@ export class BusinessTripsService {
     return this.dataSource.query(`SELECT bt.id,bt.code,bt.customer_id AS "customerId",bt.responsible_employee_id AS "responsibleEmployeeId",bt.site_name AS "siteName",bt.site_address AS "siteAddress",bt.start_at AS "startAt",bt.end_at AS "endAt",bt.content,bt.requires_photo AS "requiresPhoto",bt.status,bt.cancel_reason AS "cancelReason",bt.created_at AS "createdAt",bt.updated_at AS "updatedAt",c.name AS "customerName",c.contact_name AS "customerContactName",c.contact_phone AS "customerContactPhone",responsible.full_name AS "responsibleEmployeeName",COUNT(btm.employee_id)::int AS "memberCount",COALESCE(string_agg(e.full_name, ', ' ORDER BY e.full_name),'') AS "memberNames",COALESCE(jsonb_agg(jsonb_build_object('employeeId',e.id,'employeeCode',e.employee_code,'fullName',e.full_name,'status',btm.participation_status,'startedAt',btm.started_at,'completedAt',btm.completed_at,'note',btm.note,'evidenceImageReference',btm.evidence_image_reference,'evidenceCapturedAt',btm.evidence_captured_at)) FILTER (WHERE e.id IS NOT NULL),'[]'::jsonb) AS members FROM business_trips bt LEFT JOIN customers c ON c.id=bt.customer_id LEFT JOIN employees responsible ON responsible.id=bt.responsible_employee_id LEFT JOIN business_trip_members btm ON btm.business_trip_id=bt.id LEFT JOIN employees e ON e.id=btm.employee_id GROUP BY bt.id,c.name,c.contact_name,c.contact_phone,responsible.full_name ORDER BY bt.start_at DESC`);
   }
 
-  listCustomers(): Promise<CustomerEntity[]> { return this.customers.find({ order: { name: 'ASC' } }); }
-  createCustomer(input: CreateCustomerDto): Promise<CustomerEntity> { return this.customers.save(this.customers.create(input)); }
+  listCustomerOptions(): Promise<CustomerEntity[]> {
+    return this.customers.find({
+      where: { isActive: true },
+      order: { name: 'ASC' },
+    });
+  }
+
+  listCustomers(): Promise<unknown[]> {
+    return this.dataSource.query(
+      `SELECT c.id,c.name,c.address,c.contact_name AS "contactName",c.contact_phone AS "contactPhone",
+        c.is_active AS "isActive",c.created_at AS "createdAt",c.updated_at AS "updatedAt",
+        COUNT(bt.id)::int AS "tripCount"
+       FROM customers c
+       LEFT JOIN business_trips bt ON bt.customer_id=c.id
+       GROUP BY c.id
+       ORDER BY c.is_active DESC,c.name`,
+    );
+  }
+
+  async createCustomer(
+    user: AuthenticatedUserView,
+    input: CreateCustomerDto,
+  ): Promise<CustomerEntity> {
+    const name = input.name.trim();
+    const address = input.address.trim();
+    this.validateCustomerRequiredFields(name, address);
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(CustomerEntity);
+      const customer = await repository.save(
+        repository.create({
+          name,
+          address,
+          contactName: input.contactName?.trim() || null,
+          contactPhone: input.contactPhone?.trim() || null,
+          isActive: true,
+        }),
+      );
+      await this.audit(
+        manager,
+        user.id,
+        customer.id,
+        'CREATE',
+        null,
+        customer,
+        'CUSTOMER',
+      );
+      return customer;
+    });
+  }
+
+  async updateCustomer(
+    user: AuthenticatedUserView,
+    id: string,
+    input: UpdateCustomerDto,
+  ): Promise<CustomerEntity> {
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(CustomerEntity);
+      const customer = await repository.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!customer) {
+        throw new NotFoundException({
+          code: 'CUSTOMER_NOT_FOUND',
+          message: 'Không tìm thấy khách hàng / phòng khám.',
+        });
+      }
+      const oldValue = { ...customer };
+      const name = input.name?.trim() ?? customer.name;
+      const address = input.address?.trim() ?? customer.address;
+      this.validateCustomerRequiredFields(name, address);
+      customer.name = name;
+      customer.address = address;
+      if (input.contactName !== undefined) {
+        customer.contactName = input.contactName?.trim() || null;
+      }
+      if (input.contactPhone !== undefined) {
+        customer.contactPhone = input.contactPhone?.trim() || null;
+      }
+      if (input.isActive !== undefined) customer.isActive = input.isActive;
+      const saved = await repository.save(customer);
+      await this.audit(
+        manager,
+        user.id,
+        id,
+        input.isActive === undefined
+          ? 'UPDATE'
+          : input.isActive
+            ? 'ACTIVATE'
+            : 'DEACTIVATE',
+        oldValue,
+        saved,
+        'CUSTOMER',
+      );
+      return saved;
+    });
+  }
 
   async create(user: AuthenticatedUserView, input: CreateBusinessTripDto): Promise<BusinessTripEntity> {
     const startAt = new Date(input.startAt);
@@ -28,8 +124,10 @@ export class BusinessTripsService {
     try {
       return await this.dataSource.transaction(async (manager) => {
         await this.assertMembers(manager, memberIds, input.responsibleEmployeeId);
+        await this.assertCustomer(manager, input.customerId ?? null);
         const repository = manager.getRepository(BusinessTripEntity);
-        const trip = await repository.save(repository.create({ code: input.code.trim().toUpperCase(), customerId: input.customerId ?? null, responsibleEmployeeId: input.responsibleEmployeeId, siteName: input.siteName, siteAddress: input.siteAddress, startAt, endAt, content: input.content, requiresPhoto: input.requiresPhoto, status: 'DRAFT', cancelReason: null, createdBy: user.id }));
+        const code = await this.nextCode(manager, new Date());
+        const trip = await repository.save(repository.create({ code, customerId: input.customerId ?? null, responsibleEmployeeId: input.responsibleEmployeeId, siteName: input.siteName, siteAddress: input.siteAddress, startAt, endAt, content: input.content, requiresPhoto: input.requiresPhoto, status: 'DRAFT', cancelReason: null, createdBy: user.id }));
         await manager.getRepository(BusinessTripMemberEntity).save(memberIds.map((employeeId) => ({ businessTripId: trip.id, employeeId, participationStatus: 'ASSIGNED' })));
         await this.audit(manager, user.id, trip.id, 'CREATE', null, { ...trip, memberIds });
         return trip;
@@ -53,7 +151,11 @@ export class BusinessTripsService {
       const startAt = input.startAt ? new Date(input.startAt) : new Date(trip.startAt);
       const endAt = input.endAt ? new Date(input.endAt) : new Date(trip.endAt);
       this.validateTime(startAt, endAt);
-      Object.assign(trip, { customerId: input.customerId ?? trip.customerId, responsibleEmployeeId, siteName: input.siteName ?? trip.siteName, siteAddress: input.siteAddress ?? trip.siteAddress, startAt, endAt, content: input.content ?? trip.content, requiresPhoto: input.requiresPhoto ?? trip.requiresPhoto });
+      const customerId = 'customerId' in input ? input.customerId ?? null : trip.customerId ?? null;
+      if (customerId !== (trip.customerId ?? null)) {
+        await this.assertCustomer(manager, customerId);
+      }
+      Object.assign(trip, { customerId, responsibleEmployeeId, siteName: input.siteName ?? trip.siteName, siteAddress: input.siteAddress ?? trip.siteAddress, startAt, endAt, content: input.content ?? trip.content, requiresPhoto: input.requiresPhoto ?? trip.requiresPhoto });
       const saved = await manager.getRepository(BusinessTripEntity).save(trip);
       if (input.memberIds) {
         await manager.delete(BusinessTripMemberEntity, { businessTripId: id });
@@ -137,11 +239,56 @@ export class BusinessTripsService {
     if ((result?.count ?? 0) !== memberIds.length) throw new BadRequestException({ code: 'BUSINESS_TRIP_MEMBER_INVALID', message: 'Danh sách có nhân viên không tồn tại hoặc đã khóa.' });
   }
 
+  private async assertCustomer(
+    manager: EntityManager,
+    customerId: string | null,
+  ): Promise<void> {
+    if (!customerId) return;
+    const customer = await manager.getRepository(CustomerEntity).findOne({
+      where: { id: customerId, isActive: true },
+    });
+    if (!customer) {
+      throw new BadRequestException({
+        code: 'BUSINESS_TRIP_CUSTOMER_INVALID',
+        message: 'Khách hàng không tồn tại hoặc đã ngừng sử dụng.',
+      });
+    }
+  }
+
+  private validateCustomerRequiredFields(
+    name: string,
+    address: string,
+  ): void {
+    if (!name || !address) {
+      throw new BadRequestException({
+        code: 'CUSTOMER_REQUIRED_FIELDS_EMPTY',
+        message: 'Tên và địa chỉ khách hàng không được để trống.',
+      });
+    }
+  }
+
+  private async nextCode(
+    manager: EntityManager,
+    startAt: Date,
+  ): Promise<string> {
+    const period = businessTripPeriod(startAt);
+    const [counter] = await manager.query<Array<{ lastValue: number }>>(
+      `INSERT INTO business_trip_code_counters (period_key,last_value)
+       VALUES ($1,1)
+       ON CONFLICT (period_key) DO UPDATE
+       SET last_value=business_trip_code_counters.last_value+1
+       RETURNING last_value AS "lastValue"`,
+      [period],
+    );
+    if (!counter) throw new Error('BUSINESS_TRIP_COUNTER_NOT_RETURNED');
+    return formatBusinessTripCode(period, counter.lastValue);
+  }
+
   private async memberIds(manager: EntityManager, id: string): Promise<string[]> {
     return (await manager.query<Array<{ employeeId: string }>>('SELECT employee_id AS "employeeId" FROM business_trip_members WHERE business_trip_id=$1', [id])).map((row) => row.employeeId);
   }
 
-  private audit(manager: EntityManager, userId: string, resourceId: string, action: string, oldValue: unknown, newValue: unknown): Promise<ConfigurationAuditLogEntity> {
-    return manager.save(ConfigurationAuditLogEntity, manager.create(ConfigurationAuditLogEntity, { resourceType: 'BUSINESS_TRIP', resourceId, action, oldValue, newValue, createdBy: userId }));
+  private audit(manager: EntityManager, userId: string, resourceId: string, action: string, oldValue: unknown, newValue: unknown, resourceType = 'BUSINESS_TRIP'): Promise<ConfigurationAuditLogEntity> {
+    return manager.save(ConfigurationAuditLogEntity, manager.create(ConfigurationAuditLogEntity, { resourceType, resourceId, action, oldValue, newValue, createdBy: userId }));
   }
 }

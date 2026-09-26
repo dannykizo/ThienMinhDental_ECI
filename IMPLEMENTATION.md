@@ -80,6 +80,8 @@
 - Admin owns trip preparation: create, edit while `DRAFT`, assign and cancel with a mandatory reason. Admin no longer marks a trip in progress or completed on behalf of employees.
 - An assigned employee starts and completes only their own participation through dedicated authenticated endpoints. Both actions persist server time and a single GPS sample as attendance events.
 - When `requires_photo=true`, completion requires an image reference and capture time. Mobile captures and uploads the image through an authenticated endpoint; development uses `BusinessTripEvidenceStorage` on local disk behind an adapter boundary.
+- Customer review CR3 uses migration `1791072000000-business-trip-customer-management`. A PostgreSQL monthly counter allocates `CT-YYYYMM-NNNN` inside the same transaction that creates the trip, so clients cannot choose codes and concurrent creation cannot reuse a sequence.
+- Admin Web filters active employee candidates by their current organization assignments while Backend remains authoritative for membership validity. Customers have a managed active/inactive lifecycle, trip counts and immutable configuration audit entries; deactivation never removes historical trip links.
 - Aggregate trip status moves to `IN_PROGRESS` when the first member starts and to `COMPLETED` only when every member completes.
 - Business trip changes and member actions use `configuration_audit_logs`; audit payloads intentionally exclude precise coordinates.
 - Mobile lists the signed-in employee's assignments and exposes start/complete actions only for the participation state returned by Backend. Each action captures one GPS sample; no background or continuous tracking is used.

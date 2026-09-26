@@ -62,6 +62,9 @@ export class CustomerEntity {
   @Column({ type: 'varchar', length: 300 }) address!: string;
   @Column({ type: 'varchar', length: 120, name: 'contact_name', nullable: true }) contactName?: string | null;
   @Column({ type: 'varchar', length: 30, name: 'contact_phone', nullable: true }) contactPhone?: string | null;
+  @Column({ type: 'boolean', name: 'is_active', default: true }) isActive!: boolean;
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' }) updatedAt!: Date;
 }
 
 @Entity({ name: 'business_trips' })

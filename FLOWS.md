@@ -89,15 +89,17 @@ DRAFT -> ASSIGNED -> IN_PROGRESS -> COMPLETED
   +------> CANCELLED <-----+
 ```
 
-1. Admin tạo phiếu với khách hàng/phòng khám, địa chỉ, thời gian, nội dung và thành viên.
+1. Admin tạo phiếu với khách hàng/phòng khám, địa chỉ, thời gian, nội dung và thành viên. Backend cấp mã tuần tự theo tháng tạo phiếu ở định dạng `CT-YYYYMM-NNNN`; Admin không nhập mã.
 2. Khi `ASSIGNED`, nhân viên nhận thông báo và thấy phiếu trên Mobile.
 3. Mỗi phiếu có một người phụ trách thuộc danh sách thành viên. Admin chỉ được sửa nội dung và thành viên khi phiếu còn `DRAFT`.
 4. Thành viên bấm Bắt đầu công tác; Backend kiểm tra đúng người được giao, lưu GPS vào attendance event và chuyển riêng phần tham gia của người đó sang `IN_PROGRESS`.
 5. Khi kết thúc, thành viên gửi GPS, ghi chú và ảnh nếu phiếu yêu cầu. Backend chỉ chuyển toàn phiếu sang `COMPLETED` khi mọi thành viên đều hoàn tất.
 6. Admin có thể hủy phiếu chưa hoàn tất nhưng phải nhập lý do. Mọi lần tạo, sửa, giao, hủy, bắt đầu và hoàn tất đều có audit.
 7. Attendance daily projection nhận diện ngày đó là công tác, không tự tính vắng văn phòng.
+8. Admin lọc danh sách người phụ trách/thành viên theo phòng ban. Người phụ trách luôn phải nằm trong danh sách thành viên; Backend tiếp tục kiểm tra nhân viên đang hoạt động.
+9. Admin xem, tìm kiếm, thêm, sửa, ngừng sử dụng hoặc khôi phục khách hàng/phòng khám. Ngừng sử dụng chỉ loại khách hàng khỏi lựa chọn phiếu mới; phiếu cũ và audit được giữ nguyên.
 
-**Implementation status:** Customer alignment C5 đã triển khai Admin Web, Backend API và Mobile Android cho tạo/giao phiếu, danh sách phân công, trạng thái từng thành viên, GPS một lần lúc bắt đầu/kết thúc, ghi chú và ảnh hiện trường bắt buộc theo cấu hình. Ảnh development được lưu local qua adapter riêng và Admin Web mở được ảnh có xác thực. Push vẫn chưa triển khai. Do W25–W29 chưa có quyết định khách hàng, C5 chưa hỗ trợ nhiều địa điểm, chữ ký khách hàng hoặc nhiều cấp duyệt.
+**Implementation status:** Customer alignment C5 đã triển khai Admin Web, Backend API và Mobile Android cho tạo/giao phiếu, danh sách phân công, trạng thái từng thành viên, GPS một lần lúc bắt đầu/kết thúc, ghi chú và ảnh hiện trường bắt buộc theo cấu hình. Customer review CR3 và migration `1791072000000-business-trip-customer-management` bổ sung mã phiếu tự sinh an toàn khi tạo đồng thời, lọc nhân sự theo phòng ban và danh bạ khách hàng có trạng thái/audit. Ảnh development được lưu local qua adapter riêng và Admin Web mở được ảnh có xác thực. Do W25–W29 chưa có quyết định khách hàng, luồng chưa hỗ trợ nhiều địa điểm, chữ ký khách hàng hoặc nhiều cấp duyệt.
 
 ## Mobile + Admin Web — leave request
 
