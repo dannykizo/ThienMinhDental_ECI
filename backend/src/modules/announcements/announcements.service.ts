@@ -217,7 +217,7 @@ export class AnnouncementsService {
       return saved;
     });
     if (input.status === 'PUBLISHED') {
-      await this.deliverPush(saved, recipientIds);
+      await this.deliverPublishedAnnouncementPush(saved, recipientIds);
     }
     return saved;
   }
@@ -252,10 +252,53 @@ export class AnnouncementsService {
         status: 'SENT',
       };
     }
-    return this.deliverPush(
+    return this.deliverPublishedAnnouncementPush(
       announcement,
       rows.map((row) => row.employeeId),
     );
+  }
+
+  async createPublishedIndividualWithinTransaction(
+    manager: EntityManager,
+    input: {
+      body: string;
+      createdBy: string;
+      employeeId: string;
+      title: string;
+    },
+  ): Promise<AnnouncementEntity> {
+    await this.assertTarget(manager, 'EMPLOYEE', null, input.employeeId);
+    const now = new Date();
+    const repository = manager.getRepository(AnnouncementEntity);
+    const announcement = await repository.save(
+      repository.create({
+        audienceType: 'EMPLOYEE',
+        body: input.body.trim(),
+        createdBy: input.createdBy,
+        departmentId: null,
+        employeeId: input.employeeId,
+        publishedAt: now,
+        requiresAcknowledgement: true,
+        status: 'PUBLISHED',
+        title: input.title.trim(),
+      }),
+    );
+    await manager.getRepository(AnnouncementRecipientEntity).save(
+      manager.getRepository(AnnouncementRecipientEntity).create({
+        announcementId: announcement.id,
+        deliveredAt: now,
+        employeeId: input.employeeId,
+      }),
+    );
+    await this.audit(
+      manager,
+      input.createdBy,
+      announcement.id,
+      'SYSTEM_PUBLISH',
+      null,
+      this.summary(announcement),
+    );
+    return announcement;
   }
 
   async recipients(user: AuthenticatedUserView, id: string): Promise<unknown[]> {
@@ -308,7 +351,7 @@ export class AnnouncementsService {
     return { title: announcement.title, status: announcement.status, audienceType: announcement.audienceType, departmentId: announcement.departmentId ?? null, employeeId: announcement.employeeId ?? null, requiresAcknowledgement: announcement.requiresAcknowledgement, publishedAt: announcement.publishedAt ?? null, withdrawnAt: announcement.withdrawnAt ?? null, withdrawReason: announcement.withdrawReason ?? null };
   }
 
-  private async deliverPush(
+  async deliverPublishedAnnouncementPush(
     announcement: AnnouncementEntity,
     employeeIds: string[],
   ): Promise<AnnouncementPushResult> {
@@ -340,22 +383,28 @@ export class AnnouncementsService {
     }
 
     const attemptedAt = new Date();
-    await this.dataSource.transaction(async (manager) => {
-      await Promise.all(
-        result.recipients.map((recipient) =>
-          manager.query(
-            `UPDATE announcement_recipients SET push_status=$3,push_attempt_count=push_attempt_count+1,push_last_attempt_at=$4,push_sent_at=CASE WHEN $3='SENT' THEN $4 ELSE push_sent_at END,push_failure_code=$5 WHERE announcement_id=$1 AND employee_id=$2`,
-            [
-              announcement.id,
-              recipient.employeeId,
-              recipient.status,
-              attemptedAt,
-              recipient.failureCode ?? null,
-            ],
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        await Promise.all(
+          result.recipients.map((recipient) =>
+            manager.query(
+              `UPDATE announcement_recipients SET push_status=$3,push_attempt_count=push_attempt_count+1,push_last_attempt_at=$4,push_sent_at=CASE WHEN $3='SENT' THEN $4 ELSE push_sent_at END,push_failure_code=$5 WHERE announcement_id=$1 AND employee_id=$2`,
+              [
+                announcement.id,
+                recipient.employeeId,
+                recipient.status,
+                attemptedAt,
+                recipient.failureCode ?? null,
+              ],
+            ),
           ),
-        ),
+        );
+      });
+    } catch (error) {
+      this.logger.error(
+        `Unable to persist push outcome for ${announcement.id}: ${error instanceof Error ? error.message : String(error)}`,
       );
-    });
+    }
     return result;
   }
 

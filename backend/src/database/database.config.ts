@@ -7,6 +7,7 @@ import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserEntity } from './entities/user.entity.js';
 import { AuthSessionEntity } from './entities/auth-session.entity.js';
 import { PushDeviceTokenEntity } from './entities/push-device-token.entity.js';
+import { DisciplinaryActionEntity } from './entities/disciplinary-action.entity.js';
 import {
   BranchEntity,
   EmployeeOrganizationAssignmentEntity,
@@ -57,6 +58,7 @@ export const databaseEntities = [
   AnnouncementEntity,
   AnnouncementRecipientEntity,
   PushDeviceTokenEntity,
+  DisciplinaryActionEntity,
 ];
 
 export function createDatabaseOptions(databaseUrl: string): TypeOrmModuleOptions {

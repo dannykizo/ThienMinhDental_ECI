@@ -24,5 +24,6 @@ import { FirebaseAnnouncementPushSender } from './infrastructure/firebase-announ
       useExisting: FirebaseAnnouncementPushSender,
     },
   ],
+  exports: [AnnouncementsService],
 })
 export class AnnouncementsModule {}

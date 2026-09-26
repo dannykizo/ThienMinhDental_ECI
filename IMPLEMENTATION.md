@@ -117,6 +117,14 @@
 - Admin Web shows Firebase/device diagnostics, aggregate and per-recipient push status, and can retry only unresolved recipients while the announcement is still `PUBLISHED`.
 - Mobile distinguishes missing Firebase configuration, denied notification permission and a pending device token. Real push delivery still requires environment-owned Firebase credentials and matching Android public options; no credential is stored in Git.
 
+### Customer review CR5 — disciplinary actions
+
+- Migration `1791244800000-employee-disciplinary-actions` stores warning, suspension and disciplinary-action records with a strict `DRAFT -> ISSUED -> REVOKED` lifecycle and references to the generated inbox announcements.
+- Only `ADMIN` can create, edit, issue or revoke. Draft fields become immutable after issue; revocation requires a reason and every mutation is recorded in `configuration_audit_logs`.
+- Suspension requires a bounded effective period. Other actions may be open-ended. CR5 deliberately does not mutate payroll, attendance, employment status or authentication because those consequences require separate approved policies.
+- Issue creates an important individual announcement and recipient inside the same database transaction. Push delivery runs after commit through the existing tracked FCM adapter, so provider failure never removes the decision or inbox message.
+- Admin Web provides drafting, filtering, issue/revoke confirmation and immutable history. Mobile consumes the generated message through the existing inbox/read/acknowledgement flow; no duplicate disciplinary business rule exists in the client.
+
 ### Mobile completion — UX and Android package
 
 - App renders immediately into a branded bootstrap state while secure-session restoration and Backend verification continue asynchronously; credentials are never prefilled in the login form.
@@ -157,6 +165,7 @@ attendance
 business-trips
 leave
 announcements
+disciplinary-actions
 kpi
 notifications
 reporting

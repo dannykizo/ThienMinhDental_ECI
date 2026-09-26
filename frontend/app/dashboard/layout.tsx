@@ -14,6 +14,7 @@ import {
   LogOut,
   MapPin,
   ShieldCheck,
+  ShieldAlert,
   TriangleAlert,
   UsersRound,
   type LucideIcon,
@@ -89,6 +90,12 @@ const navigation: NavItem[] = [
     href: '/dashboard/announcements',
     ready: true,
     icon: Bell,
+  },
+  {
+    label: 'Kỷ luật nhân sự',
+    href: '/dashboard/disciplinary-actions',
+    ready: true,
+    icon: ShieldAlert,
   },
   {
     label: 'Báo cáo tháng',

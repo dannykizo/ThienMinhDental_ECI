@@ -144,6 +144,20 @@ Per recipient: DELIVERED -> READ -> ACKNOWLEDGED (chỉ tin quan trọng)
 
 **Trạng thái hiện tại:** Customer review CR4 đã triển khai Admin Web, Backend API và hộp thư Mobile cho nháp/chỉnh sửa/xuất bản/thu hồi, đối tượng toàn công ty/cá nhân/phòng ban, badge chưa đọc, chi tiết tin, xác nhận tin quan trọng, thống kê người chưa đọc/chưa xác nhận và phạm vi Trưởng phòng. Backend lưu trạng thái push theo từng người nhận, cung cấp chẩn đoán cấu hình/thiết bị và cho Admin gửi lại; Mobile báo rõ tình trạng thiếu cấu hình, quyền thông báo hoặc token. Môi trường chỉ gửi push thật sau khi cấu hình Firebase deployment. File/ảnh, mức khẩn cấp, hẹn giờ, thời hạn hiển thị và lưu trữ tự động vẫn là `NOT_IMPLEMENTED` do W39 chưa được khách hàng giải thích.
 
+## Admin Web + Mobile Inbox — disciplinary actions
+
+```text
+DRAFT -> ISSUED -> REVOKED
+```
+
+1. Chỉ Admin lập và chỉnh sửa quyết định nháp với một trong ba hình thức: cảnh cáo, đình chỉ hoặc xử lý vi phạm.
+2. Mọi quyết định có nhân viên, lý do, nội dung xử lý và ngày hiệu lực. Đình chỉ bắt buộc có ngày kết thúc không trước ngày bắt đầu.
+3. Khi ban hành, Backend chốt nội dung và tạo trong cùng transaction một thông báo cá nhân bắt buộc xác nhận. Sau commit, Backend thử gửi push; lỗi push không làm mất quyết định hoặc inbox.
+4. Quyết định đã ban hành không được sửa hoặc xóa. Admin chỉ có thể thu hồi với lý do bắt buộc; lịch sử và thông báo cũ vẫn được giữ, đồng thời nhân viên được báo về việc thu hồi nếu tài khoản còn hoạt động.
+5. CR5 chỉ quản lý hồ sơ quyết định và giao nhận thông báo. Không tự động trừ lương, sửa bảng công, đổi trạng thái việc làm hoặc khóa tài khoản vì các hệ quả đó chưa có policy khách hàng được duyệt.
+
+**Trạng thái hiện tại:** Customer review CR5 đã triển khai migration, API chỉ Admin, audit bất biến, trang quản trị và thông báo Mobile qua Hộp thư/push hiện có. Nhân viên vẫn đăng nhập được để đọc và xác nhận quyết định.
+
 ## Admin Web — monthly report
 
 1. Admin chọn tháng và bộ lọc nhân viên/phòng ban.

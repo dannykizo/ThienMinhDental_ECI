@@ -89,6 +89,9 @@ const statusToneMap: Record<string, 'success' | 'warning' | 'danger'> = {
   WITHDRAWN: 'danger',
   ABSENT: 'danger',
   INACTIVE: 'danger',
+  ISSUED: 'success',
+  REVOKED: 'danger',
+  DRAFT: 'warning',
 };
 
 const statusLabelMap: Record<string, string> = {
@@ -112,6 +115,9 @@ const statusLabelMap: Record<string, string> = {
   WITHDRAWN: 'Đã thu hồi',
   ABSENT: 'Vắng mặt',
   INACTIVE: 'Tạm khóa',
+  ISSUED: 'Đã ban hành',
+  REVOKED: 'Đã thu hồi',
+  DRAFT: 'Bản nháp',
 };
 
 export function StatusBadge({ value }: { value: string }) {
