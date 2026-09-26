@@ -95,7 +95,7 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-page module-page">
       <PageHeader
-        description="Tổng quan tình hình vận hành nhân sự và chấm công tại Chi nhánh TP.HCM."
+        description="Tổng quan tình hình vận hành nhân sự và chấm công trong phạm vi chi nhánh được cấp quyền."
         eyebrow="TRUNG TÂM QUẢN TRỊ"
         title="Tổng quan vận hành"
       />

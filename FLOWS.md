@@ -188,3 +188,12 @@ DRAFT -> ISSUED -> REVOKED
 5. Menu mobile dùng drawer có backdrop; focus bàn phím, reduced motion, loading/empty/error/success state phải sử dụng component thống nhất.
 
 **Trạng thái CR8:** Đã triển khai trên Admin Web và hai endpoint danh sách liên quan. Không thay đổi state machine, authorization hay schema database.
+
+### Final Web polish (CR9)
+
+1. Thanh điều hướng và Dashboard mô tả phạm vi dữ liệu theo role: Admin/Kế toán trưởng xem toàn bộ chi nhánh; Quản lý chỉ thấy nhãn phạm vi được phân quyền. Đây là nhãn giải thích quyền hiện có, không tạo bộ lọc chi nhánh giả ở Frontend.
+2. Các luồng chọn nhân viên dài cho phép tìm theo mã/họ tên và lọc phòng ban từ assignment Backend trả về. Nhân viên ngừng hoạt động không được đưa vào lựa chọn nghiệp vụ mới.
+3. Biểu mẫu hồ sơ nhân viên và phiếu công tác cảnh báo trước khi điều hướng nội bộ, tải lại trang hoặc đóng phần chỉnh sửa đang có thay đổi chưa lưu.
+4. Admin có thể mở drawer chi tiết audit để xem metadata cùng giá trị trước/sau; các trường có tên nhạy cảm được che ở lớp hiển thị, audit bất biến trong Backend không bị sửa.
+
+**Trạng thái CR9:** Đã triển khai hoàn toàn ở Admin Web, không thêm migration và không thay đổi business rule/API contract.

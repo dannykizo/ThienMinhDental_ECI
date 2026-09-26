@@ -3,7 +3,7 @@
 import { AlertTriangle, X } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 
-interface ActionDialogOptions {
+export interface ActionDialogOptions {
   title: string;
   description: string;
   confirmLabel: string;

@@ -118,6 +118,8 @@ CR7 bổ sung chống brute-force cho endpoint xác thực, kiểm tra Origin đ
 
 CR8 hoàn thiện trải nghiệm vận hành Admin Web mà không thay đổi business rule: dashboard có hàng đợi ưu tiên từ số liệu thật, menu mobile dạng drawer, hộp thoại xác nhận thống nhất cho thao tác nhạy cảm, toast thành công, focus/keyboard state rõ ràng và phân trang cho các danh sách dài. `GET /api/employees` hỗ trợ tùy chọn `search`, `page`, `pageSize`; khi có `page` response là `{ items, page, pageSize, total, activeTotal, inactiveTotal }`, còn request không có `page` giữ response mảng để tương thích các màn hình chọn nhân sự và Mobile. `GET /api/operations/audit` trả `{ items, page, pageSize, total }` và trang vận hành hiển thị lần giao email/push thành công gần nhất.
 
+CR9 hoàn thiện lớp sử dụng cuối của Admin Web: ngữ cảnh chi nhánh hiển thị theo phạm vi role thay vì hard-code một văn phòng, bộ chọn nhân viên có tìm kiếm và lọc phòng ban trong các luồng công tác/nghỉ phép/thông báo/kỷ luật, cảnh báo bỏ thay đổi chưa lưu ở biểu mẫu nhân viên và phiếu công tác, cùng drawer audit hiển thị giá trị trước/sau. Drawer tự che các khóa có tên dạng password/token/secret/authorization và không thay đổi dữ liệu audit gốc.
+
 ```bash
 cd mobile
 flutter pub get

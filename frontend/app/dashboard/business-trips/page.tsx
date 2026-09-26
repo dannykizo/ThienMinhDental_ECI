@@ -21,6 +21,7 @@ import {
 import { apiRequest, apiUrl } from '@/lib/auth-api';
 import { useActionDialog } from '@/components/use-action-dialog';
 import { useClientPagination } from '@/lib/use-client-pagination';
+import { useUnsavedChanges } from '@/lib/use-unsaved-changes';
 
 interface TripMember {
   employeeId: string;
@@ -127,6 +128,8 @@ export default function BusinessTripsPage() {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
   const [responsibleEmployeeId, setResponsibleEmployeeId] = useState('');
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [tripDirty, setTripDirty] = useState(false);
   const [statusFilter, setStatusFilter] = useState('ACTIVE');
   const [customerSearch, setCustomerSearch] = useState('');
   const [showInactiveCustomers, setShowInactiveCustomers] = useState(false);
@@ -138,6 +141,7 @@ export default function BusinessTripsPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const { request: requestAction, dialog: actionDialog } = useActionDialog();
+  const confirmDiscardTrip = useUnsavedChanges(tripDirty, requestAction);
 
   async function load(): Promise<void> {
     const [tripRows, customerRows, employeeRows, departmentRows] =
@@ -167,10 +171,14 @@ export default function BusinessTripsPage() {
     setSelectedDepartmentId('');
     setResponsibleEmployeeId('');
     setSelectedMemberIds([]);
+    setEmployeeSearch('');
+    setTripDirty(false);
   }
 
-  function beginTripEdit(trip: Trip): void {
+  async function beginTripEdit(trip: Trip): Promise<void> {
+    if (!(await confirmDiscardTrip())) return;
     setEditing(trip);
+    setTripDirty(false);
     setResponsibleEmployeeId(trip.responsibleEmployeeId ?? '');
     setSelectedMemberIds(trip.members.map((member) => member.employeeId));
     const responsible = employees.find(
@@ -426,6 +434,11 @@ export default function BusinessTripsPage() {
         (assignment) => assignment.departmentId === selectedDepartmentId,
       ),
   );
+  const normalizedEmployeeSearch = employeeSearch.trim().toLocaleLowerCase('vi');
+  const filteredCandidateEmployees = candidateEmployees.filter((employee) => !normalizedEmployeeSearch || `${employee.employeeCode} ${employee.fullName} ${employee.organizationAssignments.map((assignment) => assignment.departmentName).join(' ')}`.toLocaleLowerCase('vi').includes(normalizedEmployeeSearch));
+  const responsibleOptions = responsibleEmployeeId && !filteredCandidateEmployees.some((employee) => employee.id === responsibleEmployeeId)
+    ? [candidateEmployees.find((employee) => employee.id === responsibleEmployeeId), ...filteredCandidateEmployees].filter((employee): employee is Employee => Boolean(employee))
+    : filteredCandidateEmployees;
   const customerOptions = customers.filter(
     (customer) => customer.isActive || customer.id === editing?.customerId,
   );
@@ -470,11 +483,12 @@ export default function BusinessTripsPage() {
 
       <details className="editor-panel" open>
         <summary><span className="summary-label">{editing ? <Pencil aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}{editing ? `Chỉnh sửa phiếu nháp ${editing.code}` : 'Tạo phiếu công tác'}</span></summary>
-        <form className="form-grid" key={editing?.id ?? 'create'} onSubmit={saveTrip}>
+        <form className="form-grid" key={editing?.id ?? 'create'} onChangeCapture={(event) => { if (!(event.target as HTMLElement).hasAttribute('data-filter-control')) setTripDirty(true); }} onSubmit={saveTrip}>
           <div className="generated-code-field"><BriefcaseBusiness aria-hidden="true" size={19} /><span><strong>{editing?.code ?? 'Tự sinh khi lưu'}</strong><small>Quy tắc CT-YYYYMM-NNNN</small></span></div>
           <label>Khách hàng<select name="customerId" defaultValue={editing?.customerId ?? ''}><option value="">Không chọn</option>{customerOptions.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.isActive ? '' : ' · Đã ngừng'}</option>)}</select></label>
           <label>Phòng ban phụ trách<select value={selectedDepartmentId} onChange={(event) => changeDepartment(event.target.value)}><option value="">Tất cả phòng ban</option>{departments.filter((department) => department.isActive).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
-          <label>Người phụ trách<select required value={responsibleEmployeeId} onChange={(event) => changeResponsible(event.target.value)}><option value="">Chọn người phụ trách</option>{candidateEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.employeeCode} · {employee.fullName}</option>)}</select></label>
+          <label className="search-box employee-search-field"><Search aria-hidden="true" size={15} /><input aria-label="Tìm nhân sự công tác" data-filter-control onChange={(event) => setEmployeeSearch(event.target.value)} placeholder="Tìm mã hoặc tên nhân sự…" type="search" value={employeeSearch} /></label>
+          <label>Người phụ trách<select required value={responsibleEmployeeId} onChange={(event) => changeResponsible(event.target.value)}><option value="">Chọn người phụ trách</option>{responsibleOptions.map((employee) => <option key={employee.id} value={employee.id}>{employee.employeeCode} · {employee.fullName}</option>)}</select></label>
           <label>Tên địa điểm<input name="siteName" defaultValue={editing?.siteName ?? ''} required /></label>
           <label className="span-2">Địa chỉ<input name="siteAddress" defaultValue={editing?.siteAddress ?? ''} required /></label>
           <label>Bắt đầu<input name="startAt" type="datetime-local" defaultValue={editing ? toLocalInput(editing.startAt) : defaultStart()} required /></label>
@@ -482,7 +496,7 @@ export default function BusinessTripsPage() {
           <label className="span-2">Nội dung công việc<textarea name="content" defaultValue={editing?.content ?? ''} required /></label>
           <fieldset className="span-2 check-list trip-member-picker">
             <legend>Thành viên trong phòng ban đang chọn · đã chọn {selectedMemberIds.length}</legend>
-            {candidateEmployees.length === 0 ? <p>Không có nhân viên đang hoạt động trong phòng ban này.</p> : candidateEmployees.map((employee) => (
+            {filteredCandidateEmployees.length === 0 ? <p>Không có nhân viên phù hợp phòng ban và từ khóa.</p> : filteredCandidateEmployees.map((employee) => (
               <label key={employee.id}>
                 <input checked={selectedMemberIds.includes(employee.id)} disabled={employee.id === responsibleEmployeeId} onChange={(event) => toggleMember(employee.id, event.target.checked)} type="checkbox" />
                 <span>{employee.employeeCode} · {employee.fullName}<small>{employee.organizationAssignments.map((row) => row.departmentName).join(' · ')}</small></span>
@@ -490,7 +504,7 @@ export default function BusinessTripsPage() {
             ))}
           </fieldset>
           <label className="check-inline"><input name="requiresPhoto" type="checkbox" defaultChecked={editing?.requiresPhoto} />Bắt buộc ảnh hiện trường khi hoàn tất</label>
-          <span className="action-group"><button className="primary-button form-action" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo phiếu nháp'}</button>{editing && <button className="secondary-button" type="button" onClick={resetTripEditor}>Hủy chỉnh sửa</button>}</span>
+          <span className="action-group"><button className="primary-button form-action" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo phiếu nháp'}</button>{editing && <button className="secondary-button" type="button" onClick={() => void confirmDiscardTrip().then((confirmed) => { if (confirmed) resetTripEditor(); })}>Hủy chỉnh sửa</button>}</span>
         </form>
       </details>
 
@@ -521,7 +535,7 @@ export default function BusinessTripsPage() {
         <><div className="card-list">{tripPaging.items.map((trip) => (
           <article className="list-card trip-card" key={trip.id}>
             <div><p className="mono">{trip.code} · {trip.customerName ?? 'Không gắn khách hàng'}</p><h3>{trip.siteName}</h3><p>{trip.siteAddress}</p><p>{trip.content}</p><small>{formatDate(trip.startAt)} → {formatDate(trip.endAt)} · Phụ trách: {trip.responsibleEmployeeName ?? 'Chưa xác định'}{trip.requiresPhoto ? ' · Bắt buộc ảnh' : ''}</small><div className="trip-member-list">{trip.members.map((member) => <span key={member.employeeId}><strong>{member.fullName}</strong> <StatusBadge value={member.status} />{member.evidenceImageReference ? <> · <a href={evidenceHref(member.evidenceImageReference)} rel="noreferrer" target="_blank">Mở ảnh</a></> : ''}</span>)}</div>{trip.cancelReason && <p><strong>Lý do hủy:</strong> {trip.cancelReason}</p>}{history?.tripId === trip.id && <div className="trip-history"><strong>Lịch sử thao tác</strong>{history.items.map((item) => <small key={item.id}>{formatDate(item.createdAt)} · {item.actorName} · {item.action}</small>)}</div>}</div>
-            <div><StatusBadge value={trip.status} /><button className="table-action" onClick={() => void showHistory(trip.id)}>Lịch sử</button>{trip.status === 'DRAFT' && <><button className="table-action" onClick={() => beginTripEdit(trip)}>Chỉnh sửa</button><button className="table-action success-action" disabled={saving} onClick={() => void transition(trip.id, 'ASSIGNED')}>Giao phiếu</button></>}{!['COMPLETED', 'CANCELLED'].includes(trip.status) && <button className="table-action danger-action" disabled={saving} onClick={() => void transition(trip.id, 'CANCELLED')}>Hủy phiếu</button>}</div>
+            <div><StatusBadge value={trip.status} /><button className="table-action" onClick={() => void showHistory(trip.id)}>Lịch sử</button>{trip.status === 'DRAFT' && <><button className="table-action" onClick={() => void beginTripEdit(trip)}>Chỉnh sửa</button><button className="table-action success-action" disabled={saving} onClick={() => void transition(trip.id, 'ASSIGNED')}>Giao phiếu</button></>}{!['COMPLETED', 'CANCELLED'].includes(trip.status) && <button className="table-action danger-action" disabled={saving} onClick={() => void transition(trip.id, 'CANCELLED')}>Hủy phiếu</button>}</div>
           </article>
         ))}</div><Pagination page={tripPaging.page} pageSize={tripPaging.pageSize} total={visibleTrips.length} onPageChange={tripPaging.setPage} /></>
       )}

@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Activity, BellRing, Database, History, KeyRound, Send } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { Activity, BellRing, Database, Eye, History, KeyRound, Send, X } from 'lucide-react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { EmptyState, LoadingState, Notice, PageHeader, Pagination, formatDate } from '@/components/admin-ui';
 import { apiRequest } from '@/lib/auth-api';
 
@@ -22,7 +22,7 @@ interface Overview {
   integrations: Record<string, boolean>;
   lastDelivery: { emailAlertAt: string | null; pushAt: string | null };
 }
-interface AuditRow { id: string; resourceType: string; resourceId: string; action: string; actorName: string; createdAt: string; }
+interface AuditRow { id: string; resourceType: string; resourceId: string; action: string; actorName: string; createdAt: string; oldValue: Record<string, unknown> | null; newValue: Record<string, unknown> | null; }
 interface AuditPage { items: AuditRow[]; page: number; pageSize: number; total: number; }
 const auditPageSize = 25;
 const integrationLabels: Record<string, { label: string; href: string }> = {
@@ -39,13 +39,20 @@ const cards = [
   { key: 'auditEvents24h', label: 'Thay đổi đã ghi audit', note: 'Trong 24 giờ gần nhất', icon: History },
 ] as const;
 
+function formatAuditValue(value: Record<string, unknown> | null): string {
+  if (!value) return 'Không có dữ liệu';
+  return JSON.stringify(value, (key, item) => /password|token|secret|authorization/i.test(key) ? '[ĐÃ ẨN]' : item, 2);
+}
+
 export default function OperationsPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [audit, setAudit] = useState<AuditRow[] | null>(null);
   const [auditPage, setAuditPage] = useState(1);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditFilters, setAuditFilters] = useState({ resourceType: '', action: '' });
+  const [selectedAudit, setSelectedAudit] = useState<AuditRow | null>(null);
   const [error, setError] = useState('');
+  const auditCloseRef = useRef<HTMLButtonElement>(null);
 
   async function loadAudit(page = auditPage, resourceType = auditFilters.resourceType, action = auditFilters.action): Promise<void> {
     const params = new URLSearchParams({ page: String(page), pageSize: String(auditPageSize) });
@@ -61,6 +68,16 @@ export default function OperationsPage() {
       .catch((caught) => setError(caught instanceof Error ? caught.message : 'Không thể tải trạng thái vận hành.'));
   }, []);
 
+  useEffect(() => {
+    if (!selectedAudit) return;
+    auditCloseRef.current?.focus();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setSelectedAudit(null); };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => { document.removeEventListener('keydown', closeOnEscape); document.body.style.overflow = previousOverflow; };
+  }, [selectedAudit]);
+
   async function filter(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -72,6 +89,7 @@ export default function OperationsPage() {
   }
 
   return <div className="module-page">
+    {selectedAudit && <div className="detail-drawer-backdrop" onMouseDown={() => setSelectedAudit(null)}><aside aria-labelledby="audit-detail-title" aria-modal="true" className="detail-drawer" onMouseDown={(event) => event.stopPropagation()} role="dialog"><div className="detail-drawer-heading"><div><p className="eyebrow">AUDIT BẤT BIẾN</p><h2 id="audit-detail-title">Chi tiết thay đổi</h2></div><button aria-label="Đóng chi tiết audit" className="icon-button" onClick={() => setSelectedAudit(null)} ref={auditCloseRef} type="button"><X size={18} /></button></div><dl className="audit-metadata"><div><dt>Thời gian</dt><dd>{formatDate(selectedAudit.createdAt)}</dd></div><div><dt>Người thực hiện</dt><dd>{selectedAudit.actorName}</dd></div><div><dt>Loại dữ liệu</dt><dd>{selectedAudit.resourceType}</dd></div><div><dt>Hành động</dt><dd>{selectedAudit.action}</dd></div><div className="span-2"><dt>Mã tham chiếu</dt><dd><code>{selectedAudit.resourceId}</code></dd></div></dl><div className="audit-change-grid"><section><h3>Giá trị trước</h3><pre>{formatAuditValue(selectedAudit.oldValue)}</pre></section><section><h3>Giá trị sau</h3><pre>{formatAuditValue(selectedAudit.newValue)}</pre></section></div></aside></div>}
     <PageHeader eyebrow="CR7 / VẬN HÀNH" title="Vận hành & bảo mật" description="Theo dõi sức khỏe tích hợp, lỗi gửi thông báo và nhật ký thay đổi tập trung. Chỉ Admin được truy cập." />
     {error && <Notice kind="error">{error}</Notice>}
     {!overview ? <LoadingState /> : <>
@@ -89,7 +107,7 @@ export default function OperationsPage() {
     <section className="editor-panel">
       <h2><Database size={19} /> Nhật ký thay đổi</h2>
       <form className="toolbar" onSubmit={filter}><label>Loại dữ liệu<input name="resourceType" placeholder="Ví dụ: EMPLOYEE" /></label><label>Hành động<input name="action" placeholder="Ví dụ: UPDATE" /></label><button className="secondary-button">Lọc nhật ký</button></form>
-      {audit === null ? <LoadingState /> : audit.length === 0 ? <EmptyState title="Chưa có nhật ký phù hợp" description="Thử bỏ bớt điều kiện lọc." /> : <><div className="table-wrap"><table><thead><tr><th>Thời gian</th><th>Dữ liệu</th><th>Hành động</th><th>Người thực hiện</th><th>Mã tham chiếu</th></tr></thead><tbody>{audit.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt)}</td><td>{row.resourceType}</td><td>{row.action}</td><td>{row.actorName}</td><td><code>{row.resourceId.slice(0, 8)}</code></td></tr>)}</tbody></table></div><Pagination page={auditPage} pageSize={auditPageSize} total={auditTotal} onPageChange={(page) => { setAudit(null); void loadAudit(page).catch((caught) => { setError(caught instanceof Error ? caught.message : 'Không thể chuyển trang audit.'); setAudit([]); }); }} /></>}
+      {audit === null ? <LoadingState /> : audit.length === 0 ? <EmptyState title="Chưa có nhật ký phù hợp" description="Thử bỏ bớt điều kiện lọc." /> : <><div className="table-wrap"><table><thead><tr><th>Thời gian</th><th>Dữ liệu</th><th>Hành động</th><th>Người thực hiện</th><th>Mã tham chiếu</th><th>Chi tiết</th></tr></thead><tbody>{audit.map((row) => <tr key={row.id}><td>{formatDate(row.createdAt)}</td><td>{row.resourceType}</td><td>{row.action}</td><td>{row.actorName}</td><td><code>{row.resourceId.slice(0, 8)}</code></td><td><button className="table-action" onClick={() => setSelectedAudit(row)} type="button"><Eye aria-hidden="true" size={13} /> Xem</button></td></tr>)}</tbody></table></div><Pagination page={auditPage} pageSize={auditPageSize} total={auditTotal} onPageChange={(page) => { setAudit(null); void loadAudit(page).catch((caught) => { setError(caught instanceof Error ? caught.message : 'Không thể chuyển trang audit.'); setAudit([]); }); }} /></>}
     </section>
   </div>;
 }

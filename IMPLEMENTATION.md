@@ -236,6 +236,7 @@ Chỉ tạo các thư mục con này khi module bắt đầu có code thật; kh
 - [x] Push notification reliability and delivery tracking.
 - [x] Multi-branch organization assignments and branch-scoped employee directory.
 - [x] Admin Web UX/scalability polish: responsive navigation, safe action dialogs, actionable dashboard and paged employee/audit views.
+- [x] Admin Web final polish: role-aware branch context, searchable employee pickers, unsaved-change guards and redacted audit detail drawer.
 
 ### Phase 3 — only after new approval
 

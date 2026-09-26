@@ -6,8 +6,9 @@ import { EmptyState, LoadingState, Notice, PageHeader, Pagination, StatusBadge, 
 import { apiRequest, getAdminSession, type SessionUser } from '@/lib/auth-api';
 import { useActionDialog } from '@/components/use-action-dialog';
 import { useClientPagination } from '@/lib/use-client-pagination';
+import { EmployeePicker, type EmployeePickerOption } from '@/components/employee-picker';
 
-interface Employee { id: string; employeeCode: string; fullName: string; }
+type Employee = EmployeePickerOption;
 interface LeavePolicy {
   id: string; code: string; name: string; isActive: boolean; balanceTrackingEnabled: boolean;
   annualEntitlementMinutes: number; dayMinutes: number; carryOverEnabled: boolean;
@@ -58,6 +59,7 @@ export default function LeavePage() {
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
   const [balanceYear, setBalanceYear] = useState(currentYear);
   const [selectedPolicyId, setSelectedPolicyId] = useState('');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [durationType, setDurationType] = useState<DurationType>('FULL_DAY');
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
@@ -98,14 +100,14 @@ export default function LeavePage() {
     setSaving(true); setMessage(''); setError('');
     try {
       await apiRequest('/leave-requests', { method: 'POST', body: JSON.stringify({
-        employeeId: form.get('employeeId'), policyId: selectedPolicyId, durationType,
+        employeeId: selectedEmployeeId, policyId: selectedPolicyId, durationType,
         startDate, endDate: durationType === 'FULL_DAY' ? endDate : startDate,
         halfDayPeriod: durationType === 'HALF_DAY' ? form.get('halfDayPeriod') : undefined,
         startTime: durationType === 'HOURS' ? form.get('startTime') : undefined,
         endTime: durationType === 'HOURS' ? form.get('endTime') : undefined,
         reason: form.get('reason'),
       }) });
-      formElement.reset(); setDurationType('FULL_DAY'); setStartDate(today); setEndDate(today);
+      formElement.reset(); setSelectedEmployeeId(''); setDurationType('FULL_DAY'); setStartDate(today); setEndDate(today);
       setMessage('Đã ghi nhận đơn nghỉ và giữ trước số dư (nếu chính sách có theo dõi).'); await load();
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể tạo đơn.'); }
     finally { setSaving(false); }
@@ -240,7 +242,7 @@ export default function LeavePage() {
     <details className="editor-panel">
       <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Ghi nhận đơn nghỉ cho nhân viên</span></summary>
       <form className="form-grid" onSubmit={create}>
-        <label>Nhân viên<select name="employeeId" required><option value="">Chọn nhân viên</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.employeeCode} · {item.fullName}</option>)}</select></label>
+        <EmployeePicker employees={employees.filter((employee) => employee.isActive !== false)} onChange={setSelectedEmployeeId} value={selectedEmployeeId} />
         <label>Chính sách<select required value={selectedPolicyId} onChange={(event) => { setSelectedPolicyId(event.target.value); setDurationType('FULL_DAY'); }}><option value="">Chọn chính sách</option>{activePolicies.map((policy) => <option key={policy.id} value={policy.id}>{policy.name}</option>)}</select></label>
         <label>Hình thức<select value={durationType} onChange={(event) => setDurationType(event.target.value as DurationType)}><option value="FULL_DAY">Cả ngày / nhiều ngày</option>{selectedPolicy?.allowHalfDay && <option value="HALF_DAY">Nửa ngày</option>}{selectedPolicy?.allowHourly && <option value="HOURS">Theo giờ</option>}</select></label>
         <label>Từ ngày<input onChange={(event) => { setStartDate(event.target.value); if (durationType !== 'FULL_DAY') setEndDate(event.target.value); }} required type="date" value={startDate} /></label>

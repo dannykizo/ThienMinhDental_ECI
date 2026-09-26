@@ -22,6 +22,8 @@ import {
   ToastNotice,
 } from '@/components/admin-ui';
 import { apiRequest, getAdminSession } from '@/lib/auth-api';
+import { useActionDialog } from '@/components/use-action-dialog';
+import { useUnsavedChanges } from '@/lib/use-unsaved-changes';
 
 interface Lookup {
   id: string;
@@ -107,6 +109,7 @@ function today(): string {
 
 export default function EmployeesPage() {
   const [items, setItems] = useState<Employee[] | null>(null);
+  const [employeeOptions, setEmployeeOptions] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Lookup[]>([]);
   const [positions, setPositions] = useState<Lookup[]>([]);
   const [branches, setBranches] = useState<Lookup[]>([]);
@@ -125,17 +128,23 @@ export default function EmployeesPage() {
     employee: Employee;
     data: EmployeeHistory | null;
   } | null>(null);
+  const [employeeDirty, setEmployeeDirty] = useState(false);
+  const [createFormVersion, setCreateFormVersion] = useState(0);
+  const { request: requestAction, dialog: actionDialog } = useActionDialog();
+  const confirmDiscardEmployee = useUnsavedChanges(employeeDirty, requestAction);
 
   async function load(selectedPage = page, selectedSearch = search): Promise<void> {
     const params = new URLSearchParams({ page: String(selectedPage), pageSize: String(employeePageSize) });
     if (selectedSearch.trim()) params.set('search', selectedSearch.trim());
-    const [employees, deps, pos, branchItems] = await Promise.all([
+    const [employees, people, deps, pos, branchItems] = await Promise.all([
       apiRequest<PagedEmployees>(`/employees?${params}`),
+      apiRequest<Employee[]>('/employees'),
       apiRequest<Lookup[]>('/employees/lookups/departments'),
       apiRequest<Lookup[]>('/employees/lookups/positions'),
       apiRequest<Lookup[]>('/employees/lookups/branches'),
     ]);
     setItems(employees.items);
+    setEmployeeOptions(people);
     setTotal(employees.total);
     setActiveTotal(employees.activeTotal);
     setPage(employees.page);
@@ -147,13 +156,15 @@ export default function EmployeesPage() {
   useEffect(() => {
     Promise.all([
       apiRequest<PagedEmployees>(`/employees?page=1&pageSize=${employeePageSize}`),
+      apiRequest<Employee[]>('/employees'),
       apiRequest<Lookup[]>('/employees/lookups/departments'),
       apiRequest<Lookup[]>('/employees/lookups/positions'),
       apiRequest<Lookup[]>('/employees/lookups/branches'),
       getAdminSession(),
     ])
-      .then(([employees, deps, pos, branchItems, session]) => {
+      .then(([employees, people, deps, pos, branchItems, session]) => {
         setItems(employees.items);
+        setEmployeeOptions(people);
         setTotal(employees.total);
         setActiveTotal(employees.activeTotal);
         setDepartments(deps);
@@ -202,6 +213,7 @@ export default function EmployeesPage() {
         }),
       });
       event.currentTarget.reset();
+      setEmployeeDirty(false);
       setMessage('Đã tạo hồ sơ nhân viên thành công.');
       await load();
     } catch (caught) {
@@ -213,7 +225,10 @@ export default function EmployeesPage() {
     }
   }
 
-  function beginEdit(employee: Employee): void {
+  async function beginEdit(employee: Employee): Promise<void> {
+    if (!(await confirmDiscardEmployee())) return;
+    setEmployeeDirty(false);
+    setCreateFormVersion((current) => current + 1);
     setEditing(employee);
     setStatusEmployee(null);
     setHistoryState(null);
@@ -252,6 +267,7 @@ export default function EmployeesPage() {
   }
 
   function addEditAssignment(): void {
+    setEmployeeDirty(true);
     setEditAssignments((current) => [
       ...current,
       {
@@ -266,6 +282,7 @@ export default function EmployeesPage() {
   }
 
   function removeEditAssignment(index: number): void {
+    setEmployeeDirty(true);
     setEditAssignments((current) => {
       if (current.length === 1) return current;
       const next = current.filter((_, assignmentIndex) => assignmentIndex !== index);
@@ -303,6 +320,7 @@ export default function EmployeesPage() {
         }),
       });
       setEditing(null);
+      setEmployeeDirty(false);
       setMessage(`Đã cập nhật hồ sơ ${editing.fullName}.`);
       await load();
     } catch (caught) {
@@ -344,7 +362,10 @@ export default function EmployeesPage() {
   }
 
   async function viewHistory(employee: Employee): Promise<void> {
+    if (!(await confirmDiscardEmployee())) return;
     setEditing(null);
+    setEmployeeDirty(false);
+    setCreateFormVersion((current) => current + 1);
     setStatusEmployee(null);
     setHistoryState({ employee, data: null });
     setError('');
@@ -356,6 +377,16 @@ export default function EmployeesPage() {
       setHistoryState(null);
       setError(caught instanceof Error ? caught.message : 'Không thể tải lịch sử nhân viên.');
     }
+  }
+
+  async function beginStatusChange(employee: Employee): Promise<void> {
+    if (!(await confirmDiscardEmployee())) return;
+    setEmployeeDirty(false);
+    setCreateFormVersion((current) => current + 1);
+    setEditing(null);
+    setHistoryState(null);
+    setStatusEmployee(employee);
+    setTimeout(() => document.getElementById('employee-status-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   }
 
   async function createLookup(
@@ -392,6 +423,7 @@ export default function EmployeesPage() {
 
   return (
     <div className="module-page">
+      {actionDialog}
       <PageHeader
         description="Quản lý thông tin hồ sơ nhân viên, phòng ban, chức vụ và tài khoản đăng nhập."
         eyebrow="DANH MỤC NHÂN SỰ"
@@ -456,11 +488,11 @@ export default function EmployeesPage() {
               <h2>Sửa hồ sơ {editing.fullName}</h2>
               <p>Mã nhân viên và tài khoản đăng nhập được giữ nguyên để bảo toàn lịch sử.</p>
             </div>
-            <button aria-label="Đóng biểu mẫu sửa" className="icon-button" onClick={() => setEditing(null)} type="button">
+            <button aria-label="Đóng biểu mẫu sửa" className="icon-button" onClick={() => void confirmDiscardEmployee().then((confirmed) => { if (confirmed) { setEditing(null); setEmployeeDirty(false); } })} type="button">
               <X aria-hidden="true" size={18} />
             </button>
           </div>
-          <form className="form-grid" key={editing.id} onSubmit={submitEdit}>
+          <form className="form-grid" key={editing.id} onChangeCapture={() => setEmployeeDirty(true)} onSubmit={submitEdit}>
             <label>
               Họ và tên
               <input defaultValue={editing.fullName} name="fullName" required />
@@ -533,7 +565,7 @@ export default function EmployeesPage() {
                         value={assignment.managerEmployeeId}
                       >
                         <option value="">Chưa chỉ định</option>
-                        {items?.filter((item) => item.isActive && item.id !== editing.id).map((item) => (
+                        {employeeOptions.filter((item) => item.isActive && item.id !== editing.id).map((item) => (
                           <option key={item.id} value={item.id}>{item.fullName} · {item.employeeCode}</option>
                         ))}
                       </select>
@@ -572,7 +604,7 @@ export default function EmployeesPage() {
               <small>Chỉ áp dụng cho tài khoản có vai trò Quản lý khu vực.</small>
             </label>
             <div className="form-actions span-2">
-              <button className="secondary-button" onClick={() => setEditing(null)} type="button">Hủy</button>
+              <button className="secondary-button" onClick={() => void confirmDiscardEmployee().then((confirmed) => { if (confirmed) { setEditing(null); setEmployeeDirty(false); } })} type="button">Hủy</button>
               <button className="primary-button" disabled={saving}>
                 <Save aria-hidden="true" size={16} /> {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
               </button>
@@ -667,9 +699,9 @@ export default function EmployeesPage() {
         </section>
       )}
 
-      {canManage && <details className="editor-panel" open>
+      {canManage && !editing && <details className="editor-panel" open>
         <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Thêm hồ sơ nhân viên mới</span></summary>
-        <form className="form-grid" onSubmit={submit}>
+        <form className="form-grid" key={createFormVersion} onChangeCapture={() => setEmployeeDirty(true)} onSubmit={submit}>
           <label>
             Mã nhân viên
             <input name="employeeCode" placeholder="VD: TM001" required />
@@ -733,7 +765,7 @@ export default function EmployeesPage() {
             Quản lý trực tiếp
             <select name="managerEmployeeId">
               <option value="">Chưa chỉ định</option>
-              {items?.filter((item) => item.isActive).map((item) => (
+              {employeeOptions.filter((item) => item.isActive).map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.fullName} · {item.employeeCode}
                 </option>
@@ -936,7 +968,7 @@ export default function EmployeesPage() {
                   </td>
                   {canManage && <td>
                     <div className="action-group employee-actions">
-                      <button className="table-action" onClick={() => beginEdit(item)} type="button">
+                      <button className="table-action" onClick={() => void beginEdit(item)} type="button">
                         <Pencil aria-hidden="true" size={14} /> Sửa
                       </button>
                       <button className="table-action" onClick={() => void viewHistory(item)} type="button">
@@ -944,12 +976,7 @@ export default function EmployeesPage() {
                       </button>
                       <button
                         className={`table-action ${item.isActive ? 'danger-action' : 'success-action'}`}
-                        onClick={() => {
-                          setEditing(null);
-                          setHistoryState(null);
-                          setStatusEmployee(item);
-                          setTimeout(() => document.getElementById('employee-status-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-                        }}
+                        onClick={() => void beginStatusChange(item)}
                         type="button"
                       >
                         {item.isActive ? <Archive aria-hidden="true" size={14} /> : <RotateCcw aria-hidden="true" size={14} />}

@@ -169,6 +169,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
+  const dataScopeLabel = user?.roles.some((role) => role === 'ADMIN' || role === 'CHIEF_ACCOUNTANT')
+    ? 'Toàn bộ chi nhánh'
+    : 'Chi nhánh được phân quyền';
   const [currentDateString] = useState(() => {
     try {
       const now = new Date();
@@ -352,7 +355,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <button aria-expanded={menuOpen} aria-label={menuOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'} className="mobile-menu-button" onClick={() => setMenuPath((current) => current === pathname ? null : pathname)} type="button">{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>
             <div className="topbar-branch">
               <MapPin aria-hidden="true" size={14} strokeWidth={2} />
-              Phạm vi dữ liệu theo quyền tài khoản
+              {dataScopeLabel}
             </div>
             {currentDateString && (
               <span className="topbar-date">

@@ -15,16 +15,12 @@ import {
 import { apiRequest } from '@/lib/auth-api';
 import { useActionDialog } from '@/components/use-action-dialog';
 import { useClientPagination } from '@/lib/use-client-pagination';
+import { EmployeePicker, type EmployeePickerOption } from '@/components/employee-picker';
 
 type ActionType = 'WARNING' | 'SUSPENSION' | 'DISCIPLINARY_ACTION';
 type ActionStatus = 'DRAFT' | 'ISSUED' | 'REVOKED';
 
-interface Employee {
-  employeeCode: string;
-  fullName: string;
-  id: string;
-  isActive: boolean;
-}
+type Employee = EmployeePickerOption & { isActive: boolean };
 
 interface DisciplinaryAction {
   actionType: ActionType;
@@ -72,6 +68,7 @@ export default function DisciplinaryActionsPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [editing, setEditing] = useState<DisciplinaryAction | null>(null);
   const [actionType, setActionType] = useState<ActionType>('WARNING');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [history, setHistory] = useState<{ id: string; items: HistoryItem[] } | null>(null);
   const [message, setMessage] = useState('');
@@ -110,7 +107,7 @@ export default function DisciplinaryActionsPage() {
       decision: form.get('decision'),
       effectiveFrom: form.get('effectiveFrom'),
       effectiveTo: actionType === 'SUSPENSION' ? form.get('effectiveTo') : undefined,
-      employeeId: form.get('employeeId'),
+      employeeId: selectedEmployeeId,
       reason: form.get('reason'),
       title: form.get('title'),
     };
@@ -119,7 +116,7 @@ export default function DisciplinaryActionsPage() {
         body: JSON.stringify(payload),
         method: editing ? 'PATCH' : 'POST',
       });
-      formElement.reset(); setEditing(null); setActionType('WARNING');
+      formElement.reset(); setEditing(null); setActionType('WARNING'); setSelectedEmployeeId('');
       setMessage(editing ? 'Đã cập nhật quyết định nháp.' : 'Đã tạo quyết định nháp.');
       await load();
     } catch (caught) {
@@ -165,7 +162,7 @@ export default function DisciplinaryActionsPage() {
   }
 
   function beginEdit(item: DisciplinaryAction): void {
-    setEditing(item); setActionType(item.actionType);
+    setEditing(item); setActionType(item.actionType); setSelectedEmployeeId(item.employeeId);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -194,7 +191,7 @@ export default function DisciplinaryActionsPage() {
     <details className="editor-panel" open={Boolean(editing)}>
       <summary><span className="summary-label">{editing ? <Pencil aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}{editing ? `Chỉnh sửa · ${editing.title}` : 'Lập quyết định mới'}</span></summary>
       <form className="form-grid" key={editing?.id ?? 'new'} onSubmit={save}>
-        <label>Nhân viên<select defaultValue={editing?.employeeId ?? ''} name="employeeId" required><option value="">Chọn nhân viên</option>{employees.filter((employee) => employee.isActive || employee.id === editing?.employeeId).map((employee) => <option key={employee.id} value={employee.id}>{employee.employeeCode} · {employee.fullName}</option>)}</select></label>
+        <EmployeePicker employees={employees.filter((employee) => employee.isActive || employee.id === editing?.employeeId)} onChange={setSelectedEmployeeId} value={selectedEmployeeId} />
         <label>Hình thức<select value={actionType} onChange={(event) => setActionType(event.target.value as ActionType)}><option value="WARNING">Cảnh cáo</option><option value="SUSPENSION">Đình chỉ</option><option value="DISCIPLINARY_ACTION">Xử lý vi phạm</option></select></label>
         <label>Ngày hiệu lực<input defaultValue={editing?.effectiveFrom ?? today()} name="effectiveFrom" required type="date" /></label>
         {actionType === 'SUSPENSION' && <label>Đình chỉ đến hết ngày<input defaultValue={editing?.effectiveTo ?? ''} min={editing?.effectiveFrom ?? today()} name="effectiveTo" required type="date" /></label>}
@@ -202,7 +199,7 @@ export default function DisciplinaryActionsPage() {
         <label className="span-2">Lý do / hành vi vi phạm<textarea defaultValue={editing?.reason ?? ''} maxLength={5000} minLength={5} name="reason" required rows={4} /></label>
         <label className="span-2">Nội dung xử lý<textarea defaultValue={editing?.decision ?? ''} maxLength={5000} minLength={3} name="decision" required rows={4} /></label>
         <button className="primary-button form-action" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Cập nhật bản nháp' : 'Lưu bản nháp'}</button>
-        {editing && <button className="secondary-button form-action" onClick={() => { setEditing(null); setActionType('WARNING'); }} type="button">Hủy chỉnh sửa</button>}
+        {editing && <button className="secondary-button form-action" onClick={() => { setEditing(null); setActionType('WARNING'); setSelectedEmployeeId(''); }} type="button">Hủy chỉnh sửa</button>}
       </form>
     </details>
 

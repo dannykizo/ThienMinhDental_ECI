@@ -6,9 +6,10 @@ import { EmptyState, LoadingState, Notice, PageHeader, Pagination, StatusBadge, 
 import { apiRequest, getAdminSession, type SessionUser } from '@/lib/auth-api';
 import { useActionDialog } from '@/components/use-action-dialog';
 import { useClientPagination } from '@/lib/use-client-pagination';
+import { EmployeePicker, type EmployeePickerOption } from '@/components/employee-picker';
 
 interface Department { id: string; name: string; }
-interface Employee { id: string; employeeCode: string; fullName: string; }
+type Employee = EmployeePickerOption;
 interface Announcement {
   id: string;
   title: string;
@@ -47,6 +48,7 @@ export default function AnnouncementsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [audienceType, setAudienceType] = useState<AudienceType>('ALL');
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [pushStatus, setPushStatus] = useState<PushStatus | null>(null);
   const [editing, setEditing] = useState<Announcement | null>(null);
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -89,12 +91,12 @@ export default function AnnouncementsPage() {
     const payload = {
       title: form.get('title'), body: form.get('body'), audienceType,
       departmentId: audienceType === 'DEPARTMENT' ? form.get('departmentId') : undefined,
-      employeeId: audienceType === 'EMPLOYEE' ? form.get('employeeId') : undefined,
+      employeeId: audienceType === 'EMPLOYEE' ? selectedEmployeeId : undefined,
       requiresAcknowledgement: form.get('requiresAcknowledgement') === 'on',
     };
     try {
       await apiRequest(editing ? `/announcements/${editing.id}` : '/announcements', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) });
-      formElement.reset(); setEditing(null); setAudienceType('ALL'); setMessage(editing ? 'Đã cập nhật bản nháp.' : 'Đã lưu thông báo nháp.'); await load();
+      formElement.reset(); setEditing(null); setAudienceType('ALL'); setSelectedEmployeeId(''); setMessage(editing ? 'Đã cập nhật bản nháp.' : 'Đã lưu thông báo nháp.'); await load();
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể lưu thông báo.'); }
     finally { setSaving(false); }
   }
@@ -132,7 +134,7 @@ export default function AnnouncementsPage() {
   }
 
   function beginEdit(item: Announcement): void {
-    setEditing(item); setAudienceType(item.audienceType); window.scrollTo({ top: 0, behavior: 'smooth' });
+    setEditing(item); setAudienceType(item.audienceType); setSelectedEmployeeId(item.employeeId ?? ''); window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   const metrics = useMemo(() => ({
@@ -163,12 +165,12 @@ export default function AnnouncementsPage() {
       <summary><span className="summary-label">{editing ? <Pencil aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}{editing ? `Chỉnh sửa bản nháp · ${editing.title}` : 'Soạn thông báo mới'}</span></summary>
       <form className="form-grid" key={editing?.id ?? 'new'} onSubmit={saveDraft}>
         <label className="span-2">Tiêu đề<input defaultValue={editing?.title ?? ''} maxLength={200} minLength={3} name="title" required /></label>
-        <label>Đối tượng<select name="audienceType" value={audienceType} onChange={(event) => setAudienceType(event.target.value as AudienceType)}><option value="ALL">Toàn công ty</option><option value="DEPARTMENT">Theo phòng ban</option><option value="EMPLOYEE">Theo cá nhân</option></select></label>
-        {audienceType === 'DEPARTMENT' ? <label>Phòng ban<select defaultValue={editing?.departmentId ?? ''} name="departmentId" required><option value="">Chọn phòng ban</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : audienceType === 'EMPLOYEE' ? <label>Nhân viên<select defaultValue={editing?.employeeId ?? ''} name="employeeId" required><option value="">Chọn nhân viên</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.employeeCode} · {item.fullName}</option>)}</select></label> : <div className="span-1"><Notice kind="info">Danh sách người nhận được chốt từ toàn bộ nhân viên đang hoạt động khi xuất bản.</Notice></div>}
+        <label>Đối tượng<select name="audienceType" value={audienceType} onChange={(event) => { const next = event.target.value as AudienceType; setAudienceType(next); if (next !== 'EMPLOYEE') setSelectedEmployeeId(''); }}><option value="ALL">Toàn công ty</option><option value="DEPARTMENT">Theo phòng ban</option><option value="EMPLOYEE">Theo cá nhân</option></select></label>
+        {audienceType === 'DEPARTMENT' ? <label>Phòng ban<select defaultValue={editing?.departmentId ?? ''} name="departmentId" required><option value="">Chọn phòng ban</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : audienceType === 'EMPLOYEE' ? <EmployeePicker employees={employees.filter((employee) => employee.isActive !== false || employee.id === selectedEmployeeId)} onChange={setSelectedEmployeeId} value={selectedEmployeeId} /> : <div className="span-1"><Notice kind="info">Danh sách người nhận được chốt từ toàn bộ nhân viên đang hoạt động khi xuất bản.</Notice></div>}
         <label className="span-2">Nội dung<textarea defaultValue={editing?.body ?? ''} maxLength={10000} minLength={3} name="body" required rows={5} /></label>
         <label className="check-inline span-2"><input defaultChecked={editing?.requiresAcknowledgement ?? false} name="requiresAcknowledgement" type="checkbox" /> Tin quan trọng — bắt buộc nhân viên xác nhận đã đọc</label>
         <button className="primary-button form-action" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Cập nhật bản nháp' : 'Lưu bản nháp'}</button>
-        {editing && <button className="secondary-button form-action" onClick={() => { setEditing(null); setAudienceType('ALL'); }} type="button">Hủy chỉnh sửa</button>}
+        {editing && <button className="secondary-button form-action" onClick={() => { setEditing(null); setAudienceType('ALL'); setSelectedEmployeeId(''); }} type="button">Hủy chỉnh sửa</button>}
       </form>
     </details>}
 
