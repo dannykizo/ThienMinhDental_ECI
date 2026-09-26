@@ -43,7 +43,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Mỗi lần nhân sự đăng nhập phải tạo cảnh báo email tới địa chỉ Admin đã cấu hình. Lỗi gửi email không được chặn đăng nhập nhưng phải hiển thị trạng thái giao nhận trong Admin Web.
 - Lịch làm việc do Admin cấu hình theo chi nhánh và phòng ban; ngoại lệ theo nhân viên được ưu tiên và mọi lần thay đổi cấu hình phải có lịch sử chỉ Admin xem.
 - Mặc định đủ công khi tổng thời gian check-in đến check-out đạt 480 phút. Cho phép check-in sớm; đi muộn khi quá giờ bắt đầu hơn 3 phút; về trước giờ kết thúc là về sớm và thời gian sau giờ kết thúc được ghi nhận là tăng ca.
-- Hệ thống hỗ trợ hai văn phòng HCM/HN và địa điểm làm việc bên ngoài. Bán kính geofence và ngưỡng sai số GPS cấu hình được nhưng không vượt quá 50 m; không điền tọa độ giả khi chưa có dữ liệu chính thức.
+- Hệ thống hỗ trợ hai văn phòng HCM/HN và địa điểm làm việc bên ngoài. Bán kính geofence cấu hình được nhưng không vượt quá 100 m; ngưỡng sai số GPS cấu hình được nhưng không vượt quá 50 m. Không điền tọa độ giả khi chưa có dữ liệu chính thức.
 
 ## Explicit non-goals for MVP
 

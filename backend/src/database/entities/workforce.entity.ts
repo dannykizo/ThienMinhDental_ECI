@@ -46,7 +46,7 @@ export class OfficeLocationEntity {
   @Column({ type: 'varchar', length: 300 }) address!: string;
   @Column({ type: 'double precision' }) latitude!: number;
   @Column({ type: 'double precision' }) longitude!: number;
-  @Column({ type: 'int', name: 'radius_meters' }) radiusMeters!: number;
+  @Column({ type: 'int', name: 'radius_meters', default: 100 }) radiusMeters!: number;
   @Column({ type: 'int', name: 'accuracy_threshold_meters', default: 50 }) accuracyThresholdMeters!: number;
   @Column({ type: 'uuid', name: 'branch_id', nullable: true }) branchId!: string | null;
   @Column({ type: 'varchar', length: 30, name: 'location_type', default: 'OFFICE' }) locationType!: 'OFFICE' | 'EXTERNAL_WORKPLACE';

@@ -14,6 +14,7 @@ import { RefreshTokenSessions1790640000000 } from './migrations/1790640000000-re
 import { PushNotificationDevices1790726400000 } from './migrations/1790726400000-push-notification-devices.js';
 import { CanonicalRoles1790812800000 } from './migrations/1790812800000-canonical-roles.js';
 import { EmployeeLifecycle1790899200000 } from './migrations/1790899200000-employee-lifecycle.js';
+import { GeofenceRadiusAlignment1790985600000 } from './migrations/1790985600000-geofence-radius-alignment.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -39,6 +40,7 @@ export const applicationDataSource = new DataSource({
     PushNotificationDevices1790726400000,
     CanonicalRoles1790812800000,
     EmployeeLifecycle1790899200000,
+    GeofenceRadiusAlignment1790985600000,
   ],
   migrationsTableName: 'schema_migrations',
 });

@@ -31,11 +31,11 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 1. Admin tạo lịch gồm ngày làm, giờ bắt đầu/kết thúc, dung sai đi muộn/về sớm và số phút đủ công.
 2. Admin áp dụng lịch mặc định cho một cặp chi nhánh/phòng ban theo khoảng hiệu lực. Có thể tạo ngoại lệ theo nhân viên; ngoại lệ cá nhân được ưu tiên khi Backend tính công.
 3. Khi một lịch mới bắt đầu, assignment cũ đang mở được đóng vào ngày liền trước thay vì bị xóa; mọi thao tác được ghi vào lịch sử cấu hình chỉ Admin truy cập.
-4. Admin cấu hình vị trí văn phòng gắn với chi nhánh hoặc địa điểm làm việc bên ngoài, với bán kính geofence và ngưỡng accuracy tối đa 50 m.
+4. Admin cấu hình vị trí văn phòng gắn với chi nhánh hoặc địa điểm làm việc bên ngoài. Có thể lấy một mẫu tọa độ từ thiết bị hoặc chọn/kéo điểm trên bản đồ; bán kính geofence tối đa 100 m và ngưỡng accuracy tối đa 50 m.
 5. Khi chấm công văn phòng, Backend chỉ xét các vị trí đang hoạt động phù hợp chi nhánh của nhân viên (và địa điểm bên ngoài dùng chung), chọn vị trí gần nhất rồi lưu `office_location_id` vào sự kiện.
 6. Backend cho phép check-in sớm, gắn cờ `LATE` sau dung sai 3 phút, gắn cờ `EARLY_LEAVE` trước giờ kết thúc, xác định đủ công từ 480 phút và tính OT sau giờ kết thúc.
 
-**Implementation status:** Customer alignment C3 được lưu bằng migration `1790208000000-schedule-location-alignment`; Admin Web có cấu hình, assignment, trạng thái và lịch sử. Tọa độ HN/địa điểm bên ngoài phải được Admin nhập sau khi khách hàng cung cấp dữ liệu chính thức.
+**Implementation status:** Customer alignment C3 được lưu bằng migration `1790208000000-schedule-location-alignment`; Customer review CR2 dùng migration `1790985600000-geofence-radius-alignment` để nâng giới hạn bán kính lên 100 m. Admin Web có cấu hình, assignment, trạng thái, lịch sử, bản đồ tương tác và lấy một mẫu vị trí thiết bị khi Admin chủ động bấm. Tọa độ HN/địa điểm bên ngoài phải được Admin nhập hoặc lấy tại thiết bị sau khi khách hàng xác nhận; hệ thống không theo dõi vị trí liên tục.
 
 ## Shared attendance state
 

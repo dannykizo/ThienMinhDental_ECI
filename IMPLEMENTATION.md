@@ -61,8 +61,9 @@
 - Migration `1790208000000-schedule-location-alignment` bổ sung `department_schedules`, lịch sử cấu hình, liên kết chi nhánh/loại cho vị trí và `office_location_id` trên attendance event.
 - Lịch theo phòng ban là mặc định; assignment theo nhân viên là override có độ ưu tiên cao hơn. Assignment cũ được đóng khoảng hiệu lực, không hard-delete.
 - Quy tắc 3 phút đi muộn, 480 phút đủ công, về sớm và OT nằm trong Backend. Web/Mobile chỉ hiển thị kết quả `workedMinutes`, `requiredWorkMinutes`, `isFullWorkday` và `overtimeMinutes`.
-- Geofence được chọn theo chi nhánh hiện hành của nhân viên và khoảng cách gần nhất. Database cùng DTO cùng giới hạn bán kính/ngưỡng accuracy tối đa 50 m.
+- Geofence được chọn theo chi nhánh hiện hành của nhân viên và khoảng cách gần nhất. Customer review CR2 dùng migration `1790985600000-geofence-radius-alignment` để đồng bộ giới hạn bán kính tối đa 100 m tại Database và DTO; ngưỡng accuracy vẫn tối đa 50 m.
 - Chỉ `ADMIN` được tạo/sửa lịch, vị trí và xem `configuration_audit_logs`. Không seed tọa độ HN hoặc địa điểm ngoài văn phòng khi chưa có dữ liệu chính thức.
+- Admin Web hiển thị các vị trí và vùng geofence trên bản đồ, cho phép chọn/kéo tọa độ hoặc lấy đúng một mẫu vị trí từ thiết bị. Tile URL/attribution được cấu hình bằng biến môi trường; thao tác này không bật theo dõi GPS liên tục.
 
 ### Customer alignment C4 — attendance reconciliation and period locking
 
