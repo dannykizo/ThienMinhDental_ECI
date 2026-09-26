@@ -98,7 +98,8 @@ export class ReportingService {
       COALESCE((SELECT aa.new_value#>>'{}' FROM attendance_adjustments aa WHERE aa.employee_id=s.employee_id AND aa.work_date=s.work_date AND aa.field_name='CHECK_IN_TIME' ORDER BY aa.created_at DESC LIMIT 1),er.checked_in_at::text) AS "checkedInAt",
       COALESCE((SELECT aa.new_value#>>'{}' FROM attendance_adjustments aa WHERE aa.employee_id=s.employee_id AND aa.work_date=s.work_date AND aa.field_name='CHECK_OUT_TIME' ORDER BY aa.created_at DESC LIMIT 1),er.checked_out_at::text) AS "checkedOutAt",
       COALESCE((SELECT aa.new_value#>>'{}' FROM attendance_adjustments aa WHERE aa.employee_id=s.employee_id AND aa.work_date=s.work_date AND aa.field_name='DAY_STATUS' ORDER BY aa.created_at DESC LIMIT 1),
-        CASE WHEN EXISTS(SELECT 1 FROM leave_requests l WHERE l.employee_id=s.employee_id AND l.status='APPROVED' AND s.work_date BETWEEN l.start_date AND l.end_date) THEN 'LEAVE'
+        CASE WHEN EXISTS(SELECT 1 FROM leave_requests l WHERE l.employee_id=s.employee_id AND l.status='APPROVED' AND l.duration_type='FULL_DAY' AND s.work_date BETWEEN l.start_date AND l.end_date) THEN 'LEAVE'
+        WHEN EXISTS(SELECT 1 FROM leave_requests l WHERE l.employee_id=s.employee_id AND l.status='APPROVED' AND l.duration_type IN ('HALF_DAY','HOURS') AND s.work_date=l.start_date) THEN 'PARTIAL_LEAVE'
         WHEN EXISTS(SELECT 1 FROM business_trip_members btm JOIN business_trips bt ON bt.id=btm.business_trip_id WHERE btm.employee_id=s.employee_id AND bt.status IN ('ASSIGNED','IN_PROGRESS','COMPLETED') AND s.work_date BETWEEN (bt.start_at AT TIME ZONE 'Asia/Bangkok')::date AND (bt.end_at AT TIME ZONE 'Asia/Bangkok')::date) THEN 'BUSINESS_TRIP'
         WHEN er.checked_out_at IS NOT NULL THEN 'PRESENT' WHEN er.checked_in_at IS NOT NULL THEN 'INCOMPLETE' ELSE 'ABSENT' END) AS status,
       COALESCE(er.risk_flags,'{}') AS "riskFlags",(SELECT COUNT(*)::int FROM attendance_adjustments aa WHERE aa.employee_id=s.employee_id AND aa.work_date=s.work_date) AS "adjustmentCount"
@@ -107,13 +108,14 @@ export class ReportingService {
 
   async kpi(month: string): Promise<unknown[]> {
     const rows = await this.monthly(month);
-    const byEmployee = new Map<string, { employeeId: string; employeeCode: string; fullName: string; scheduledDays: number; presentDays: number; businessTripDays: number; leaveDays: number; incompleteDays: number; absentDays: number; reviewDays: number }>();
+    const byEmployee = new Map<string, { employeeId: string; employeeCode: string; fullName: string; scheduledDays: number; presentDays: number; businessTripDays: number; leaveDays: number; partialLeaveDays: number; incompleteDays: number; absentDays: number; reviewDays: number }>();
     for (const row of rows) {
-      const value = byEmployee.get(row.employeeId) ?? { employeeId: row.employeeId, employeeCode: row.employeeCode, fullName: row.fullName, scheduledDays: 0, presentDays: 0, businessTripDays: 0, leaveDays: 0, incompleteDays: 0, absentDays: 0, reviewDays: 0 };
+      const value = byEmployee.get(row.employeeId) ?? { employeeId: row.employeeId, employeeCode: row.employeeCode, fullName: row.fullName, scheduledDays: 0, presentDays: 0, businessTripDays: 0, leaveDays: 0, partialLeaveDays: 0, incompleteDays: 0, absentDays: 0, reviewDays: 0 };
       value.scheduledDays += 1;
       if (row.status === 'PRESENT') value.presentDays += 1;
       if (row.status === 'BUSINESS_TRIP') value.businessTripDays += 1;
       if (row.status === 'LEAVE') value.leaveDays += 1;
+      if (row.status === 'PARTIAL_LEAVE') value.partialLeaveDays += 1;
       if (row.status === 'INCOMPLETE') value.incompleteDays += 1;
       if (row.status === 'ABSENT') value.absentDays += 1;
       if (row.riskFlags.length || row.adjustmentCount) value.reviewDays += 1;

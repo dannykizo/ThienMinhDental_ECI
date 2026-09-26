@@ -17,6 +17,8 @@ class LeaveRequestScreen extends StatefulWidget {
 
 class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   List<EmployeeLeaveRequest> _items = <EmployeeLeaveRequest>[];
+  List<LeavePolicy> _policies = <LeavePolicy>[];
+  List<LeaveBalance> _balances = <LeaveBalance>[];
   String? _error;
   bool _loading = true;
 
@@ -34,9 +36,17 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
       });
     }
     try {
-      final List<EmployeeLeaveRequest> items =
-          await widget.session.api.myLeaveRequests();
-      if (mounted) setState(() => _items = items);
+      final List<dynamic> result = await Future.wait<dynamic>(<Future<dynamic>>[
+        widget.session.api.myLeaveRequests(),
+        widget.session.api.leavePolicies(),
+        widget.session.api.myLeaveBalances(DateTime.now().year),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _items = result[0] as List<EmployeeLeaveRequest>;
+        _policies = result[1] as List<LeavePolicy>;
+        _balances = result[2] as List<LeaveBalance>;
+      });
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
@@ -45,14 +55,68 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   }
 
   Future<void> _create() async {
+    if (_policies.isEmpty) {
+      setState(() => _error = 'Chưa có chính sách nghỉ phép đang áp dụng.');
+      return;
+    }
     final bool? created = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (BuildContext context) => CreateLeaveRequestScreen(
+          policies: _policies,
           session: widget.session,
         ),
       ),
     );
     if (created == true) await _load();
+  }
+
+  Future<void> _cancel(EmployeeLeaveRequest item) async {
+    final TextEditingController controller = TextEditingController();
+    final String? reason = await showDialog<String>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('Hủy đơn nghỉ'),
+        content: TextField(
+          autofocus: true,
+          controller: controller,
+          maxLength: 2000,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            labelText: 'Lý do hủy',
+          ),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Quay lại'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.trim().length >= 5) {
+                Navigator.of(context).pop(controller.text.trim());
+              }
+            },
+            child: const Text('Xác nhận hủy'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason == null || !mounted) return;
+    try {
+      await widget.session.api.cancelLeaveRequest(
+        leaveRequestId: item.id,
+        reason: reason,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã hủy đơn nghỉ và hoàn lại số dư.')),
+      );
+      await _load();
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    }
   }
 
   @override
@@ -89,7 +153,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Gửi đơn rõ ràng,\ntheo dõi dễ dàng.',
+                'Biết rõ quỹ phép,\ngửi đơn đúng chính sách.',
                 style: TextStyle(
                   fontFamily: 'serif',
                   fontSize: 29,
@@ -99,7 +163,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
               ),
               const SizedBox(height: 10),
               const Text(
-                'Đơn hiện áp dụng cho cả ngày hoặc một khoảng ngày. Trạng thái duyệt được cập nhật từ Backend.',
+                'Loại nghỉ, thời lượng và quyền hủy do công ty cấu hình. App hiển thị đúng kết quả do Backend tính toán.',
                 style: TextStyle(
                   color: Color(0xFF746A77),
                   fontSize: 12,
@@ -109,6 +173,25 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
               if (_error != null) ...<Widget>[
                 const SizedBox(height: 16),
                 _LeaveError(message: _error!, onRetry: _load),
+              ],
+              if (_balances.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 20),
+                const Text(
+                  'SỐ DƯ NĂM NAY',
+                  style: TextStyle(
+                    color: Color(0xFF817683),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ..._balances.map(
+                  (LeaveBalance item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _BalanceCard(item: item),
+                  ),
+                ),
               ],
               const SizedBox(height: 20),
               if (_loading)
@@ -124,14 +207,21 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                 ..._items.map(
                   (EmployeeLeaveRequest item) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _LeaveCard(item: item),
+                    child: _LeaveCard(
+                      item: item,
+                      onCancel: item.status == 'SUBMITTED' ||
+                              (item.status == 'APPROVED' &&
+                                  item.allowApprovedCancellation)
+                          ? () => _cancel(item)
+                          : null,
+                    ),
                   ),
                 ),
             ],
           ),
         ),
         floatingActionButton: FloatingActionButton.extended(
-          onPressed: _create,
+          onPressed: _loading ? null : _create,
           backgroundColor: brandPurple,
           foregroundColor: Colors.white,
           icon: const Icon(Icons.add_rounded),
@@ -141,8 +231,13 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
 }
 
 class CreateLeaveRequestScreen extends StatefulWidget {
-  const CreateLeaveRequestScreen({required this.session, super.key});
+  const CreateLeaveRequestScreen({
+    required this.policies,
+    required this.session,
+    super.key,
+  });
 
+  final List<LeavePolicy> policies;
   final SessionController session;
 
   @override
@@ -152,15 +247,20 @@ class CreateLeaveRequestScreen extends StatefulWidget {
 
 class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   final TextEditingController _reason = TextEditingController();
+  String _durationType = 'FULL_DAY';
   late DateTime _endDate;
+  TimeOfDay _endTime = const TimeOfDay(hour: 17, minute: 0);
   String? _error;
-  String _leaveType = 'ANNUAL';
+  String _halfDayPeriod = 'AM';
+  late LeavePolicy _policy;
   late DateTime _startDate;
+  TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
   bool _submitting = false;
 
   @override
   void initState() {
     super.initState();
+    _policy = widget.policies.first;
     final DateTime tomorrow = DateUtils.dateOnly(
       DateTime.now().add(const Duration(days: 1)),
     );
@@ -184,7 +284,9 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
     if (selected == null || !mounted) return;
     setState(() {
       _startDate = DateUtils.dateOnly(selected);
-      if (_endDate.isBefore(_startDate)) _endDate = _startDate;
+      if (_durationType != 'FULL_DAY' || _endDate.isBefore(_startDate)) {
+        _endDate = _startDate;
+      }
     });
   }
 
@@ -195,8 +297,24 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
       initialDate: _endDate.isBefore(_startDate) ? _startDate : _endDate,
       lastDate: DateTime(2100),
     );
+    if (selected != null && mounted) {
+      setState(() => _endDate = DateUtils.dateOnly(selected));
+    }
+  }
+
+  Future<void> _pickTime({required bool start}) async {
+    final TimeOfDay? selected = await showTimePicker(
+      context: context,
+      initialTime: start ? _startTime : _endTime,
+    );
     if (selected == null || !mounted) return;
-    setState(() => _endDate = DateUtils.dateOnly(selected));
+    setState(() {
+      if (start) {
+        _startTime = selected;
+      } else {
+        _endTime = selected;
+      }
+    });
   }
 
   Future<void> _submit() async {
@@ -206,20 +324,21 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
       setState(() => _error = 'Lý do nghỉ cần ít nhất 3 ký tự.');
       return;
     }
-    if (_endDate.isBefore(_startDate)) {
-      setState(() => _error = 'Ngày kết thúc không thể trước ngày bắt đầu.');
-      return;
-    }
     setState(() {
       _error = null;
       _submitting = true;
     });
     try {
       await widget.session.api.createLeaveRequest(
-        endDate: _apiDate(_endDate),
-        leaveType: _leaveType,
+        durationType: _durationType,
+        endDate: _apiDate(_durationType == 'FULL_DAY' ? _endDate : _startDate),
+        endTime: _durationType == 'HOURS' ? _apiTime(_endTime) : null,
+        halfDayPeriod:
+            _durationType == 'HALF_DAY' ? _halfDayPeriod : null,
+        policyId: _policy.id,
         reason: reason,
         startDate: _apiDate(_startDate),
+        startTime: _durationType == 'HOURS' ? _apiTime(_startTime) : null,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -253,15 +372,17 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 color: Color(0xFFF2EAF5),
                 border: Border(left: BorderSide(color: brandPurple, width: 3)),
               ),
-              child: const Row(
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Icon(Icons.calendar_month_outlined, color: brandPurple),
-                  SizedBox(width: 12),
+                  const Icon(Icons.policy_outlined, color: brandPurple),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Mỗi ngày trong khoảng đã chọn được tính là một ngày nghỉ nguyên ngày. App chưa hỗ trợ nghỉ nửa ngày hoặc theo giờ.',
-                      style: TextStyle(fontSize: 12, height: 1.45),
+                      _policy.minimumNoticeDays > 0
+                          ? 'Chính sách này yêu cầu gửi trước ít nhất ${_policy.minimumNoticeDays} ngày. Backend sẽ kiểm tra số dư và lịch làm việc.'
+                          : 'Backend sẽ kiểm tra số dư, lịch làm việc, ngày trùng và kỳ công trước khi tiếp nhận.',
+                      style: const TextStyle(fontSize: 12, height: 1.45),
                     ),
                   ),
                 ],
@@ -269,24 +390,63 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             ),
             const SizedBox(height: 22),
             DropdownButtonFormField<String>(
-              initialValue: _leaveType,
+              initialValue: _policy.id,
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
-                labelText: 'Loại nghỉ',
+                labelText: 'Chính sách nghỉ',
               ),
-              items: const <DropdownMenuItem<String>>[
-                DropdownMenuItem(value: 'ANNUAL', child: Text('Phép năm')),
-                DropdownMenuItem(value: 'SICK', child: Text('Nghỉ bệnh')),
-                DropdownMenuItem(
-                  value: 'UNPAID',
-                  child: Text('Nghỉ không lương'),
+              items: widget.policies
+                  .map((LeavePolicy item) => DropdownMenuItem<String>(
+                        value: item.id,
+                        child: Text(item.name),
+                      ))
+                  .toList(),
+              onChanged: _submitting
+                  ? null
+                  : (String? value) {
+                      final LeavePolicy? selected = widget.policies
+                          .where((LeavePolicy item) => item.id == value)
+                          .firstOrNull;
+                      if (selected != null) {
+                        setState(() {
+                          _policy = selected;
+                          _durationType = 'FULL_DAY';
+                        });
+                      }
+                    },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _durationType,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                labelText: 'Hình thức nghỉ',
+              ),
+              items: <DropdownMenuItem<String>>[
+                const DropdownMenuItem(
+                  value: 'FULL_DAY',
+                  child: Text('Cả ngày / nhiều ngày'),
                 ),
-                DropdownMenuItem(value: 'OTHER', child: Text('Khác')),
+                if (_policy.allowHalfDay)
+                  const DropdownMenuItem(
+                    value: 'HALF_DAY',
+                    child: Text('Nửa ngày'),
+                  ),
+                if (_policy.allowHourly)
+                  const DropdownMenuItem(
+                    value: 'HOURS',
+                    child: Text('Theo giờ'),
+                  ),
               ],
               onChanged: _submitting
                   ? null
                   : (String? value) {
-                      if (value != null) setState(() => _leaveType = value);
+                      if (value != null) {
+                        setState(() {
+                          _durationType = value;
+                          if (value != 'FULL_DAY') _endDate = _startDate;
+                        });
+                      }
                     },
             ),
             const SizedBox(height: 16),
@@ -294,21 +454,57 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
               children: <Widget>[
                 Expanded(
                   child: _DateField(
-                    label: 'Từ ngày',
+                    label: _durationType == 'FULL_DAY' ? 'Từ ngày' : 'Ngày nghỉ',
                     onTap: _submitting ? null : _pickStartDate,
                     value: _displayDate(_startDate),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _DateField(
-                    label: 'Đến ngày',
-                    onTap: _submitting ? null : _pickEndDate,
-                    value: _displayDate(_endDate),
+                if (_durationType == 'FULL_DAY') ...<Widget>[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DateField(
+                      label: 'Đến ngày',
+                      onTap: _submitting ? null : _pickEndDate,
+                      value: _displayDate(_endDate),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
+            if (_durationType == 'HALF_DAY') ...<Widget>[
+              const SizedBox(height: 16),
+              SegmentedButton<String>(
+                segments: const <ButtonSegment<String>>[
+                  ButtonSegment<String>(value: 'AM', label: Text('Buổi sáng')),
+                  ButtonSegment<String>(value: 'PM', label: Text('Buổi chiều')),
+                ],
+                selected: <String>{_halfDayPeriod},
+                onSelectionChanged: (Set<String> value) =>
+                    setState(() => _halfDayPeriod = value.first),
+              ),
+            ],
+            if (_durationType == 'HOURS') ...<Widget>[
+              const SizedBox(height: 16),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: _TimeField(
+                      label: 'Từ giờ',
+                      onTap: _submitting ? null : () => _pickTime(start: true),
+                      value: _startTime.format(context),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _TimeField(
+                      label: 'Đến giờ',
+                      onTap: _submitting ? null : () => _pickTime(start: false),
+                      value: _endTime.format(context),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
             TextField(
               controller: _reason,
@@ -345,14 +541,43 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                 label: Text(_submitting ? 'Đang gửi…' : 'Gửi đơn nghỉ'),
               ),
             ),
-            const SizedBox(height: 10),
-            const Text(
-              'Backend sẽ kiểm tra trùng ngày, hồ sơ nhân viên và kỳ công đã khóa trước khi tiếp nhận.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Color(0xFF817683),
-                fontSize: 11,
-                height: 1.4,
+          ],
+        ),
+      );
+}
+
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({required this.item});
+
+  final LeaveBalance item;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F5F8),
+          border: Border.all(color: const Color(0xFFE5DDE7)),
+        ),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.account_balance_wallet_outlined,
+                color: brandPurple),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(item.policyName,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Còn ${_minutesLabel(item.availableMinutes, item.dayMinutes)} · Đang chờ ${_minutesLabel(item.pendingMinutes, item.dayMinutes)}',
+                    style: const TextStyle(
+                      color: Color(0xFF746A77),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -361,16 +586,10 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
 }
 
 class _DateField extends StatelessWidget {
-  const _DateField({
-    required this.label,
-    required this.onTap,
-    required this.value,
-  });
-
+  const _DateField({required this.label, required this.onTap, required this.value});
   final String label;
   final VoidCallback? onTap;
   final String value;
-
   @override
   Widget build(BuildContext context) => InkWell(
         onTap: onTap,
@@ -385,10 +604,30 @@ class _DateField extends StatelessWidget {
       );
 }
 
+class _TimeField extends StatelessWidget {
+  const _TimeField({required this.label, required this.onTap, required this.value});
+  final String label;
+  final VoidCallback? onTap;
+  final String value;
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        child: InputDecorator(
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            labelText: label,
+            suffixIcon: const Icon(Icons.schedule_outlined, size: 18),
+          ),
+          child: Text(value),
+        ),
+      );
+}
+
 class _LeaveCard extends StatelessWidget {
-  const _LeaveCard({required this.item});
+  const _LeaveCard({required this.item, this.onCancel});
 
   final EmployeeLeaveRequest item;
+  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -404,7 +643,7 @@ class _LeaveCard extends StatelessWidget {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    _leaveTypeLabel(item.leaveType),
+                    item.policyName,
                     style: const TextStyle(
                       fontFamily: 'serif',
                       fontSize: 20,
@@ -418,23 +657,25 @@ class _LeaveCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: <Widget>[
-                const Icon(
-                  Icons.date_range_outlined,
-                  color: brandOrange,
-                  size: 18,
-                ),
+                const Icon(Icons.date_range_outlined,
+                    color: brandOrange, size: 18),
                 const SizedBox(width: 7),
-                Text(
-                  _dateRange(item.startDate, item.endDate),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+                Expanded(
+                  child: Text(
+                    '${_dateRange(item.startDate, item.endDate)} · ${_durationLabel(item)}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 9),
+            const SizedBox(height: 5),
             Text(
-              item.reason,
-              style: const TextStyle(color: Color(0xFF615764), height: 1.45),
+              'Thời lượng ${_minutesLabel(item.requestedMinutes, item.dayMinutes)}',
+              style: const TextStyle(color: brandPurple, fontSize: 11),
             ),
+            const SizedBox(height: 9),
+            Text(item.reason,
+                style: const TextStyle(color: Color(0xFF615764), height: 1.45)),
             const SizedBox(height: 10),
             Text(
               'Gửi lúc ${DateFormat('dd/MM/yyyy HH:mm').format(item.submittedAt)}',
@@ -446,36 +687,23 @@ class _LeaveCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 color: const Color(0xFFF8F5F8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    if (item.reviewedByName != null)
-                      Text(
-                        'Người duyệt: ${item.reviewedByName}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    if (item.reviewNote != null) ...<Widget>[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Ghi chú: ${item.reviewNote}',
-                        style: const TextStyle(fontSize: 12, height: 1.4),
-                      ),
-                    ],
-                    if (item.reviewedAt != null) ...<Widget>[
-                      const SizedBox(height: 4),
-                      Text(
-                        DateFormat('dd/MM/yyyy HH:mm').format(item.reviewedAt!),
-                        style: const TextStyle(
-                          color: Color(0xFF8B7F8E),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ],
+                child: Text(
+                  '${item.reviewedByName ?? 'Người duyệt'}${item.reviewNote == null ? '' : ': ${item.reviewNote}'}',
+                  style: const TextStyle(fontSize: 12, height: 1.4),
                 ),
+              ),
+            ],
+            if (item.cancelledAt != null) ...<Widget>[
+              const SizedBox(height: 10),
+              Text('Lý do hủy: ${item.cancellationReason ?? 'Không có'}',
+                  style: const TextStyle(fontSize: 12)),
+            ],
+            if (onCancel != null) ...<Widget>[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: onCancel,
+                icon: const Icon(Icons.cancel_outlined, size: 18),
+                label: const Text('Hủy đơn'),
               ),
             ],
           ],
@@ -485,42 +713,32 @@ class _LeaveCard extends StatelessWidget {
 
 class _LeaveStatus extends StatelessWidget {
   const _LeaveStatus({required this.status});
-
   final String status;
-
   @override
   Widget build(BuildContext context) {
     final Color color = switch (status) {
       'APPROVED' => const Color(0xFF26704F),
-      'REJECTED' => const Color(0xFFA84C42),
+      'REJECTED' || 'CANCELLED' => const Color(0xFFA84C42),
       _ => brandPurple,
     };
     final Color background = switch (status) {
       'APPROVED' => const Color(0xFFE4F4EC),
-      'REJECTED' => const Color(0xFFFFE9E5),
+      'REJECTED' || 'CANCELLED' => const Color(0xFFFFE9E5),
       _ => const Color(0xFFF2EAF5),
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       color: background,
-      child: Text(
-        _statusLabel(status),
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
+      child: Text(_statusLabel(status),
+          style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w800)),
     );
   }
 }
 
 class _LeaveError extends StatelessWidget {
   const _LeaveError({required this.message, this.onRetry});
-
   final String message;
   final Future<void> Function()? onRetry;
-
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.all(14),
@@ -530,9 +748,7 @@ class _LeaveError extends StatelessWidget {
         ),
         child: Row(
           children: <Widget>[
-            Expanded(
-              child: Text(message, style: const TextStyle(fontSize: 12)),
-            ),
+            Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
             if (onRetry != null)
               TextButton(onPressed: onRetry, child: const Text('Thử lại')),
           ],
@@ -542,7 +758,6 @@ class _LeaveError extends StatelessWidget {
 
 class _EmptyLeaveRequests extends StatelessWidget {
   const _EmptyLeaveRequests();
-
   @override
   Widget build(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 50),
@@ -554,24 +769,21 @@ class _EmptyLeaveRequests extends StatelessWidget {
           children: <Widget>[
             Icon(Icons.event_available_rounded, color: brandPurple, size: 34),
             SizedBox(height: 12),
-            Text(
-              'Bạn chưa có đơn nghỉ nào',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
+            Text('Bạn chưa có đơn nghỉ nào',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.w800)),
             SizedBox(height: 6),
-            Text(
-              'Nhấn “Tạo đơn nghỉ” để gửi yêu cầu đầu tiên.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF817683), fontSize: 12),
-            ),
+            Text('Nhấn “Tạo đơn nghỉ” để gửi yêu cầu đầu tiên.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF817683), fontSize: 12)),
           ],
         ),
       );
 }
 
 String _apiDate(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
-
+String _apiTime(TimeOfDay time) =>
+    '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 String _displayDate(DateTime date) => DateFormat('dd/MM/yyyy').format(date);
 
 String _dateRange(String start, String end) {
@@ -582,17 +794,23 @@ String _dateRange(String start, String end) {
   return '${_displayDate(startDate)} → ${_displayDate(endDate)}';
 }
 
-String _leaveTypeLabel(String type) => switch (type) {
-      'ANNUAL' => 'Phép năm',
-      'SICK' => 'Nghỉ bệnh',
-      'UNPAID' => 'Nghỉ không lương',
-      'OTHER' => 'Nghỉ khác',
-      _ => type,
+String _durationLabel(EmployeeLeaveRequest item) => switch (item.durationType) {
+      'HALF_DAY' => item.halfDayPeriod == 'AM' ? 'Nửa ngày sáng' : 'Nửa ngày chiều',
+      'HOURS' => '${item.startTime?.substring(0, 5)}–${item.endTime?.substring(0, 5)}',
+      _ => 'Cả ngày',
     };
+
+String _minutesLabel(int minutes, int dayMinutes) {
+  final double days = minutes / dayMinutes;
+  return days == days.roundToDouble()
+      ? '${days.toInt()} ngày'
+      : '${days.toStringAsFixed(2)} ngày';
+}
 
 String _statusLabel(String status) => switch (status) {
       'SUBMITTED' => 'CHỜ DUYỆT',
       'APPROVED' => 'ĐÃ DUYỆT',
       'REJECTED' => 'TỪ CHỐI',
+      'CANCELLED' => 'ĐÃ HỦY',
       _ => status,
     };

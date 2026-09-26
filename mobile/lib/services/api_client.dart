@@ -231,47 +231,148 @@ class BusinessTripAssignment {
 
 class EmployeeLeaveRequest {
   const EmployeeLeaveRequest({
+    required this.allowApprovedCancellation,
+    required this.cancelledAt,
+    required this.cancellationReason,
     required this.departmentName,
+    required this.dayMinutes,
+    required this.durationType,
     required this.endDate,
+    required this.endTime,
+    required this.halfDayPeriod,
     required this.id,
     required this.leaveType,
+    required this.policyId,
+    required this.policyName,
     required this.reason,
+    required this.requestedMinutes,
     required this.reviewedAt,
     required this.reviewedByName,
     required this.reviewNote,
     required this.startDate,
+    required this.startTime,
     required this.status,
     required this.submittedAt,
   });
 
   factory EmployeeLeaveRequest.fromJson(Map<String, dynamic> json) =>
       EmployeeLeaveRequest(
+        allowApprovedCancellation:
+            json['allowApprovedCancellation'] as bool? ?? false,
+        cancelledAt: json['cancelledAt'] == null
+            ? null
+            : DateTime.parse(json['cancelledAt'] as String).toLocal(),
+        cancellationReason: json['cancellationReason'] as String?,
         departmentName: json['departmentName'] as String?,
+        dayMinutes: (json['dayMinutes'] as num?)?.toInt() ?? 480,
+        durationType: json['durationType'] as String? ?? 'FULL_DAY',
         endDate: json['endDate'] as String,
+        endTime: json['endTime'] as String?,
+        halfDayPeriod: json['halfDayPeriod'] as String?,
         id: json['id'] as String,
         leaveType: json['leaveType'] as String,
+        policyId: json['policyId'] as String,
+        policyName: json['policyName'] as String? ?? json['leaveType'] as String,
         reason: json['reason'] as String,
+        requestedMinutes: (json['requestedMinutes'] as num?)?.toInt() ?? 480,
         reviewedAt: json['reviewedAt'] == null
             ? null
             : DateTime.parse(json['reviewedAt'] as String).toLocal(),
         reviewedByName: json['reviewedByName'] as String?,
         reviewNote: json['reviewNote'] as String?,
         startDate: json['startDate'] as String,
+        startTime: json['startTime'] as String?,
         status: json['status'] as String,
         submittedAt: DateTime.parse(json['submittedAt'] as String).toLocal(),
       );
 
+  final bool allowApprovedCancellation;
+  final DateTime? cancelledAt;
+  final String? cancellationReason;
   final String? departmentName;
+  final int dayMinutes;
+  final String durationType;
   final String endDate;
+  final String? endTime;
+  final String? halfDayPeriod;
   final String id;
   final String leaveType;
+  final String policyId;
+  final String policyName;
   final String reason;
+  final int requestedMinutes;
   final DateTime? reviewedAt;
   final String? reviewedByName;
   final String? reviewNote;
   final String startDate;
+  final String? startTime;
   final String status;
   final DateTime submittedAt;
+}
+
+class LeavePolicy {
+  const LeavePolicy({
+    required this.allowApprovedCancellation,
+    required this.allowHalfDay,
+    required this.allowHourly,
+    required this.balanceTrackingEnabled,
+    required this.code,
+    required this.dayMinutes,
+    required this.id,
+    required this.isActive,
+    required this.minimumNoticeDays,
+    required this.name,
+  });
+
+  factory LeavePolicy.fromJson(Map<String, dynamic> json) => LeavePolicy(
+        allowApprovedCancellation:
+            json['allowApprovedCancellation'] as bool? ?? false,
+        allowHalfDay: json['allowHalfDay'] as bool? ?? false,
+        allowHourly: json['allowHourly'] as bool? ?? false,
+        balanceTrackingEnabled:
+            json['balanceTrackingEnabled'] as bool? ?? false,
+        code: json['code'] as String,
+        dayMinutes: (json['dayMinutes'] as num?)?.toInt() ?? 480,
+        id: json['id'] as String,
+        isActive: json['isActive'] as bool? ?? true,
+        minimumNoticeDays: (json['minimumNoticeDays'] as num?)?.toInt() ?? 0,
+        name: json['name'] as String,
+      );
+
+  final bool allowApprovedCancellation;
+  final bool allowHalfDay;
+  final bool allowHourly;
+  final bool balanceTrackingEnabled;
+  final String code;
+  final int dayMinutes;
+  final String id;
+  final bool isActive;
+  final int minimumNoticeDays;
+  final String name;
+}
+
+class LeaveBalance {
+  const LeaveBalance({
+    required this.availableMinutes,
+    required this.dayMinutes,
+    required this.pendingMinutes,
+    required this.policyId,
+    required this.policyName,
+  });
+
+  factory LeaveBalance.fromJson(Map<String, dynamic> json) => LeaveBalance(
+        availableMinutes: (json['availableMinutes'] as num).toInt(),
+        dayMinutes: (json['dayMinutes'] as num?)?.toInt() ?? 480,
+        pendingMinutes: (json['pendingMinutes'] as num).toInt(),
+        policyId: json['policyId'] as String,
+        policyName: json['policyName'] as String,
+      );
+
+  final int availableMinutes;
+  final int dayMinutes;
+  final int pendingMinutes;
+  final String policyId;
+  final String policyName;
 }
 
 class EmployeeAnnouncement {
@@ -533,20 +634,57 @@ class ApiClient {
         .toList();
   }
 
+  Future<List<LeavePolicy>> leavePolicies() async {
+    final List<dynamic> json = await _requestList('/leave-requests/policies');
+    return json
+        .map((dynamic item) =>
+            LeavePolicy.fromJson(item as Map<String, dynamic>))
+        .where((LeavePolicy item) => item.isActive)
+        .toList();
+  }
+
+  Future<List<LeaveBalance>> myLeaveBalances(int year) async {
+    final List<dynamic> json =
+        await _requestList('/leave-requests/mine/balances?year=$year');
+    return json
+        .map((dynamic item) =>
+            LeaveBalance.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<void> createLeaveRequest({
     required String endDate,
-    required String leaveType,
+    required String policyId,
     required String reason,
     required String startDate,
+    String durationType = 'FULL_DAY',
+    String? endTime,
+    String? halfDayPeriod,
+    String? startTime,
   }) async {
     await _request(
       '/leave-requests/mine',
       body: <String, dynamic>{
+        'durationType': durationType,
         'endDate': endDate,
-        'leaveType': leaveType,
+        if (endTime != null) 'endTime': endTime,
+        if (halfDayPeriod != null) 'halfDayPeriod': halfDayPeriod,
+        'policyId': policyId,
         'reason': reason,
         'startDate': startDate,
+        if (startTime != null) 'startTime': startTime,
       },
+      method: 'POST',
+    );
+  }
+
+  Future<void> cancelLeaveRequest({
+    required String leaveRequestId,
+    required String reason,
+  }) async {
+    await _request(
+      '/leave-requests/$leaveRequestId/cancel',
+      body: <String, dynamic>{'reason': reason},
       method: 'POST',
     );
   }

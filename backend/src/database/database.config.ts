@@ -8,6 +8,7 @@ import { UserEntity } from './entities/user.entity.js';
 import { AuthSessionEntity } from './entities/auth-session.entity.js';
 import { PushDeviceTokenEntity } from './entities/push-device-token.entity.js';
 import { DisciplinaryActionEntity } from './entities/disciplinary-action.entity.js';
+import { EmployeeLeaveBalanceEntity, LeaveBalanceAdjustmentEntity, LeavePolicyEntity } from './entities/leave-policy.entity.js';
 import {
   BranchEntity,
   EmployeeOrganizationAssignmentEntity,
@@ -59,6 +60,9 @@ export const databaseEntities = [
   AnnouncementRecipientEntity,
   PushDeviceTokenEntity,
   DisciplinaryActionEntity,
+  LeavePolicyEntity,
+  EmployeeLeaveBalanceEntity,
+  LeaveBalanceAdjustmentEntity,
 ];
 
 export function createDatabaseOptions(databaseUrl: string): TypeOrmModuleOptions {

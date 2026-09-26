@@ -47,6 +47,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Mã phiếu công tác do Backend tự sinh theo tháng tạo phiếu với định dạng `CT-YYYYMM-NNNN`; Admin không nhập hoặc sửa mã. Khách hàng/phòng khám đã phát sinh phiếu chỉ được ngừng sử dụng, không xóa vật lý khỏi lịch sử.
 - Thông báo nội bộ có thể gửi tới toàn công ty, một phòng ban hoặc một cá nhân. Backend chốt danh sách nhân viên đang hoạt động khi xuất bản; hộp thư là kênh giao nhận chính, còn push notification là kênh báo thêm có trạng thái và cơ chế gửi lại riêng.
 - Cảnh cáo, đình chỉ và quyết định xử lý vi phạm phải có lý do, nội dung xử lý, ngày hiệu lực và audit. Đình chỉ bắt buộc có ngày kết thúc. Khi ban hành, nhân viên nhận ngay thông báo cá nhân yêu cầu xác nhận; hệ thống không tự trừ lương, sửa bảng công hoặc khóa tài khoản nếu chưa có chính sách riêng được duyệt.
+- Chính sách nghỉ phép do Admin cấu hình theo loại nghỉ: định mức năm, số phút quy đổi một ngày, báo trước tối thiểu, cộng dồn có giới hạn, nghỉ nửa ngày/theo giờ và quyền hủy đơn đã duyệt. Backend giữ trước số dư cho đơn chờ duyệt và là nguồn duy nhất tính số dư; mọi điều chỉnh thủ công phải có lý do và audit.
 
 ## Explicit non-goals for MVP
 

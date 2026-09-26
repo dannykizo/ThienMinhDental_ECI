@@ -18,6 +18,7 @@ import { GeofenceRadiusAlignment1790985600000 } from './migrations/1790985600000
 import { BusinessTripCustomerManagement1791072000000 } from './migrations/1791072000000-business-trip-customer-management.js';
 import { AnnouncementCompanyPushDelivery1791158400000 } from './migrations/1791158400000-announcement-company-push-delivery.js';
 import { EmployeeDisciplinaryActions1791244800000 } from './migrations/1791244800000-employee-disciplinary-actions.js';
+import { LeavePoliciesBalances1791331200000 } from './migrations/1791331200000-leave-policies-balances.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -47,6 +48,7 @@ export const applicationDataSource = new DataSource({
     BusinessTripCustomerManagement1791072000000,
     AnnouncementCompanyPushDelivery1791158400000,
     EmployeeDisciplinaryActions1791244800000,
+    LeavePoliciesBalances1791331200000,
   ],
   migrationsTableName: 'schema_migrations',
 });

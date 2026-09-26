@@ -188,6 +188,12 @@ export class LeaveRequestEntity {
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'uuid', name: 'employee_id' }) employeeId!: string;
   @Column({ type: 'varchar', length: 30, name: 'leave_type' }) leaveType!: string;
+  @Column({ type: 'uuid', name: 'policy_id' }) policyId!: string;
+  @Column({ type: 'varchar', length: 20, name: 'duration_type', default: 'FULL_DAY' }) durationType!: string;
+  @Column({ type: 'varchar', length: 10, name: 'half_day_period', nullable: true }) halfDayPeriod?: string | null;
+  @Column({ type: 'time', name: 'start_time', nullable: true }) startTime?: string | null;
+  @Column({ type: 'time', name: 'end_time', nullable: true }) endTime?: string | null;
+  @Column({ type: 'integer', name: 'requested_minutes', default: 480 }) requestedMinutes!: number;
   @Column({ type: 'date', name: 'start_date' }) startDate!: string;
   @Column({ type: 'date', name: 'end_date' }) endDate!: string;
   @Column({ type: 'text' }) reason!: string;
@@ -197,6 +203,9 @@ export class LeaveRequestEntity {
   @Column({ type: 'uuid', name: 'reviewed_by', nullable: true }) reviewedBy?: string | null;
   @Column({ type: 'text', name: 'review_note', nullable: true }) reviewNote?: string | null;
   @Column({ type: 'timestamptz', name: 'reviewed_at', nullable: true }) reviewedAt?: Date | null;
+  @Column({ type: 'uuid', name: 'cancelled_by', nullable: true }) cancelledBy?: string | null;
+  @Column({ type: 'timestamptz', name: 'cancelled_at', nullable: true }) cancelledAt?: Date | null;
+  @Column({ type: 'text', name: 'cancellation_reason', nullable: true }) cancellationReason?: string | null;
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
   @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' }) updatedAt!: Date;
 }

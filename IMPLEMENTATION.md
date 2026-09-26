@@ -30,7 +30,7 @@
 - KPI Lite chỉ là số ngày theo trạng thái vận hành; không có công thức điểm, lương, thưởng hoặc phạt.
 - Thông báo resolve audience thành từng recipient và có API read receipt. Mobile/Backend đã tích hợp adapter FCM; gửi push thật phụ thuộc Firebase project và credential của môi trường triển khai.
 - Mobile attendance vertical slice dùng `geolocator` chỉ tại sự kiện check-in/check-out; API `GET /attendance/me/today` là nguồn trạng thái trong ngày. Không có background location tracking.
-- Leave balance và cutoff chưa có policy được duyệt nên không được tự suy diễn trong code.
+- Leave policy và số dư do Admin cấu hình; Backend là nguồn duy nhất kiểm tra cutoff, thời lượng và số dư.
 
 ### Customer alignment C1 — organization and RBAC
 
@@ -94,8 +94,8 @@
 - Backend owns date-range validation, active-request overlap detection, one-step review and the mandatory rejection reason. Every submission and review is written to `configuration_audit_logs`.
 - Leave changes are rejected when any affected attendance month is locked. A month with a pending leave request cannot be locked, so the monthly report cannot silently finalize unresolved leave.
 - Approved leave is already consumed by the daily attendance/monthly reporting projection; rejected leave is excluded.
-- Mobile lists only the signed-in employee's requests and submits full-day/date-range requests through `/leave-requests/mine`. It renders pending, approved and rejected results returned by Backend and does not duplicate overlap or locked-period rules in the client.
-- Because customer answers W30–W35 are blank, C6 intentionally remains full-day/date-range only and does not add leave balance, accrual, half-day/hour leave, attachments, delegation, multi-level approval, retroactive edits or cancellation of approved requests.
+- Mobile lists only the signed-in employee's requests and submits requests through `/leave-requests/mine`. Business rules remain authoritative in Backend rather than being duplicated in the client.
+- C6 originally remained full-day/date-range only. Customer review CR6 supersedes that restriction with Admin-configurable policies and balances while keeping attachments, delegation and multi-level approval outside scope.
 
 ### Customer alignment C7 — internal announcements
 
@@ -124,6 +124,17 @@
 - Suspension requires a bounded effective period. Other actions may be open-ended. CR5 deliberately does not mutate payroll, attendance, employment status or authentication because those consequences require separate approved policies.
 - Issue creates an important individual announcement and recipient inside the same database transaction. Push delivery runs after commit through the existing tracked FCM adapter, so provider failure never removes the decision or inbox message.
 - Admin Web provides drafting, filtering, issue/revoke confirmation and immutable history. Mobile consumes the generated message through the existing inbox/read/acknowledgement flow; no duplicate disciplinary business rule exists in the client.
+
+### Customer review CR6 — configurable leave policy and balance
+
+- Migration `1791331200000-leave-policies-balances` adds policy, yearly balance and immutable adjustment tables, then links every leave request to a policy with duration and cancellation metadata.
+- The four legacy codes are migrated as active policies with balance tracking disabled. Admin must explicitly enable tracking and initialize a year, preventing historical data from silently consuming newly introduced entitlements.
+- Policy configuration covers annual entitlement, minutes per day, bounded carry-over, minimum notice, half-day/hour support and approved-request cancellation. The code is immutable after creation so historical references remain stable.
+- A submitted request reserves balance. Approval rechecks it under a row lock; rejection or cancellation releases it because usage is derived from current request state. Cross-year requests are rejected only for balance-tracked policies.
+- Full-day duration uses the employee override or department schedule when available and falls back to policy day minutes only when no scheduled minutes resolve. Partial-day requests must stay on one date.
+- Admin can initialize yearly balances and make signed adjustments with a mandatory reason. Policy, balance and request transitions are recorded in `configuration_audit_logs`.
+- Admin Web exposes policy/balance operation and one-step review. Mobile shows the signed-in employee's balances, policy-aware request options and allowed cancellation. Reporting labels approved partial leave as `PARTIAL_LEAVE` instead of treating the whole day as leave.
+- CR6 does not implement attachments, tenure-based automatic accrual, cash conversion, payroll effects or multi-level approval.
 
 ### Mobile completion — UX and Android package
 

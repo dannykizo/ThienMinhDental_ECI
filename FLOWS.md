@@ -106,15 +106,20 @@ DRAFT -> ASSIGNED -> IN_PROGRESS -> COMPLETED
 ```text
 SUBMITTED -> APPROVED
           -> REJECTED
+          -> CANCELLED
+APPROVED  -> CANCELLED (chỉ khi chính sách cho phép)
 ```
 
-1. Nhân viên chọn loại nghỉ, khoảng ngày và lý do.
-2. Backend kiểm tra khoảng ngày, nhân viên đang hoạt động, kỳ công chưa khóa và không trùng đơn `SUBMITTED`/`APPROVED`.
-3. Admin/Manager duyệt một cấp hoặc từ chối; lý do từ chối là bắt buộc.
-4. Mọi lần gửi và duyệt/từ chối có audit. Đơn đang chờ là blocker khi chốt kỳ công.
-5. Mobile nhận kết quả; daily attendance projection cập nhật ngày đã duyệt.
+1. Admin cấu hình từng chính sách nghỉ: định mức, quy đổi phút/ngày, cộng dồn, báo trước, hình thức cả ngày/nửa ngày/theo giờ và quyền hủy đơn đã duyệt.
+2. Admin khởi tạo số dư theo năm. Số dư năm mới lấy định mức tại thời điểm khởi tạo và phần còn lại năm trước trong giới hạn cộng dồn; điều chỉnh tăng/giảm phải có lý do và được lưu bất biến.
+3. Nhân viên chọn một chính sách đang hoạt động, thời lượng được chính sách cho phép và lý do. Backend tính số phút từ lịch làm việc; khi không có lịch mới dùng số phút/ngày của chính sách.
+4. Backend kiểm tra báo trước, nhân viên đang hoạt động, kỳ công chưa khóa, không trùng đơn và đủ số dư. Đơn `SUBMITTED` giữ trước số dư để tránh gửi vượt quỹ.
+5. Admin/Manager duyệt một cấp hoặc từ chối; lý do từ chối là bắt buộc. Backend kiểm tra lại số dư trong transaction khi duyệt.
+6. Nhân viên có thể hủy đơn chờ duyệt. Đơn đã duyệt chỉ hủy được khi chính sách cho phép và kỳ công chưa khóa; số dư được giải phóng theo trạng thái mới.
+7. Mọi lần gửi, duyệt/từ chối, hủy, đổi chính sách và điều chỉnh số dư đều có audit. Đơn đang chờ là blocker khi chốt kỳ công.
+8. Mobile hiển thị số dư và kết quả do Backend trả về; báo cáo ngày phân biệt nghỉ cả ngày với nghỉ một phần.
 
-**Implementation status:** Customer alignment C6 đã triển khai Admin Web, Backend API và Mobile Android. Nhân viên xem đơn của chính mình, tạo đơn nghỉ nguyên ngày/theo khoảng ngày và nhận trạng thái duyệt/từ chối từ Backend. Backend kiểm tra trùng ngày, kỳ công đã khóa, duyệt/từ chối một cấp và audit. Vì W30–W35 chưa có quyết định khách hàng, leave balance/cộng dồn, nghỉ nửa ngày/giờ, file minh chứng, duyệt thay/nhiều cấp, sửa hồi tố và hủy đơn đã duyệt đều chưa được triển khai.
+**Implementation status:** Customer review CR6 và migration `1791331200000-leave-policies-balances` đã triển khai chính sách nghỉ cấu hình được, số dư theo năm/cộng dồn, điều chỉnh có audit, nghỉ nửa ngày/theo giờ và hủy đơn theo policy trên Backend, Admin Web và Mobile Android. Bốn loại nghỉ cũ được tạo thành chính sách tương thích với theo dõi số dư mặc định tắt, nên dữ liệu cũ không bị tự động trừ quỹ. File minh chứng, cấp phép tự động theo thâm niên và quy trình duyệt nhiều cấp vẫn ngoài phạm vi.
 
 ## Admin Web — attendance adjustment
 
