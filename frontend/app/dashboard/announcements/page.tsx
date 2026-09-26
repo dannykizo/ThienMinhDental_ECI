@@ -2,8 +2,10 @@
 
 import { BellRing, Pencil, Plus, RefreshCw } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
+import { EmptyState, LoadingState, Notice, PageHeader, Pagination, StatusBadge, ToastNotice, formatDate } from '@/components/admin-ui';
 import { apiRequest, getAdminSession, type SessionUser } from '@/lib/auth-api';
+import { useActionDialog } from '@/components/use-action-dialog';
+import { useClientPagination } from '@/lib/use-client-pagination';
 
 interface Department { id: string; name: string; }
 interface Employee { id: string; employeeCode: string; fullName: string; }
@@ -53,6 +55,7 @@ export default function AnnouncementsPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { request: requestAction, dialog: actionDialog } = useActionDialog();
 
   const isAdmin = session?.roles.includes('ADMIN') ?? false;
 
@@ -97,7 +100,8 @@ export default function AnnouncementsPage() {
   }
 
   async function transition(id: string, status: 'PUBLISHED' | 'CANCELLED' | 'WITHDRAWN'): Promise<void> {
-    const reason = status === 'WITHDRAWN' ? window.prompt('Ghi chú thu hồi (không bắt buộc):') : null;
+    const reason = await requestAction({ title: status === 'PUBLISHED' ? 'Xuất bản thông báo' : status === 'WITHDRAWN' ? 'Thu hồi thông báo' : 'Hủy bản nháp', description: status === 'PUBLISHED' ? 'Backend sẽ chốt danh sách người nhận và bắt đầu xử lý push notification.' : status === 'WITHDRAWN' ? 'Thông báo sẽ biến mất khỏi hộp thư đang hoạt động nhưng lịch sử giao nhận vẫn được giữ.' : 'Bản nháp sẽ chuyển sang trạng thái đã hủy.', confirmLabel: status === 'PUBLISHED' ? 'Xuất bản' : status === 'WITHDRAWN' ? 'Thu hồi' : 'Hủy bản nháp', fieldLabel: status === 'WITHDRAWN' ? 'Ghi chú thu hồi (không bắt buộc)' : undefined, danger: status !== 'PUBLISHED' });
+    if (reason === null) return;
     setSaving(true); setMessage(''); setError('');
     try {
       await apiRequest(`/announcements/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, reason: reason?.trim() || undefined }) });
@@ -139,10 +143,12 @@ export default function AnnouncementsPage() {
     pushAttention: items?.reduce((total, item) => total + item.pushFailedCount + item.pushSkippedCount + item.pushPendingCount, 0) ?? 0,
   }), [items]);
   const visibleItems = items?.filter((item) => statusFilter === 'ALL' || item.status === statusFilter) ?? [];
+  const itemPaging = useClientPagination(visibleItems, 20);
 
   return <div className="module-page">
+    {actionDialog}
     <PageHeader eyebrow="CR4 / THÔNG BÁO NỘI BỘ" title={isAdmin ? 'Thông báo nội bộ' : 'Theo dõi xác nhận thông báo'} description={isAdmin ? 'Phát hành cho toàn công ty, phòng ban hoặc cá nhân; theo dõi trạng thái đọc và giao push.' : 'Theo dõi nhân viên được phân công trực tiếp cho bạn; không hiển thị dữ liệu ngoài phạm vi quản lý.'} />
-    {message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
+    {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}{error && <Notice kind="error">{error}</Notice>}
     <Notice kind={pushStatus?.configured ? 'success' : 'info'}><strong>Push notification:</strong> {pushStatus?.configured ? `Firebase đã sẵn sàng · ${pushStatus.activeDeviceCount} thiết bị hoạt động${pushStatus.devicesWithErrorCount ? ` · ${pushStatus.devicesWithErrorCount} thiết bị đang có lỗi` : ''}.` : 'Hộp thư vẫn hoạt động đầy đủ; cần cấu hình Firebase trên môi trường triển khai để gửi push thật.'}</Notice>
 
     <section className="metric-grid" aria-label="Tổng quan thông báo">
@@ -166,9 +172,9 @@ export default function AnnouncementsPage() {
       </form>
     </details>}
 
-    <div className="toolbar"><label>Trạng thái<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">Tất cả</option>{isAdmin && <option value="DRAFT">Bản nháp</option>}<option value="PUBLISHED">Đang phát hành</option><option value="WITHDRAWN">Đã thu hồi</option>{isAdmin && <option value="CANCELLED">Đã hủy</option>}</select></label></div>
+    <div className="toolbar"><label>Trạng thái<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); itemPaging.setPage(1); }}><option value="ALL">Tất cả</option>{isAdmin && <option value="DRAFT">Bản nháp</option>}<option value="PUBLISHED">Đang phát hành</option><option value="WITHDRAWN">Đã thu hồi</option>{isAdmin && <option value="CANCELLED">Đã hủy</option>}</select></label></div>
 
-    {items === null ? <LoadingState /> : visibleItems.length === 0 ? <EmptyState title="Chưa có thông báo phù hợp" description={isAdmin ? 'Soạn bản nháp mới hoặc thay đổi bộ lọc.' : 'Chưa có thông báo cho nhân viên thuộc phạm vi quản lý.'} /> : <div className="card-list">{visibleItems.map((item) => {
+    {items === null ? <LoadingState /> : visibleItems.length === 0 ? <EmptyState title="Chưa có thông báo phù hợp" description={isAdmin ? 'Soạn bản nháp mới hoặc thay đổi bộ lọc.' : 'Chưa có thông báo cho nhân viên thuộc phạm vi quản lý.'} /> : <><div className="card-list">{itemPaging.items.map((item) => {
       const recipients = recipientState?.announcementId === item.id ? recipientState.items : null;
       return <article className="list-card announcement-card" key={item.id}><div>
         <p className="mono">{audienceLabels[item.audienceType] ?? item.audienceType}{item.targetName ? ` · ${item.targetName}` : ''} · {formatDate(item.publishedAt ?? item.createdAt)}</p>
@@ -179,6 +185,6 @@ export default function AnnouncementsPage() {
         {recipients && <div className="trip-history"><strong>Trạng thái người nhận</strong>{recipients.length === 0 ? <small>Không có nhân viên thuộc phạm vi bạn quản lý.</small> : recipients.map((recipient) => <small key={recipient.employeeId}>{recipient.employeeCode} · {recipient.employeeName} · {recipient.departmentName ?? 'Chưa gán phòng'} · {item.requiresAcknowledgement ? recipient.acknowledgedAt ? `Đã xác nhận ${formatDate(recipient.acknowledgedAt)}` : recipient.readAt ? 'Đã đọc, chưa xác nhận' : 'Chưa đọc' : recipient.readAt ? `Đã đọc ${formatDate(recipient.readAt)}` : 'Chưa đọc'} · {pushLabels[recipient.pushStatus]}{recipient.pushAttemptCount > 0 ? ` (${recipient.pushAttemptCount} lần)` : ''}</small>)}</div>}
         {history?.announcementId === item.id && <div className="trip-history"><strong>Lịch sử quản trị</strong>{history.items.map((entry) => <small key={entry.id}>{formatDate(entry.createdAt)} · {entry.actorName} · {entry.action}</small>)}</div>}
       </div><div><StatusBadge value={item.status} />{item.status !== 'DRAFT' && <button className="table-action" onClick={() => void showRecipients(item.id)} type="button">Người nhận</button>}{isAdmin && <>{item.status === 'DRAFT' && <><button className="table-action" onClick={() => beginEdit(item)} type="button">Chỉnh sửa</button><button className="table-action success-action" disabled={saving} onClick={() => void transition(item.id, 'PUBLISHED')} type="button">Xuất bản</button><button className="table-action danger-action" disabled={saving} onClick={() => void transition(item.id, 'CANCELLED')} type="button">Hủy nháp</button></>}{item.status === 'PUBLISHED' && <>{item.pushSentCount < item.recipientCount && <button className="table-action" disabled={saving} onClick={() => void retryPush(item.id)} type="button"><RefreshCw aria-hidden="true" size={13} /> Gửi lại push</button>}<button className="table-action danger-action" disabled={saving} onClick={() => void transition(item.id, 'WITHDRAWN')} type="button">Thu hồi</button></>}<button className="table-action" onClick={() => void showHistory(item.id)} type="button">Lịch sử</button></>}</div></article>;
-    })}</div>}
+    })}</div><Pagination page={itemPaging.page} pageSize={itemPaging.pageSize} total={visibleItems.length} onPageChange={itemPaging.setPage} /></>}
   </div>;
 }

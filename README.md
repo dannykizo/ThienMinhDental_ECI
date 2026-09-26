@@ -116,6 +116,8 @@ Triển khai vận hành thật dùng Docker Compose production, HTTPS tự đ�
 
 CR7 bổ sung chống brute-force cho endpoint xác thực, kiểm tra Origin đối với cookie mutation, request ID/log an toàn, mật khẩu tạm mạnh, trang vận hành chỉ Admin, báo cáo giờ làm/OT và Excel hai sheet. Bộ production có preflight, backup đồng bộ kèm checksum, kiểm tra restore biệt lập và quality gate thủ công/PR.
 
+CR8 hoàn thiện trải nghiệm vận hành Admin Web mà không thay đổi business rule: dashboard có hàng đợi ưu tiên từ số liệu thật, menu mobile dạng drawer, hộp thoại xác nhận thống nhất cho thao tác nhạy cảm, toast thành công, focus/keyboard state rõ ràng và phân trang cho các danh sách dài. `GET /api/employees` hỗ trợ tùy chọn `search`, `page`, `pageSize`; khi có `page` response là `{ items, page, pageSize, total, activeTotal, inactiveTotal }`, còn request không có `page` giữ response mảng để tương thích các màn hình chọn nhân sự và Mobile. `GET /api/operations/audit` trả `{ items, page, pageSize, total }` và trang vận hành hiển thị lần giao email/push thành công gần nhất.
+
 ```bash
 cd mobile
 flutter pub get

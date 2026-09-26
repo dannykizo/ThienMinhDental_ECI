@@ -13,5 +13,5 @@ export class OperationsController {
   constructor(private readonly service: OperationsService) {}
 
   @Get('overview') overview(): Promise<Record<string, unknown>> { return this.service.overview(); }
-  @Get('audit') audit(@Query() query: OperationsAuditQueryDto): Promise<unknown[]> { return this.service.audit(query); }
+  @Get('audit') audit(@Query() query: OperationsAuditQueryDto): Promise<Record<string, unknown>> { return this.service.audit(query); }
 }

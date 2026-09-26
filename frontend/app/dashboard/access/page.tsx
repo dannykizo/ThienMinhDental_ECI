@@ -3,6 +3,7 @@
 import { CircleAlert, History } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ToastNotice } from '@/components/admin-ui';
 import {
   ApiError,
   getLoginSessions,
@@ -121,9 +122,7 @@ export default function AccessPage() {
         tự động đăng xuất thiết bị cũ; phiên hợp lệ tối đa 30 ngày.
       </div>
 
-      {message && state !== 'error' && (
-        <div className="notice notice-success">{message}</div>
-      )}
+      {message && state !== 'error' && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
 
       <div className="metric-grid">
         <article className="metric-card">

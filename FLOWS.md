@@ -178,3 +178,13 @@ DRAFT -> ISSUED -> REVOKED
 2. Backend chỉ trả chỉ số kỹ thuật an toàn: phiên hoạt động, workflow tồn, lỗi email/push, migration, release và uptime; không trả secret hay đường dẫn nhạy cảm.
 3. Mỗi request production có request ID và log metadata tối thiểu để tra lỗi; body, token, GPS và mật khẩu không được ghi log.
 4. Trước mỗi deploy đang vận hành phải tạo backup; deploy chỉ hoàn tất sau khi health check đạt yêu cầu. Restore được kiểm tra trong database tạm biệt lập.
+
+## Admin Web — UX và khả năng mở rộng danh sách
+
+1. Dashboard chỉ dùng số liệu Backend và dẫn thẳng tới hàng đợi chấm công, nghỉ phép hoặc công tác; không tạo số liệu minh họa.
+2. Thao tác có thể đổi trạng thái nghiệp vụ phải mở hộp thoại mô tả hậu quả. Lý do bắt buộc tiếp tục do Backend kiểm tra; đóng hộp thoại không phát sinh request.
+3. Danh sách nhân viên tìm kiếm và phân trang tại Backend. Request nội bộ không truyền `page` tiếp tục nhận toàn bộ mảng để không đổi contract của các bộ chọn nhân sự hiện hữu.
+4. Audit vận hành phân trang tại Backend. Các danh sách nghiệp vụ đang cần tổng hợp toàn bộ để tính metric giữ contract hiện tại và phân trang tại client.
+5. Menu mobile dùng drawer có backdrop; focus bàn phím, reduced motion, loading/empty/error/success state phải sử dụng component thống nhất.
+
+**Trạng thái CR8:** Đã triển khai trên Admin Web và hai endpoint danh sách liên quan. Không thay đổi state machine, authorization hay schema database.

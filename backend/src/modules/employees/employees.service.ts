@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, ILike, IsNull, Repository } from 'typeorm';
+import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { DepartmentEntity } from '../../database/entities/department.entity.js';
 import { EmployeeEntity } from '../../database/entities/employee.entity.js';
 import {
@@ -82,36 +82,32 @@ export class EmployeesService {
     @Inject(PASSWORD_HASHER) private readonly passwordHasher: PasswordHasher,
   ) {}
 
-  async list(user: AuthenticatedUserView, search?: string): Promise<unknown[]> {
-    let employees = await this.employees.find({
-      where: search
-        ? [
-            { fullName: ILike(`%${search}%`) },
-            { employeeCode: ILike(`%${search}%`) },
-          ]
-        : undefined,
-      relations: { department: true, position: true, user: true },
-      order: { fullName: 'ASC' },
-    });
-
+  async list(user: AuthenticatedUserView, search?: string, page?: number, pageSize = 25): Promise<unknown> {
     const hasGlobalAccess = user.roles.some((role) =>
       [RoleCode.Admin, RoleCode.ChiefAccountant].includes(role),
     );
-    if (!hasGlobalAccess) {
-      const allowedRows = await this.dataSource.query<
-        Array<{ employeeId: string }>
-      >(
-        `SELECT DISTINCT a.employee_id AS "employeeId"
-         FROM user_branch_scopes s
-         JOIN employee_organization_assignments a ON a.branch_id = s.branch_id
-         WHERE s.user_id = $1 AND a.effective_to IS NULL`,
-        [user.id],
-      );
-      const allowedIds = new Set(allowedRows.map((row) => row.employeeId));
-      employees = employees.filter((employee) => allowedIds.has(employee.id));
+    const query = this.employees.createQueryBuilder('employee')
+      .leftJoinAndSelect('employee.department', 'department')
+      .leftJoinAndSelect('employee.position', 'position')
+      .leftJoinAndSelect('employee.user', 'user')
+      .orderBy('employee.fullName', 'ASC');
+    if (search?.trim()) {
+      query.andWhere('(employee.fullName ILIKE :search OR employee.employeeCode ILIKE :search)', { search: `%${search.trim()}%` });
     }
+    if (!hasGlobalAccess) {
+      query.andWhere(`EXISTS (
+        SELECT 1 FROM user_branch_scopes scope
+        JOIN employee_organization_assignments assignment ON assignment.branch_id=scope.branch_id
+        WHERE scope.user_id=:viewerId AND assignment.employee_id=employee.id AND assignment.effective_to IS NULL
+      )`, { viewerId: user.id });
+    }
+    const [total, activeTotal] = page
+      ? await Promise.all([query.getCount(), query.clone().andWhere('employee.is_active=true').getCount()])
+      : [0, 0];
+    if (page) query.skip((page - 1) * pageSize).take(pageSize);
+    const employees = await query.getMany();
 
-    if (employees.length === 0) return [];
+    if (employees.length === 0) return page ? { items: [], page, pageSize, total, activeTotal, inactiveTotal: total - activeTotal } : [];
     const ids = employees.map((employee) => employee.id);
     const assignments = await this.dataSource.query<AssignmentRow[]>(
       `SELECT a.id, a.employee_id AS "employeeId", a.branch_id AS "branchId",
@@ -148,7 +144,7 @@ export class EmployeesService {
       accountRows.map((row) => [row.employeeId, row]),
     );
 
-    return employees.map(({ user: account, ...employee }) => ({
+    const items = employees.map(({ user: account, ...employee }) => ({
       ...employee,
       accountEmail: account?.email ?? null,
       accountRoles: accountByEmployee.get(employee.id)?.roles ?? [],
@@ -158,6 +154,7 @@ export class EmployeesService {
         (assignment) => assignment.employeeId === employee.id,
       ),
     }));
+    return page ? { items, page, pageSize, total, activeTotal, inactiveTotal: total - activeTotal } : items;
   }
 
   async create(

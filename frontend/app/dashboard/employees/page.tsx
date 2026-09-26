@@ -16,8 +16,10 @@ import {
   EmptyState,
   LoadingState,
   Notice,
+  Pagination,
   PageHeader,
   StatusBadge,
+  ToastNotice,
 } from '@/components/admin-ui';
 import { apiRequest, getAdminSession } from '@/lib/auth-api';
 
@@ -84,6 +86,9 @@ interface EmployeeHistory {
   organizationAssignments: OrganizationAssignment[];
 }
 
+interface PagedEmployees { items: Employee[]; page: number; pageSize: number; total: number; activeTotal: number; inactiveTotal: number; }
+const employeePageSize = 25;
+
 const employeeTypeLabels: Record<string, string> = {
   OFFICE: 'Văn phòng',
   TECHNICAL: 'Kỹ thuật / Hiện trường',
@@ -109,6 +114,10 @@ export default function EmployeesPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [activeTotal, setActiveTotal] = useState(0);
+  const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Employee | null>(null);
   const [editAssignments, setEditAssignments] = useState<AssignmentDraft[]>([]);
   const [statusEmployee, setStatusEmployee] = useState<Employee | null>(null);
@@ -117,14 +126,19 @@ export default function EmployeesPage() {
     data: EmployeeHistory | null;
   } | null>(null);
 
-  async function load(): Promise<void> {
+  async function load(selectedPage = page, selectedSearch = search): Promise<void> {
+    const params = new URLSearchParams({ page: String(selectedPage), pageSize: String(employeePageSize) });
+    if (selectedSearch.trim()) params.set('search', selectedSearch.trim());
     const [employees, deps, pos, branchItems] = await Promise.all([
-      apiRequest<Employee[]>('/employees'),
+      apiRequest<PagedEmployees>(`/employees?${params}`),
       apiRequest<Lookup[]>('/employees/lookups/departments'),
       apiRequest<Lookup[]>('/employees/lookups/positions'),
       apiRequest<Lookup[]>('/employees/lookups/branches'),
     ]);
-    setItems(employees);
+    setItems(employees.items);
+    setTotal(employees.total);
+    setActiveTotal(employees.activeTotal);
+    setPage(employees.page);
     setDepartments(deps);
     setPositions(pos);
     setBranches(branchItems);
@@ -132,14 +146,16 @@ export default function EmployeesPage() {
 
   useEffect(() => {
     Promise.all([
-      apiRequest<Employee[]>('/employees'),
+      apiRequest<PagedEmployees>(`/employees?page=1&pageSize=${employeePageSize}`),
       apiRequest<Lookup[]>('/employees/lookups/departments'),
       apiRequest<Lookup[]>('/employees/lookups/positions'),
       apiRequest<Lookup[]>('/employees/lookups/branches'),
       getAdminSession(),
     ])
       .then(([employees, deps, pos, branchItems, session]) => {
-        setItems(employees);
+        setItems(employees.items);
+        setTotal(employees.total);
+        setActiveTotal(employees.activeTotal);
         setDepartments(deps);
         setPositions(pos);
         setBranches(branchItems);
@@ -372,7 +388,7 @@ export default function EmployeesPage() {
     }
   }
 
-  const activeEmployees = items?.filter((e) => e.isActive).length ?? 0;
+  const activeEmployees = activeTotal;
 
   return (
     <div className="module-page">
@@ -382,7 +398,7 @@ export default function EmployeesPage() {
         title="Quản lý nhân viên"
       />
 
-      {message && <Notice kind="success">{message}</Notice>}
+      {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
       {error && <Notice kind="error">{error}</Notice>}
 
       {/* Overview stats (Học hỏi từ Ảnh 6) */}
@@ -397,7 +413,7 @@ export default function EmployeesPage() {
       >
         <article className="metric-card">
           <p>Tổng số nhân sự</p>
-          <strong>{items?.length ?? 0}</strong>
+          <strong>{total}</strong>
           <span>Hồ sơ đã tạo</span>
         </article>
         <article className="metric-card">
@@ -825,15 +841,21 @@ export default function EmployeesPage() {
         </details>
       </div>}
 
+      <form className="toolbar" onSubmit={(event) => { event.preventDefault(); setItems(null); setError(''); void load(1, search).catch((caught) => { setError(caught instanceof Error ? caught.message : 'Không thể tìm nhân viên.'); setItems([]); }); }}>
+        <label>Tìm nhân viên<input aria-label="Tìm theo mã hoặc họ tên" onChange={(event) => setSearch(event.target.value)} placeholder="Mã nhân viên hoặc họ tên…" value={search} /></label>
+        <button className="secondary-button">Tìm kiếm</button>
+        {search && <button className="table-action" onClick={() => { setSearch(''); setItems(null); setError(''); void load(1, '').catch((caught) => { setError(caught instanceof Error ? caught.message : 'Không thể xóa bộ lọc.'); setItems([]); }); }} type="button">Xóa bộ lọc</button>}
+      </form>
+
       {items === null ? (
         <LoadingState />
       ) : items.length === 0 ? (
         <EmptyState
-          description="Tạo hồ sơ nhân viên đầu tiên bằng biểu mẫu phía trên."
-          title="Chưa có nhân viên"
+          description={search ? 'Thử từ khóa khác hoặc xóa bộ lọc để xem toàn bộ nhân viên.' : 'Tạo hồ sơ nhân viên đầu tiên bằng biểu mẫu phía trên.'}
+          title={search ? 'Không tìm thấy nhân viên' : 'Chưa có nhân viên'}
         />
       ) : (
-        <div className="table-wrap">
+        <><div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -939,7 +961,7 @@ export default function EmployeesPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </div><Pagination page={page} pageSize={employeePageSize} total={total} onPageChange={(nextPage) => { setItems(null); setError(''); void load(nextPage).catch((caught) => { setError(caught instanceof Error ? caught.message : 'Không thể chuyển trang.'); setItems([]); }); }} /></>
       )}
     </div>
   );

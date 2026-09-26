@@ -3,7 +3,9 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import {
+  ArrowUpRight,
   CarFront,
+  CircleCheckBig,
   ClipboardPenLine,
   Clock3,
   Megaphone,
@@ -78,6 +80,11 @@ const metrics: Array<{
 export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState('');
+  const priorityItems = summary ? [
+    { count: summary.reviewRequired, href: '/dashboard/attendance', label: 'Bản ghi chấm công cần đối soát' },
+    { count: summary.pendingLeave, href: '/dashboard/leave', label: 'Đơn nghỉ phép đang chờ duyệt' },
+    { count: summary.activeTrips, href: '/dashboard/business-trips', label: 'Phiếu công tác đang mở' },
+  ].filter((item) => item.count > 0) : [];
 
   useEffect(() => {
     apiRequest<DashboardSummary>('/reporting/dashboard')
@@ -120,6 +127,14 @@ export default function DashboardPage() {
                 <span>{metric.note}</span>
               </Link>
             ))}
+          </section>
+
+          <section className="priority-panel" aria-labelledby="priority-heading">
+            <div className="priority-heading">
+              <div><p className="eyebrow">HÀNG ĐỢI ƯU TIÊN</p><h2 id="priority-heading">Việc cần xử lý</h2></div>
+              <span>{priorityItems.length > 0 ? `${priorityItems.length} nhóm công việc` : 'Không có tồn đọng'}</span>
+            </div>
+            {priorityItems.length > 0 ? <div className="priority-list">{priorityItems.map((item) => <Link href={item.href} key={item.href}><span><strong>{item.count}</strong>{item.label}</span><ArrowUpRight aria-hidden="true" size={18} /></Link>)}</div> : <div className="priority-clear"><CircleCheckBig aria-hidden="true" size={22} /><span><strong>Hàng đợi đã sạch</strong><small>Chưa có hồ sơ nghiệp vụ cần xử lý ngay.</small></span></div>}
           </section>
 
           <section className="foundation-hero">

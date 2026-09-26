@@ -6,10 +6,13 @@ import {
   IsDateString,
   IsEmail,
   IsIn,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Max,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -18,6 +21,12 @@ import { Type } from 'class-transformer';
 export class CreateLookupDto {
   @IsString() @MaxLength(30) code!: string;
   @IsString() @MaxLength(150) name!: string;
+}
+
+export class EmployeeListQueryDto {
+  @IsOptional() @IsString() @MaxLength(100) search?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(10) @Max(100) pageSize = 25;
 }
 
 export class OrganizationAssignmentDto {

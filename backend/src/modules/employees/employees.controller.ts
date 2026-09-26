@@ -5,7 +5,7 @@ import { CurrentUser } from '../auth/presentation/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/presentation/jwt-auth.guard.js';
 import { Roles } from '../auth/presentation/roles.decorator.js';
 import { RolesGuard } from '../auth/presentation/roles.guard.js';
-import { ChangeEmployeeStatusDto, CreateEmployeeDto, CreateLookupDto, UpdateEmployeeDto } from './employees.dto.js';
+import { ChangeEmployeeStatusDto, CreateEmployeeDto, CreateLookupDto, EmployeeListQueryDto, UpdateEmployeeDto } from './employees.dto.js';
 import { EmployeesService } from './employees.service.js';
 
 @Controller('employees')
@@ -14,7 +14,7 @@ export class EmployeesController {
   constructor(private readonly service: EmployeesService) {}
   @Get()
   @Roles(RoleCode.Admin, RoleCode.ChiefAccountant, RoleCode.AreaManager, RoleCode.Manager)
-  list(@CurrentUser() user: AuthenticatedUserView, @Query('search') search?: string): Promise<unknown> { return this.service.list(user, search); }
+  list(@CurrentUser() user: AuthenticatedUserView, @Query() query: EmployeeListQueryDto): Promise<unknown> { return this.service.list(user, query.search, query.page, query.pageSize); }
   @Post()
   @Roles(RoleCode.Admin)
   create(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateEmployeeDto): Promise<unknown> { return this.service.create(user, input); }

@@ -235,6 +235,7 @@ Chỉ tạo các thư mục con này khi module bắt đầu có code thật; kh
 - [x] Excel tổng hợp nhân viên + chi tiết ngày, giờ làm/giờ chuẩn/OT và blocker đối soát thống nhất.
 - [x] Push notification reliability and delivery tracking.
 - [x] Multi-branch organization assignments and branch-scoped employee directory.
+- [x] Admin Web UX/scalability polish: responsive navigation, safe action dialogs, actionable dashboard and paged employee/audit views.
 
 ### Phase 3 — only after new approval
 

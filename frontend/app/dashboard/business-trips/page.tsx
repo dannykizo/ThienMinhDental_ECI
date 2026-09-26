@@ -13,10 +13,14 @@ import {
   LoadingState,
   Notice,
   PageHeader,
+  Pagination,
   StatusBadge,
+  ToastNotice,
   formatDate,
 } from '@/components/admin-ui';
 import { apiRequest, apiUrl } from '@/lib/auth-api';
+import { useActionDialog } from '@/components/use-action-dialog';
+import { useClientPagination } from '@/lib/use-client-pagination';
 
 interface TripMember {
   employeeId: string;
@@ -133,6 +137,7 @@ export default function BusinessTripsPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { request: requestAction, dialog: actionDialog } = useActionDialog();
 
   async function load(): Promise<void> {
     const [tripRows, customerRows, employeeRows, departmentRows] =
@@ -274,13 +279,8 @@ export default function BusinessTripsPage() {
     id: string,
     status: 'ASSIGNED' | 'CANCELLED',
   ): Promise<void> {
-    const reason =
-      status === 'CANCELLED'
-        ? window.prompt(
-            'Nhập lý do hủy phiếu (bắt buộc, tối thiểu 5 ký tự):',
-          )
-        : null;
-    if (status === 'CANCELLED' && (!reason || reason.trim().length < 5)) return;
+    const reason = await requestAction({ title: status === 'ASSIGNED' ? 'Giao phiếu công tác' : 'Hủy phiếu công tác', description: status === 'ASSIGNED' ? 'Phiếu sẽ được giao cho các thành viên và xuất hiện trên ứng dụng nhân viên.' : 'Phiếu sẽ ngừng xử lý; lý do được lưu trong audit.', confirmLabel: status === 'ASSIGNED' ? 'Xác nhận giao phiếu' : 'Xác nhận hủy', fieldLabel: status === 'CANCELLED' ? 'Lý do hủy' : undefined, required: status === 'CANCELLED', minLength: status === 'CANCELLED' ? 5 : undefined, danger: status === 'CANCELLED' });
+    if (reason === null) return;
     setSaving(true);
     setError('');
     setMessage('');
@@ -438,15 +438,18 @@ export default function BusinessTripsPage() {
         .some((value) => value!.toLocaleLowerCase('vi').includes(query));
     return matchesSearch && (showInactiveCustomers || customer.isActive);
   });
+  const tripPaging = useClientPagination(visibleTrips, 20);
+  const customerPaging = useClientPagination(visibleCustomers, 12);
 
   return (
     <div className="module-page">
+      {actionDialog}
       <PageHeader
         description="Admin tạo và giao phiếu; mã phiếu được Backend cấp tự động, nhân sự được lọc theo phòng ban và khách hàng được quản lý tập trung."
         eyebrow="CR3 / PHIẾU CÔNG TÁC"
         title="Điều phối công tác"
       />
-      {message && <Notice kind="success">{message}</Notice>}
+      {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
       {error && <Notice kind="error">{error}</Notice>}
 
       <section className="metric-grid">
@@ -459,7 +462,7 @@ export default function BusinessTripsPage() {
       <div className="toolbar">
         <label>
           Trạng thái
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); tripPaging.setPage(1); }}>
             <option value="ACTIVE">Đang vận hành</option><option value="ALL">Tất cả</option><option value="DRAFT">Nháp</option><option value="ASSIGNED">Đã giao</option><option value="IN_PROGRESS">Đang thực hiện</option><option value="COMPLETED">Hoàn tất</option><option value="CANCELLED">Đã hủy</option>
           </select>
         </label>
@@ -501,26 +504,26 @@ export default function BusinessTripsPage() {
           <div className="form-actions span-2">{editingCustomer && <button className="secondary-button" type="button" onClick={() => setEditingCustomer(null)}>Hủy chỉnh sửa</button>}<button className="primary-button" disabled={saving}>{saving ? 'Đang lưu…' : editingCustomer ? 'Lưu khách hàng' : 'Thêm khách hàng'}</button></div>
         </form>
         <div className="customer-directory-toolbar">
-          <label className="search-box"><Search aria-hidden="true" size={16} /><input aria-label="Tìm khách hàng" placeholder="Tìm theo tên, địa chỉ, liên hệ…" value={customerSearch} onChange={(event) => setCustomerSearch(event.target.value)} /></label>
-          <label className="check-inline"><input checked={showInactiveCustomers} onChange={(event) => setShowInactiveCustomers(event.target.checked)} type="checkbox" />Hiện khách hàng đã ngừng</label>
+          <label className="search-box"><Search aria-hidden="true" size={16} /><input aria-label="Tìm khách hàng" placeholder="Tìm theo tên, địa chỉ, liên hệ…" value={customerSearch} onChange={(event) => { setCustomerSearch(event.target.value); customerPaging.setPage(1); }} /></label>
+          <label className="check-inline"><input checked={showInactiveCustomers} onChange={(event) => { setShowInactiveCustomers(event.target.checked); customerPaging.setPage(1); }} type="checkbox" />Hiện khách hàng đã ngừng</label>
         </div>
         {visibleCustomers.length === 0 ? <p className="panel-empty-copy">Chưa có khách hàng phù hợp bộ lọc.</p> : (
-          <div className="customer-directory">{visibleCustomers.map((customer) => (
+          <><div className="customer-directory">{customerPaging.items.map((customer) => (
             <article className="customer-card" key={customer.id}>
               <div><h3>{customer.name}</h3><p>{customer.address}</p><small>{customer.contactName || 'Chưa có người liên hệ'}{customer.contactPhone ? ` · ${customer.contactPhone}` : ''}</small></div>
               <div><StatusBadge value={customer.isActive ? 'ACTIVE' : 'INACTIVE'} /><span>{customer.tripCount} phiếu công tác</span><div className="action-group"><button className="table-action" onClick={() => beginCustomerEdit(customer)} type="button">Sửa</button><button className="table-action" disabled={saving} onClick={() => void toggleCustomer(customer)} type="button">{customer.isActive ? 'Ngừng sử dụng' : 'Khôi phục'}</button></div></div>
             </article>
-          ))}</div>
+          ))}</div><Pagination page={customerPaging.page} pageSize={customerPaging.pageSize} total={visibleCustomers.length} onPageChange={customerPaging.setPage} /></>
         )}
       </details>
 
       {trips === null ? <LoadingState /> : visibleTrips.length === 0 ? <EmptyState title="Chưa có phiếu phù hợp" description="Tạo phiếu nháp mới hoặc thay đổi bộ lọc trạng thái." /> : (
-        <div className="card-list">{visibleTrips.map((trip) => (
+        <><div className="card-list">{tripPaging.items.map((trip) => (
           <article className="list-card trip-card" key={trip.id}>
             <div><p className="mono">{trip.code} · {trip.customerName ?? 'Không gắn khách hàng'}</p><h3>{trip.siteName}</h3><p>{trip.siteAddress}</p><p>{trip.content}</p><small>{formatDate(trip.startAt)} → {formatDate(trip.endAt)} · Phụ trách: {trip.responsibleEmployeeName ?? 'Chưa xác định'}{trip.requiresPhoto ? ' · Bắt buộc ảnh' : ''}</small><div className="trip-member-list">{trip.members.map((member) => <span key={member.employeeId}><strong>{member.fullName}</strong> <StatusBadge value={member.status} />{member.evidenceImageReference ? <> · <a href={evidenceHref(member.evidenceImageReference)} rel="noreferrer" target="_blank">Mở ảnh</a></> : ''}</span>)}</div>{trip.cancelReason && <p><strong>Lý do hủy:</strong> {trip.cancelReason}</p>}{history?.tripId === trip.id && <div className="trip-history"><strong>Lịch sử thao tác</strong>{history.items.map((item) => <small key={item.id}>{formatDate(item.createdAt)} · {item.actorName} · {item.action}</small>)}</div>}</div>
             <div><StatusBadge value={trip.status} /><button className="table-action" onClick={() => void showHistory(trip.id)}>Lịch sử</button>{trip.status === 'DRAFT' && <><button className="table-action" onClick={() => beginTripEdit(trip)}>Chỉnh sửa</button><button className="table-action success-action" disabled={saving} onClick={() => void transition(trip.id, 'ASSIGNED')}>Giao phiếu</button></>}{!['COMPLETED', 'CANCELLED'].includes(trip.status) && <button className="table-action danger-action" disabled={saving} onClick={() => void transition(trip.id, 'CANCELLED')}>Hủy phiếu</button>}</div>
           </article>
-        ))}</div>
+        ))}</div><Pagination page={tripPaging.page} pageSize={tripPaging.pageSize} total={visibleTrips.length} onPageChange={tripPaging.setPage} /></>
       )}
     </div>
   );

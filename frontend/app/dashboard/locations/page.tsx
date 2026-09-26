@@ -19,6 +19,7 @@ import {
   Notice,
   PageHeader,
   StatusBadge,
+  ToastNotice,
   formatDate,
 } from '@/components/admin-ui';
 import {
@@ -272,7 +273,7 @@ export default function LocationsPage() {
         eyebrow="VỊ TRÍ & GEOFENCE"
         title="Vị trí làm việc"
       />
-      {message && <Notice kind="success">{message}</Notice>}
+      {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
       {error && <Notice kind="error">{error}</Notice>}
 
       <section className="location-metric-grid" aria-label="Quy tắc vị trí">

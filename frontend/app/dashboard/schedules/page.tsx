@@ -2,7 +2,7 @@
 
 import { CornerDownRight, Pencil, Plus } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
-import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
+import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, ToastNotice, formatDate } from '@/components/admin-ui';
 import { apiRequest } from '@/lib/auth-api';
 
 interface DepartmentAssignment {
@@ -131,7 +131,7 @@ export default function SchedulesPage() {
   return (
     <div className="module-page">
       <PageHeader eyebrow="CẤU HÌNH CA & LỊCH" title="Lịch làm việc" description="Admin cấu hình lịch theo chi nhánh và phòng ban; ngoại lệ cá nhân được ưu tiên khi tính công." />
-      {message && <Notice kind="success">{message}</Notice>}
+      {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
       {error && <Notice kind="error">{error}</Notice>}
 
       <section aria-label="Tóm tắt lịch" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginBottom: 24 }}>

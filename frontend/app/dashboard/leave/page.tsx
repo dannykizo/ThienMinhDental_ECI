@@ -2,8 +2,10 @@
 
 import { CalendarClock, Plus, Settings2, WalletCards } from 'lucide-react';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
+import { EmptyState, LoadingState, Notice, PageHeader, Pagination, StatusBadge, ToastNotice, formatDate } from '@/components/admin-ui';
 import { apiRequest, getAdminSession, type SessionUser } from '@/lib/auth-api';
+import { useActionDialog } from '@/components/use-action-dialog';
+import { useClientPagination } from '@/lib/use-client-pagination';
 
 interface Employee { id: string; employeeCode: string; fullName: string; }
 interface LeavePolicy {
@@ -65,6 +67,7 @@ export default function LeavePage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { request: requestAction, dialog: actionDialog } = useActionDialog();
 
   const isAdmin = session?.roles.includes('ADMIN') ?? false;
   const activePolicies = policies.filter((policy) => policy.isActive);
@@ -109,8 +112,8 @@ export default function LeavePage() {
   }
 
   async function review(id: string, status: 'APPROVED' | 'REJECTED'): Promise<void> {
-    const reviewNote = status === 'REJECTED' ? window.prompt('Nhập lý do từ chối (bắt buộc, tối thiểu 5 ký tự):') : window.prompt('Ghi chú duyệt (không bắt buộc):');
-    if (status === 'REJECTED' && (!reviewNote || reviewNote.trim().length < 5)) return;
+    const reviewNote = await requestAction({ title: status === 'APPROVED' ? 'Duyệt đơn nghỉ' : 'Từ chối đơn nghỉ', description: status === 'APPROVED' ? 'Số dư phép sẽ được cập nhật theo chính sách hiện hành.' : 'Lý do từ chối sẽ được lưu vào lịch sử đơn.', confirmLabel: status === 'APPROVED' ? 'Xác nhận duyệt' : 'Từ chối', fieldLabel: status === 'APPROVED' ? 'Ghi chú (không bắt buộc)' : 'Lý do từ chối', required: status === 'REJECTED', minLength: status === 'REJECTED' ? 5 : undefined, danger: status === 'REJECTED' });
+    if (reviewNote === null) return;
     await runAction(async () => {
       await apiRequest(`/leave-requests/${id}/review`, { method: 'PATCH', body: JSON.stringify({ status, reviewNote: reviewNote?.trim() || undefined }) });
       setMessage(status === 'APPROVED' ? 'Đã duyệt đơn nghỉ và cập nhật số dư.' : 'Đã từ chối đơn nghỉ và giải phóng số dư đang giữ.');
@@ -118,8 +121,8 @@ export default function LeavePage() {
   }
 
   async function cancel(item: Leave): Promise<void> {
-    const reason = window.prompt('Nhập lý do hủy đơn (tối thiểu 5 ký tự):');
-    if (!reason || reason.trim().length < 5) return;
+    const reason = await requestAction({ title: 'Hủy đơn nghỉ', description: 'Đơn sẽ chuyển sang trạng thái đã hủy và phần số dư đang giữ/đã dùng sẽ được hoàn lại theo chính sách.', confirmLabel: 'Xác nhận hủy', fieldLabel: 'Lý do hủy', required: true, minLength: 5, danger: true });
+    if (reason === null) return;
     await runAction(async () => {
       await apiRequest(`/leave-requests/${item.id}/cancel`, { method: 'POST', body: JSON.stringify({ reason: reason.trim() }) });
       setMessage('Đã hủy đơn và hoàn lại phần số dư đã giữ/đã dùng.');
@@ -192,17 +195,19 @@ export default function LeavePage() {
     cancelled: items?.filter((item) => item.status === 'CANCELLED').length ?? 0,
   }), [items]);
   const visibleItems = items?.filter((item) => statusFilter === 'ALL' || item.status === statusFilter) ?? [];
+  const itemPaging = useClientPagination(visibleItems, 20);
 
   return <div className="module-page">
+    {actionDialog}
     <PageHeader eyebrow="CR6 / CHÍNH SÁCH NGHỈ PHÉP" title="Nghỉ phép và số dư" description="Cấu hình chính sách, quản lý quỹ phép và xử lý đơn nghỉ trên cùng một luồng có audit." />
-    {message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
+    {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}{error && <Notice kind="error">{error}</Notice>}
     <Notice kind="info"><strong>Quy tắc an toàn:</strong> Đơn chờ duyệt giữ trước số dư; từ chối hoặc hủy sẽ tự giải phóng. Chính sách cũ mặc định chưa trừ quỹ phép cho đến khi Admin chủ động bật.</Notice>
 
     <section aria-label="Thống kê trạng thái đơn" className="metric-grid">
       {[
         ['ALL', 'Tất cả đơn', metrics.all, 'Hồ sơ đã tiếp nhận'], ['SUBMITTED', 'Chờ duyệt', metrics.submitted, 'Đang giữ trước số dư'],
         ['APPROVED', 'Đã duyệt', metrics.approved, 'Đã tính vào quỹ phép'], ['CANCELLED', 'Đã hủy', metrics.cancelled, 'Số dư đã được hoàn lại'],
-      ].map(([key, label, value, note]) => <button className="metric-card" key={key} onClick={() => setStatusFilter(String(key))} style={{ cursor: 'pointer', textAlign: 'left', outline: statusFilter === key ? '2px solid var(--brand-primary)' : 'none' }} type="button"><p>{label}</p><strong>{value}</strong><span>{note}</span></button>)}
+      ].map(([key, label, value, note]) => <button className="metric-card" key={key} onClick={() => { setStatusFilter(String(key)); itemPaging.setPage(1); }} style={{ cursor: 'pointer', textAlign: 'left', outline: statusFilter === key ? '2px solid var(--brand-primary)' : 'none' }} type="button"><p>{label}</p><strong>{value}</strong><span>{note}</span></button>)}
     </section>
 
     {isAdmin && <details className="editor-panel" open={Boolean(editingPolicy)}>
@@ -247,9 +252,9 @@ export default function LeavePage() {
       </form>
     </details>
 
-    <div className="toolbar"><label>Trạng thái<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">Tất cả</option><option value="SUBMITTED">Chờ duyệt</option><option value="APPROVED">Đã duyệt</option><option value="REJECTED">Từ chối</option><option value="CANCELLED">Đã hủy</option></select></label></div>
-    {items === null ? <LoadingState /> : visibleItems.length === 0 ? <EmptyState title="Chưa có đơn phù hợp" description="Tạo đơn mới hoặc thay đổi bộ lọc trạng thái." /> : <div className="card-list">
-      {visibleItems.map((item) => {
+    <div className="toolbar"><label>Trạng thái<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); itemPaging.setPage(1); }}><option value="ALL">Tất cả</option><option value="SUBMITTED">Chờ duyệt</option><option value="APPROVED">Đã duyệt</option><option value="REJECTED">Từ chối</option><option value="CANCELLED">Đã hủy</option></select></label></div>
+    {items === null ? <LoadingState /> : visibleItems.length === 0 ? <EmptyState title="Chưa có đơn phù hợp" description="Tạo đơn mới hoặc thay đổi bộ lọc trạng thái." /> : <><div className="card-list">
+      {itemPaging.items.map((item) => {
         const policy = policies.find((candidate) => candidate.id === item.policyId);
         const canCancel = item.status === 'SUBMITTED' || (item.status === 'APPROVED' && policy?.allowApprovedCancellation);
         return <article className="list-card" key={item.id}><div>
@@ -262,7 +267,7 @@ export default function LeavePage() {
           {history?.requestId === item.id && <div className="trip-history"><strong>Lịch sử thao tác</strong>{history.items.map((entry) => <small key={entry.id}>{formatDate(entry.createdAt)} · {entry.actorName} · {entry.action}</small>)}</div>}
         </div><div><StatusBadge value={item.status} /><button className="table-action" onClick={() => void showHistory(item.id)} type="button">Lịch sử</button>{item.status === 'SUBMITTED' && <span className="action-group"><button className="table-action success-action" disabled={saving} onClick={() => void review(item.id, 'APPROVED')} type="button">Duyệt</button><button className="table-action danger-action" disabled={saving} onClick={() => void review(item.id, 'REJECTED')} type="button">Từ chối</button></span>}{canCancel && <button className="table-action danger-action" disabled={saving} onClick={() => void cancel(item)} type="button">Hủy đơn</button>}</div></article>;
       })}
-    </div>}
+    </div><Pagination page={itemPaging.page} pageSize={itemPaging.pageSize} total={visibleItems.length} onPageChange={itemPaging.setPage} /></>}
     <p className="block-note"><CalendarClock aria-hidden="true" size={15} /> Thời lượng cả ngày ưu tiên lịch làm việc đã gán; nếu chưa có lịch, hệ thống dùng số phút/ngày của chính sách.</p>
   </div>;
 }

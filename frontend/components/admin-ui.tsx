@@ -1,4 +1,7 @@
-import { Inbox } from 'lucide-react';
+'use client';
+
+import { Inbox, X } from 'lucide-react';
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 export function PageHeader({
@@ -41,6 +44,14 @@ export function Notice({
   );
 }
 
+export function ToastNotice({ children, onDismiss }: { children: ReactNode; onDismiss: () => void }) {
+  useEffect(() => {
+    const timer = window.setTimeout(onDismiss, 5_000);
+    return () => window.clearTimeout(timer);
+  }, [children, onDismiss]);
+  return <div className="toast-notice" role="status"><span>{children}</span><button aria-label="Đóng thông báo" onClick={onDismiss} type="button"><X size={16} /></button></div>;
+}
+
 export function EmptyState({
   title,
   description,
@@ -68,6 +79,15 @@ export function LoadingState(): ReactNode {
   );
 }
 
+export function Pagination({ page, pageSize, total, onPageChange }: { page: number; pageSize: number; total: number; onPageChange: (page: number) => void }) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  if (total <= pageSize) return null;
+  return <nav aria-label="Phân trang" className="pagination">
+    <span>Trang {page}/{pageCount} · {total} kết quả</span>
+    <div><button className="secondary-button" disabled={page <= 1} onClick={() => onPageChange(page - 1)} type="button">Trang trước</button><button className="secondary-button" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)} type="button">Trang sau</button></div>
+  </nav>;
+}
+
 const statusToneMap: Record<string, 'success' | 'warning' | 'danger'> = {
   LOCKED: 'success',
   REQUESTED: 'warning',
@@ -93,6 +113,10 @@ const statusToneMap: Record<string, 'success' | 'warning' | 'danger'> = {
   REVOKED: 'danger',
   DRAFT: 'warning',
   PARTIAL_LEAVE: 'warning',
+  INCOMPLETE: 'warning',
+  FAILED: 'danger',
+  SENT: 'success',
+  SKIPPED: 'warning',
 };
 
 const statusLabelMap: Record<string, string> = {
@@ -120,6 +144,12 @@ const statusLabelMap: Record<string, string> = {
   REVOKED: 'Đã thu hồi',
   DRAFT: 'Bản nháp',
   PARTIAL_LEAVE: 'Nghỉ một phần',
+  INCOMPLETE: 'Thiếu chấm công',
+  FAILED: 'Thất bại',
+  SENT: 'Đã gửi',
+  SKIPPED: 'Chưa gửi',
+  BUSINESS_TRIP: 'Công tác',
+  LEAVE: 'Nghỉ phép',
 };
 
 export function StatusBadge({ value }: { value: string }) {

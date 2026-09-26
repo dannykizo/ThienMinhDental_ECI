@@ -14,10 +14,12 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
+  Menu,
   ShieldCheck,
   ShieldAlert,
   TriangleAlert,
   UsersRound,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -31,6 +33,7 @@ import {
 } from '@/lib/auth-api';
 
 interface NavItem {
+  group: 'TỔNG QUAN' | 'NHÂN SỰ' | 'VẬN HÀNH' | 'HỆ THỐNG';
   label: string;
   href: string;
   ready: boolean;
@@ -39,78 +42,91 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   {
+    group: 'TỔNG QUAN',
     label: 'Tổng quan',
     href: '/dashboard',
     ready: true,
     icon: LayoutDashboard,
   },
   {
+    group: 'NHÂN SỰ',
     label: 'Nhân viên',
     href: '/dashboard/employees',
     ready: true,
     icon: UsersRound,
   },
   {
+    group: 'HỆ THỐNG',
     label: 'Tài khoản & thiết bị',
     href: '/dashboard/access',
     ready: true,
     icon: ShieldCheck,
   },
   {
+    group: 'VẬN HÀNH',
     label: 'Lịch làm việc',
     href: '/dashboard/schedules',
     ready: true,
     icon: CalendarDays,
   },
   {
+    group: 'VẬN HÀNH',
     label: 'Vị trí văn phòng',
     href: '/dashboard/locations',
     ready: true,
     icon: MapPin,
   },
   {
+    group: 'VẬN HÀNH',
     label: 'Chấm công',
     href: '/dashboard/attendance',
     ready: true,
     icon: Clock3,
   },
   {
+    group: 'VẬN HÀNH',
     label: 'Phiếu công tác',
     href: '/dashboard/business-trips',
     ready: true,
     icon: BriefcaseBusiness,
   },
   {
+    group: 'NHÂN SỰ',
     label: 'Đơn nghỉ phép',
     href: '/dashboard/leave',
     ready: true,
     icon: CalendarCheck2,
   },
   {
+    group: 'NHÂN SỰ',
     label: 'Thông báo nội bộ',
     href: '/dashboard/announcements',
     ready: true,
     icon: Bell,
   },
   {
+    group: 'NHÂN SỰ',
     label: 'Kỷ luật nhân sự',
     href: '/dashboard/disciplinary-actions',
     ready: true,
     icon: ShieldAlert,
   },
   {
+    group: 'TỔNG QUAN',
     label: 'Báo cáo tháng',
     href: '/dashboard/reports',
     ready: true,
     icon: ChartNoAxesCombined,
   },
   {
+    group: 'TỔNG QUAN',
     label: 'KPI Lite',
     href: '/dashboard/kpi',
     ready: true,
     icon: Gauge,
   },
   {
+    group: 'HỆ THỐNG',
     label: 'Vận hành hệ thống',
     href: '/dashboard/operations',
     ready: true,
@@ -151,6 +167,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
+  const [menuPath, setMenuPath] = useState<string | null>(null);
+  const menuOpen = menuPath === pathname;
   const [currentDateString] = useState(() => {
     try {
       const now = new Date();
@@ -212,6 +230,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     };
   }, [router]);
 
+  useEffect(() => {
+    const handleSessionExpired = () => router.replace('/login');
+    window.addEventListener('thien-minh:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('thien-minh:session-expired', handleSessionExpired);
+  }, [router]);
+
   async function handleLogout() {
     await logout().catch(() => undefined);
     router.replace('/login');
@@ -245,7 +269,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="admin-shell">
-      <aside className="sidebar">
+      {menuOpen && <button aria-label="Đóng menu" className="sidebar-backdrop" onClick={() => setMenuPath(null)} type="button" />}
+      <aside className={menuOpen ? 'sidebar mobile-open' : 'sidebar'}>
         <div className="sidebar-brand">
           <div className="sidebar-logo-card">
             <Image
@@ -272,14 +297,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
 
         <nav aria-label="Điều hướng quản trị" className="sidebar-nav">
-          <p className="nav-label">QUẢN TRỊ</p>
-          {navigation.filter((item) => canAccessNavigation(item, user?.roles ?? [])).map((item) =>
-            item.ready ? (
+          {(['TỔNG QUAN', 'NHÂN SỰ', 'VẬN HÀNH', 'HỆ THỐNG'] as const).map((group) => {
+            const groupItems = navigation.filter((item) => item.group === group && canAccessNavigation(item, user?.roles ?? []));
+            if (groupItems.length === 0) return null;
+            return <div className="nav-group" key={group}><p className="nav-label">{group}</p>{groupItems.map((item) => item.ready ? (
               <Link
                 aria-current={pathname === item.href ? 'page' : undefined}
                 className={pathname === item.href ? 'nav-item active' : 'nav-item'}
                 href={item.href}
                 key={item.label}
+                onClick={() => setMenuPath(null)}
+                title={item.label}
               >
                 <span className="nav-icon" aria-hidden="true">
                   <item.icon size={17} strokeWidth={1.9} />
@@ -294,8 +322,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 <span>{item.label}</span>
                 <span className="nav-status">SẮP CÓ</span>
               </div>
-            ),
-          )}
+            ))}</div>;
+          })}
         </nav>
 
         <div className="sidebar-user">
@@ -321,6 +349,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       <main className="admin-main">
         <header className="topbar-strip">
           <div className="topbar-left">
+            <button aria-expanded={menuOpen} aria-label={menuOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'} className="mobile-menu-button" onClick={() => setMenuPath((current) => current === pathname ? null : pathname)} type="button">{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>
             <div className="topbar-branch">
               <MapPin aria-hidden="true" size={14} strokeWidth={2} />
               Phạm vi dữ liệu theo quyền tài khoản

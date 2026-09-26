@@ -1,8 +1,9 @@
 'use client';
 
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
+import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, ToastNotice, formatDate } from '@/components/admin-ui';
 import { apiRequest, apiUrl } from '@/lib/auth-api';
+import { useActionDialog } from '@/components/use-action-dialog';
 
 interface DailyRow {
   employeeId: string; employeeCode: string; fullName: string; employeeType: string;
@@ -48,6 +49,7 @@ export default function AttendancePage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const { request: requestAction, dialog: actionDialog } = useActionDialog();
 
   async function load(selected = date): Promise<void> {
     const [daily, audit, explanationRows] = await Promise.all([
@@ -81,8 +83,14 @@ export default function AttendancePage() {
     finally { setSaving(false); }
   }
   async function reviewExplanation(id: string, status: 'APPROVED' | 'REJECTED'): Promise<void> {
-    const reviewNote = status === 'REJECTED' ? window.prompt('Nhập lý do từ chối (bắt buộc, tối thiểu 5 ký tự):') : window.prompt('Ghi chú duyệt (không bắt buộc):');
-    if (status === 'REJECTED' && (!reviewNote || reviewNote.trim().length < 5)) return;
+    const reviewNote = await requestAction({
+      title: status === 'APPROVED' ? 'Duyệt giải trình' : 'Từ chối giải trình',
+      description: status === 'APPROVED' ? 'Xác nhận nội dung giải trình hợp lệ. Ghi chú sẽ được lưu cùng lịch sử xử lý.' : 'Nhập lý do cụ thể để nhân viên biết nội dung cần bổ sung hoặc điều chỉnh.',
+      confirmLabel: status === 'APPROVED' ? 'Xác nhận duyệt' : 'Từ chối',
+      fieldLabel: status === 'APPROVED' ? 'Ghi chú duyệt (không bắt buộc)' : 'Lý do từ chối',
+      required: status === 'REJECTED', minLength: status === 'REJECTED' ? 5 : undefined, danger: status === 'REJECTED',
+    });
+    if (reviewNote === null) return;
     setSaving(true); setError(''); setMessage('');
     try {
       await apiRequest(`/attendance/explanations/${id}/review`, { method: 'PATCH', body: JSON.stringify({ status, reviewNote: reviewNote?.trim() || undefined }) });
@@ -109,8 +117,9 @@ export default function AttendancePage() {
   const visibleRows = rows?.filter((row) => view === 'ALL' || (view === 'ATTENDED' ? Boolean(row.checkedInAt || row.checkedOutAt) : row.riskFlags.length > 0 || row.status === 'CHECKED_IN')) ?? [];
 
   return <div className="module-page">
+    {actionDialog}
     <PageHeader eyebrow="C4 / ĐỐI SOÁT CHẤM CÔNG" title="Chấm công & giải trình" description="Theo dõi người đã chấm công, yêu cầu nhân viên giải trình bất thường và điều chỉnh dữ liệu có lưu vết." />
-    {message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
+    {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}{error && <Notice kind="error">{error}</Notice>}
     <section className="metric-grid" aria-label="Tổng quan chấm công">
       <article className="metric-card"><p>Nhân sự hoạt động</p><strong>{metrics.total}</strong><span>Trong danh sách theo dõi</span></article>
       <article className="metric-card"><p>Đã chấm công</p><strong>{metrics.attended}</strong><span>Có check-in hoặc check-out</span></article>

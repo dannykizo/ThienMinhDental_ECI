@@ -1,7 +1,7 @@
 'use client';
 
 import { type FormEvent, useEffect, useState } from 'react';
-import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, formatDate } from '@/components/admin-ui';
+import { EmptyState, LoadingState, Notice, PageHeader, StatusBadge, ToastNotice, formatDate } from '@/components/admin-ui';
 import { apiRequest, apiUrl, getAdminSession, type SessionUser } from '@/lib/auth-api';
 
 interface ReportRow { employeeId: string; employeeCode: string; fullName: string; departmentName: string | null; workDate: string; checkedInAt: string | null; checkedOutAt: string | null; status: string; riskFlags: string[]; adjustmentCount: number; workedMinutes: number; requiredWorkMinutes: number; overtimeMinutes: number; isFullWorkday: boolean; }
@@ -72,7 +72,7 @@ export default function ReportsPage() {
   const canReopen = session?.roles.includes('CHIEF_ACCOUNTANT') ?? false;
   return <div className="module-page">
     <PageHeader eyebrow="CR7 / CHỐT KỲ CÔNG" title="Báo cáo & khóa sổ tháng" description="Giờ làm và OT được tính tại Backend từ lịch hiệu lực. File Excel gồm bảng tổng hợp nhân viên và chi tiết từng ngày." action={summary !== null && blockers === 0 ? <a className="export-link" href={`${apiUrl}/reporting/monthly/export?${query()}`}>Xuất Excel {period?.status === 'LOCKED' ? 'đã chốt' : 'tạm tính'}</a> : <span className="secondary-button disabled-button" aria-disabled="true">{summary === null ? 'Đang tổng hợp…' : 'Còn dữ liệu cần xử lý'}</span>} />
-    {message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
+    {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}{error && <Notice kind="error">{error}</Notice>}
     {period && <Notice kind={period.status === 'LOCKED' ? 'success' : 'info'}><strong>Kỳ {month}: {period.status === 'LOCKED' ? 'Đã chốt' : 'Đang mở'}.</strong>{period.lockedAt && ` Chốt bởi ${period.lockedByName ?? 'người dùng hệ thống'} lúc ${formatDate(period.lockedAt)}.`}{period.reopenedAt && period.status === 'OPEN' && ` Mở lại bởi ${period.reopenedByName ?? 'Kế toán trưởng'} lúc ${formatDate(period.reopenedAt)}: ${period.reopenReason}.`}</Notice>}
     {summary && blockers > 0 && <Notice kind="error">Chưa thể chốt kỳ: {summary.incompleteBlockerCount} ngày thiếu check-out, {summary.openExplanationCount} giải trình và {summary.pendingLeaveCount} đơn nghỉ đang chờ xử lý. Blocker luôn tính trên toàn công ty, kể cả khi bảng đang lọc.</Notice>}
     <form className="toolbar" onSubmit={filter}><label>Tháng<input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label><label>Phòng ban<select value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}><option value="">Tất cả</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Nhân viên<select value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}><option value="">Tất cả</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.employeeCode} · {item.fullName}</option>)}</select></label><button className="secondary-button">Tổng hợp</button></form>

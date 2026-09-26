@@ -7,10 +7,14 @@ import {
   LoadingState,
   Notice,
   PageHeader,
+  Pagination,
   StatusBadge,
+  ToastNotice,
   formatDate,
 } from '@/components/admin-ui';
 import { apiRequest } from '@/lib/auth-api';
+import { useActionDialog } from '@/components/use-action-dialog';
+import { useClientPagination } from '@/lib/use-client-pagination';
 
 type ActionType = 'WARNING' | 'SUSPENSION' | 'DISCIPLINARY_ACTION';
 type ActionStatus = 'DRAFT' | 'ISSUED' | 'REVOKED';
@@ -73,6 +77,7 @@ export default function DisciplinaryActionsPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { request: requestAction, dialog: actionDialog } = useActionDialog();
 
   async function load(): Promise<void> {
     const [actions, employeeRows] = await Promise.all([
@@ -123,7 +128,8 @@ export default function DisciplinaryActionsPage() {
   }
 
   async function issue(item: DisciplinaryAction): Promise<void> {
-    if (!window.confirm(`Ban hành “${item.title}” và gửi thông báo bắt buộc xác nhận tới ${item.employeeName}?`)) return;
+    const confirmation = await requestAction({ title: 'Ban hành quyết định', description: `Quyết định “${item.title}” sẽ được chốt và gửi thông báo bắt buộc xác nhận tới ${item.employeeName}.`, confirmLabel: 'Ban hành quyết định', danger: true });
+    if (confirmation === null) return;
     setSaving(true); setMessage(''); setError('');
     try {
       await apiRequest(`/disciplinary-actions/${item.id}/issue`, { method: 'POST' });
@@ -135,8 +141,8 @@ export default function DisciplinaryActionsPage() {
   }
 
   async function revoke(item: DisciplinaryAction): Promise<void> {
-    const reason = window.prompt('Nhập lý do thu hồi quyết định (tối thiểu 5 ký tự):');
-    if (!reason) return;
+    const reason = await requestAction({ title: 'Thu hồi quyết định', description: `Thu hồi “${item.title}”. Hồ sơ và lịch sử thông báo vẫn được giữ để đối soát.`, confirmLabel: 'Xác nhận thu hồi', fieldLabel: 'Lý do thu hồi', required: true, minLength: 5, danger: true });
+    if (reason === null) return;
     setSaving(true); setMessage(''); setError('');
     try {
       await apiRequest(`/disciplinary-actions/${item.id}/revoke`, {
@@ -170,10 +176,12 @@ export default function DisciplinaryActionsPage() {
     revoked: items?.filter((item) => item.status === 'REVOKED').length ?? 0,
   }), [items]);
   const visibleItems = items?.filter((item) => statusFilter === 'ALL' || item.status === statusFilter) ?? [];
+  const itemPaging = useClientPagination(visibleItems, 20);
 
   return <div className="module-page">
+    {actionDialog}
     <PageHeader eyebrow="CR5 / KỶ LUẬT NHÂN SỰ" title="Cảnh cáo, đình chỉ và xử lý vi phạm" description="Lập quyết định, ban hành có audit và gửi thông báo bắt buộc xác nhận tới nhân viên." />
-    {message && <Notice kind="success">{message}</Notice>}{error && <Notice kind="error">{error}</Notice>}
+    {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}{error && <Notice kind="error">{error}</Notice>}
     <Notice kind="info"><strong>Nguyên tắc vận hành:</strong> Ban hành quyết định sẽ tạo ngay một thông báo cá nhân trong Hộp thư và thử gửi push. CR5 không tự trừ lương, sửa bảng công hoặc khóa tài khoản; các hệ quả đó cần chính sách riêng được phê duyệt.</Notice>
 
     <section className="metric-grid" aria-label="Tổng quan xử lý vi phạm">
@@ -198,9 +206,9 @@ export default function DisciplinaryActionsPage() {
       </form>
     </details>
 
-    <div className="toolbar"><label>Trạng thái<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="ALL">Tất cả</option><option value="DRAFT">Bản nháp</option><option value="ISSUED">Đã ban hành</option><option value="REVOKED">Đã thu hồi</option></select></label></div>
+    <div className="toolbar"><label>Trạng thái<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); itemPaging.setPage(1); }}><option value="ALL">Tất cả</option><option value="DRAFT">Bản nháp</option><option value="ISSUED">Đã ban hành</option><option value="REVOKED">Đã thu hồi</option></select></label></div>
 
-    {items === null ? <LoadingState /> : visibleItems.length === 0 ? <EmptyState title="Chưa có quyết định phù hợp" description="Lập bản nháp mới hoặc thay đổi bộ lọc trạng thái." /> : <div className="card-list">{visibleItems.map((item) => <article className="list-card announcement-card" key={item.id}><div>
+    {items === null ? <LoadingState /> : visibleItems.length === 0 ? <EmptyState title="Chưa có quyết định phù hợp" description="Lập bản nháp mới hoặc thay đổi bộ lọc trạng thái." /> : <><div className="card-list">{itemPaging.items.map((item) => <article className="list-card announcement-card" key={item.id}><div>
       <p className="mono">{actionLabels[item.actionType]} · {item.employeeCode} · {item.employeeName} · {item.departmentName ?? 'Chưa gán phòng ban'}</p>
       <h3>{item.title}</h3>
       <p><strong>Lý do:</strong> {item.reason}</p><p><strong>Xử lý:</strong> {item.decision}</p>
@@ -208,6 +216,6 @@ export default function DisciplinaryActionsPage() {
       {item.announcementId && <small className="block-note"><FileWarning aria-hidden="true" size={14} /> Đã tạo thông báo cá nhân bắt buộc xác nhận</small>}
       {item.revocationReason && <p><strong>Thu hồi:</strong> {item.revocationReason} · {formatDate(item.revokedAt)}</p>}
       {history?.id === item.id && <div className="trip-history"><strong>Lịch sử bất biến</strong>{history.items.map((entry) => <small key={entry.id}>{formatDate(entry.createdAt)} · {entry.actorName} · {entry.action}</small>)}</div>}
-    </div><div><StatusBadge value={item.status} />{item.status === 'DRAFT' && <><button className="table-action" onClick={() => beginEdit(item)} type="button"><Pencil aria-hidden="true" size={13} /> Chỉnh sửa</button><button className="table-action success-action" disabled={saving} onClick={() => void issue(item)} type="button"><Send aria-hidden="true" size={13} /> Ban hành</button></>}{item.status === 'ISSUED' && <button className="table-action danger-action" disabled={saving} onClick={() => void revoke(item)} type="button"><RotateCcw aria-hidden="true" size={13} /> Thu hồi</button>}<button className="table-action" onClick={() => void showHistory(item.id)} type="button">Lịch sử</button></div></article>)}</div>}
+    </div><div><StatusBadge value={item.status} />{item.status === 'DRAFT' && <><button className="table-action" onClick={() => beginEdit(item)} type="button"><Pencil aria-hidden="true" size={13} /> Chỉnh sửa</button><button className="table-action success-action" disabled={saving} onClick={() => void issue(item)} type="button"><Send aria-hidden="true" size={13} /> Ban hành</button></>}{item.status === 'ISSUED' && <button className="table-action danger-action" disabled={saving} onClick={() => void revoke(item)} type="button"><RotateCcw aria-hidden="true" size={13} /> Thu hồi</button>}<button className="table-action" onClick={() => void showHistory(item.id)} type="button">Lịch sử</button></div></article>)}</div><Pagination page={itemPaging.page} pageSize={itemPaging.pageSize} total={visibleItems.length} onPageChange={itemPaging.setPage} /></>}
   </div>;
 }
