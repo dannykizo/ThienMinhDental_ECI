@@ -40,6 +40,13 @@
 - Admin có quyền ghi cấu hình nhân sự. Kế toán trưởng đọc dữ liệu nhân viên/chấm công và báo cáo. Quản lý khu vực chỉ được cấp endpoint đã thực thi scope chi nhánh ở Backend.
 - Khóa nhân viên đồng thời thu hồi quyền đăng nhập; không hard-delete hồ sơ hay mã nhân viên.
 
+### Customer review CR1 — employee lifecycle
+
+- Migration `1790899200000-employee-lifecycle` lưu ngày ngừng làm việc, lý do, người thao tác và thời điểm đổi trạng thái mà không xóa hồ sơ hoặc dữ liệu nghiệp vụ.
+- Sửa hồ sơ và cơ cấu được audit dưới resource `EMPLOYEE`; thay đổi phân công đóng khoảng hiệu lực cũ rồi tạo khoảng hiện hành mới.
+- Ngừng làm việc là transition chỉ dành cho Admin: Backend vô hiệu hóa tài khoản, thu hồi phiên đăng nhập và push token trong cùng transaction. Khôi phục chỉ mở lại tài khoản, không phục hồi phiên/token cũ.
+- Admin Web cung cấp trạng thái sửa, quyết định ngừng/khôi phục và lịch sử hồ sơ/phân công. Mã nhân viên cùng định danh tài khoản không được đổi trong flow này.
+
 ### Customer alignment C2 — session, device and login alert
 
 - Migration `1790121600000-auth-sessions` lưu vòng đời phiên, thiết bị, client Web/Mobile, thời điểm đăng nhập/thu hồi và trạng thái cảnh báo email. Migration `1790640000000-refresh-token-sessions` bổ sung hash refresh token hiện tại/trước đó và `last_seen_at`.
@@ -112,6 +119,7 @@
 - Caddy terminates HTTPS and proxies `/api/*` to Backend; Backend exposes separate liveness and database-readiness endpoints. Containers run as non-root where supported, use read-only filesystems where practical and persist PostgreSQL/evidence data in named volumes.
 - Production environment validation rejects placeholder JWT secrets, non-HTTPS CORS origins and missing evidence paths before the API accepts traffic. Database migrations run before Backend startup.
 - Migration `1790812800000-canonical-roles` provisions the canonical role catalogue. The first production Admin is created once through `scripts/prod/bootstrap-admin.sh`; the development seed remains prohibited outside development.
+- Migration `1790899200000-employee-lifecycle` adds recoverable employee deactivation metadata and preserves lifecycle changes in the immutable configuration audit log.
 - Operational commands, backup requirements, Firebase credential mounting and release-APK prerequisites are canonicalized in `DEPLOYMENT.md`.
 
 ## Repository layout

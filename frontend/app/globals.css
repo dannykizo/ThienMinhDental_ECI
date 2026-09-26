@@ -236,7 +236,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 /* -------------------------------------------------------------
    Buttons
 ------------------------------------------------------------- */
-.primary-button, .secondary-button, .table-action {
+.primary-button, .secondary-button, .danger-button, .table-action, .icon-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -245,6 +245,46 @@ button, a { -webkit-tap-highlight-color: transparent; }
   cursor: pointer;
   font-weight: 650;
   transition: all 180ms ease;
+}
+
+.danger-button {
+  min-height: 46px;
+  padding: 0 24px;
+  border: 1px solid #fecaca;
+  background: var(--danger-light);
+  color: var(--danger-dark);
+  font-size: 0.9rem;
+}
+
+.danger-button:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: #fee2e2;
+  transform: translateY(-1px);
+}
+
+.danger-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.icon-button {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink-secondary);
+}
+
+.icon-button:hover:not(:disabled) {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  background: var(--brand-primary-light);
+}
+
+.icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .primary-button {
@@ -304,6 +344,12 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 .form-action {
   margin: 0;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
 .spinner, .route-loader {
@@ -998,6 +1044,19 @@ tbody tr:hover {
   gap: 8px;
 }
 
+.employee-actions {
+  min-width: 168px;
+  flex-wrap: wrap;
+}
+
+.employee-status-note {
+  display: block;
+  max-width: 220px;
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 /* -------------------------------------------------------------
    Forms, Panels & Toolbars
 ------------------------------------------------------------- */
@@ -1105,6 +1164,31 @@ tbody tr:hover {
   border-bottom: 1px solid var(--line);
 }
 
+.employee-detail-panel {
+  scroll-margin-top: 24px;
+}
+
+.panel-heading {
+  display: flex;
+  padding: 20px 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-heading h2 {
+  margin: 5px 0 4px;
+  color: var(--ink);
+  font-size: 1.18rem;
+}
+
+.panel-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .form-grid {
   display: grid;
   padding: 24px;
@@ -1146,6 +1230,77 @@ tbody tr:hover {
   border-color: var(--brand-primary);
   background: #fff;
   box-shadow: 0 0 0 3px var(--brand-primary-subtle);
+}
+
+.form-grid input:disabled {
+  cursor: not-allowed;
+  background: var(--canvas-subtle);
+  color: var(--muted);
+}
+
+.assignment-editor {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--canvas-subtle);
+}
+
+.assignment-editor legend {
+  padding: 0 6px;
+  color: var(--ink-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.assignment-editor-list {
+  display: grid;
+  gap: 12px;
+}
+
+.assignment-editor-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr)) auto auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.assignment-editor-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.assignment-editor-row .primary-assignment-check {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.compact-button {
+  justify-self: start;
+}
+
+.employee-history-grid {
+  display: grid;
+  padding: 24px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.employee-history-grid h3 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.muted-copy {
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .span-2 {
@@ -1431,6 +1586,7 @@ tbody tr:hover {
 ------------------------------------------------------------- */
 @media (max-width: 1080px) {
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .assignment-editor-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 980px) {
@@ -1449,6 +1605,7 @@ tbody tr:hover {
   .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .split-editors { grid-template-columns: 1fr; }
   .customer-form { grid-template-columns: 1fr 1fr; }
+  .employee-history-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
@@ -1469,4 +1626,6 @@ tbody tr:hover {
   .list-card > div:last-child { align-items: flex-start; text-align: left; }
   .toolbar { flex-direction: column; align-items: stretch; }
   .customer-form { grid-template-columns: 1fr; }
+  .assignment-editor-row { grid-template-columns: 1fr; }
+  .form-actions { align-items: stretch; flex-direction: column-reverse; }
 }

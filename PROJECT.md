@@ -38,7 +38,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Phát hiện mock location chỉ là tín hiệu rủi ro; hệ thống không tuyên bố chống giả GPS tuyệt đối.
 - Mọi sửa đổi thủ công với bảng công phải có người sửa, thời gian, lý do, giá trị cũ và mới.
 - Một nhân viên có thể thuộc nhiều phòng ban nhưng phải có đúng một phân công tổ chức chính tại một thời điểm.
-- Nhân viên nghỉ việc được khóa hồ sơ/tài khoản; không xóa vật lý mã nhân viên hoặc lịch sử nghiệp vụ.
+- Nhân viên nghỉ việc được chuyển sang trạng thái ngừng làm việc với ngày hiệu lực và lý do bắt buộc; hồ sơ, tài khoản và phiên đăng nhập bị khóa nhưng mã nhân viên cùng lịch sử nghiệp vụ không bị xóa vật lý. Admin có thể khôi phục hồ sơ bằng một quyết định có audit.
 - Phiên đăng nhập có hiệu lực tối đa 30 ngày. Mỗi tài khoản chỉ có một thiết bị hoạt động; đăng nhập mới thu hồi phiên cũ và lịch sử đăng nhập/đăng xuất được giữ để Admin kiểm tra.
 - Mỗi lần nhân sự đăng nhập phải tạo cảnh báo email tới địa chỉ Admin đã cấu hình. Lỗi gửi email không được chặn đăng nhập nhưng phải hiển thị trạng thái giao nhận trong Admin Web.
 - Lịch làm việc do Admin cấu hình theo chi nhánh và phòng ban; ngoại lệ theo nhân viên được ưu tiên và mọi lần thay đổi cấu hình phải có lịch sử chỉ Admin xem.

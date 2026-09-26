@@ -49,8 +49,8 @@ export class CreateEmployeeDto {
 export class UpdateEmployeeDto {
   @IsOptional() @IsString() @MaxLength(150) fullName?: string;
   @IsOptional() @IsIn(['OFFICE', 'TECHNICAL']) employeeType?: string;
-  @IsOptional() @IsString() @MaxLength(30) phone?: string;
-  @IsOptional() @IsDateString() hireDate?: string;
+  @IsOptional() @IsString() @MaxLength(30) phone?: string | null;
+  @IsOptional() @IsDateString() hireDate?: string | null;
   @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
@@ -59,5 +59,10 @@ export class UpdateEmployeeDto {
   @Type(() => OrganizationAssignmentDto)
   organizationAssignments?: OrganizationAssignmentDto[];
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID(undefined, { each: true }) scopeBranchIds?: string[];
-  @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+export class ChangeEmployeeStatusDto {
+  @IsBoolean() isActive!: boolean;
+  @IsDateString() effectiveDate!: string;
+  @IsString() @MinLength(5) @MaxLength(500) reason!: string;
 }

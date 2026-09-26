@@ -8,9 +8,11 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 2. Mỗi nhân viên có đúng một phân công chính đang hiệu lực; các phân công cũ được đóng ngày hiệu lực thay vì xóa.
 3. Admin và Kế toán trưởng có phạm vi dữ liệu toàn cục theo quyền nghiệp vụ được cấp.
 4. Quản lý khu vực chỉ thấy nhân viên thuộc các chi nhánh trong `user_branch_scopes`.
-5. Khi nhân viên nghỉ việc, hồ sơ và tài khoản bị khóa nhưng mã nhân viên cùng lịch sử vẫn được giữ lại.
+5. Admin chỉnh sửa hồ sơ và phân công tổ chức; phân công cũ được đóng ngày hiệu lực và vẫn xuất hiện trong lịch sử.
+6. Khi nhân viên nghỉ việc, Admin phải nhập ngày hiệu lực và lý do. Backend khóa hồ sơ/tài khoản, thu hồi mọi phiên đang hoạt động và vô hiệu hóa push token nhưng giữ mã nhân viên cùng toàn bộ lịch sử nghiệp vụ.
+7. Admin có thể khôi phục hồ sơ bằng ngày hiệu lực và lý do. Tài khoản được mở lại nhưng phiên cũ không được phục hồi; nhân viên phải đăng nhập lại.
 
-**Implementation status:** Migration `1790035200000-customer-organization-rbac` đã bổ sung HCM/HN, phân công tổ chức nhiều-nhiều, phạm vi chi nhánh và role Kế toán trưởng/Quản lý khu vực. Danh sách nhân viên và Dashboard đã áp dụng scope; các module nghiệp vụ còn lại chỉ cấp quyền mới khi truy vấn theo scope tương ứng được triển khai.
+**Implementation status:** Migration `1790035200000-customer-organization-rbac` đã bổ sung HCM/HN, phân công tổ chức nhiều-nhiều, phạm vi chi nhánh và role Kế toán trưởng/Quản lý khu vực. Customer review CR1 và migration `1790899200000-employee-lifecycle` bổ sung sửa hồ sơ/cơ cấu, ngừng làm việc, khôi phục, thu hồi phiên và lịch sử audit trên Admin Web. Danh sách nhân viên và Dashboard đã áp dụng scope; các module nghiệp vụ còn lại chỉ cấp quyền mới khi truy vấn theo scope tương ứng được triển khai.
 
 ## Authentication session and device
 

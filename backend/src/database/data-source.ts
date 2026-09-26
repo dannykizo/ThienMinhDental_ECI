@@ -13,6 +13,7 @@ import { AnnouncementAlignment1790553600000 } from './migrations/1790553600000-a
 import { RefreshTokenSessions1790640000000 } from './migrations/1790640000000-refresh-token-sessions.js';
 import { PushNotificationDevices1790726400000 } from './migrations/1790726400000-push-notification-devices.js';
 import { CanonicalRoles1790812800000 } from './migrations/1790812800000-canonical-roles.js';
+import { EmployeeLifecycle1790899200000 } from './migrations/1790899200000-employee-lifecycle.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -37,6 +38,7 @@ export const applicationDataSource = new DataSource({
     RefreshTokenSessions1790640000000,
     PushNotificationDevices1790726400000,
     CanonicalRoles1790812800000,
+    EmployeeLifecycle1790899200000,
   ],
   migrationsTableName: 'schema_migrations',
 });

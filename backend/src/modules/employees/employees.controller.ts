@@ -5,7 +5,7 @@ import { CurrentUser } from '../auth/presentation/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/presentation/jwt-auth.guard.js';
 import { Roles } from '../auth/presentation/roles.decorator.js';
 import { RolesGuard } from '../auth/presentation/roles.guard.js';
-import { CreateEmployeeDto, CreateLookupDto, UpdateEmployeeDto } from './employees.dto.js';
+import { ChangeEmployeeStatusDto, CreateEmployeeDto, CreateLookupDto, UpdateEmployeeDto } from './employees.dto.js';
 import { EmployeesService } from './employees.service.js';
 
 @Controller('employees')
@@ -17,10 +17,16 @@ export class EmployeesController {
   list(@CurrentUser() user: AuthenticatedUserView, @Query('search') search?: string): Promise<unknown> { return this.service.list(user, search); }
   @Post()
   @Roles(RoleCode.Admin)
-  create(@Body() input: CreateEmployeeDto): Promise<unknown> { return this.service.create(input); }
+  create(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateEmployeeDto): Promise<unknown> { return this.service.create(user, input); }
+  @Get(':id/history')
+  @Roles(RoleCode.Admin)
+  history(@Param('id') id: string): Promise<unknown> { return this.service.history(id); }
+  @Patch(':id/status')
+  @Roles(RoleCode.Admin)
+  changeStatus(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string, @Body() input: ChangeEmployeeStatusDto): Promise<unknown> { return this.service.changeStatus(user, id, input); }
   @Patch(':id')
   @Roles(RoleCode.Admin)
-  update(@Param('id') id: string, @Body() input: UpdateEmployeeDto): Promise<unknown> { return this.service.update(id, input); }
+  update(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string, @Body() input: UpdateEmployeeDto): Promise<unknown> { return this.service.update(user, id, input); }
   @Get('lookups/departments')
   @Roles(RoleCode.Admin, RoleCode.ChiefAccountant, RoleCode.AreaManager, RoleCode.Manager)
   departments(): Promise<unknown> { return this.service.listDepartments(); }

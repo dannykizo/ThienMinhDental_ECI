@@ -24,6 +24,18 @@ export class EmployeeEntity {
   @Column({ type: 'boolean', default: true, name: 'is_active' })
   isActive!: boolean;
 
+  @Column({ type: 'date', name: 'employment_end_date', nullable: true })
+  employmentEndDate?: string | null;
+
+  @Column({ type: 'varchar', length: 500, name: 'employment_status_reason', nullable: true })
+  employmentStatusReason?: string | null;
+
+  @Column({ type: 'timestamptz', name: 'status_changed_at', nullable: true })
+  statusChangedAt?: Date | null;
+
+  @Column({ type: 'uuid', name: 'status_changed_by', nullable: true })
+  statusChangedBy?: string | null;
+
   @Column({ type: 'varchar', length: 20, name: 'employee_type', default: 'OFFICE' })
   employeeType!: string;
 

@@ -1,6 +1,16 @@
 'use client';
 
-import { Check, Plus } from 'lucide-react';
+import {
+  Archive,
+  Check,
+  History,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { type FormEvent, useEffect, useState } from 'react';
 import {
   EmptyState,
@@ -25,6 +35,8 @@ interface Employee {
   phone?: string;
   hireDate?: string;
   isActive: boolean;
+  employmentEndDate?: string;
+  employmentStatusReason?: string;
   department?: Lookup;
   position?: Lookup;
   accountEmail?: string;
@@ -45,12 +57,48 @@ interface OrganizationAssignment {
   managerEmployeeId?: string;
   managerName?: string;
   isPrimary: boolean;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+}
+
+interface AssignmentDraft {
+  key: string;
+  branchId: string;
+  departmentId: string;
+  positionId: string;
+  managerEmployeeId: string;
+  isPrimary: boolean;
+}
+
+interface EmployeeHistoryEvent {
+  id: string;
+  action: string;
+  actorName: string;
+  createdAt: string;
+  oldValue?: Record<string, unknown> | null;
+  newValue?: Record<string, unknown> | null;
+}
+
+interface EmployeeHistory {
+  events: EmployeeHistoryEvent[];
+  organizationAssignments: OrganizationAssignment[];
 }
 
 const employeeTypeLabels: Record<string, string> = {
   OFFICE: 'Văn phòng',
   TECHNICAL: 'Kỹ thuật / Hiện trường',
 };
+
+const historyActionLabels: Record<string, string> = {
+  CREATED: 'Tạo hồ sơ',
+  UPDATED: 'Cập nhật hồ sơ',
+  DEACTIVATED: 'Ngừng làm việc',
+  REACTIVATED: 'Khôi phục hoạt động',
+};
+
+function today(): string {
+  return new Date().toLocaleDateString('en-CA');
+}
 
 export default function EmployeesPage() {
   const [items, setItems] = useState<Employee[] | null>(null);
@@ -61,6 +109,13 @@ export default function EmployeesPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<Employee | null>(null);
+  const [editAssignments, setEditAssignments] = useState<AssignmentDraft[]>([]);
+  const [statusEmployee, setStatusEmployee] = useState<Employee | null>(null);
+  const [historyState, setHistoryState] = useState<{
+    employee: Employee;
+    data: EmployeeHistory | null;
+  } | null>(null);
 
   async function load(): Promise<void> {
     const [employees, deps, pos, branchItems] = await Promise.all([
@@ -142,14 +197,149 @@ export default function EmployeesPage() {
     }
   }
 
-  async function toggle(employee: Employee): Promise<void> {
+  function beginEdit(employee: Employee): void {
+    setEditing(employee);
+    setStatusEmployee(null);
+    setHistoryState(null);
+    setEditAssignments(
+      employee.organizationAssignments.map((assignment) => ({
+        key: assignment.id,
+        branchId: assignment.branchId,
+        departmentId: assignment.departmentId,
+        positionId: assignment.positionId ?? '',
+        managerEmployeeId: assignment.managerEmployeeId ?? '',
+        isPrimary: assignment.isPrimary,
+      })),
+    );
+    setTimeout(() => document.getElementById('employee-edit-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  function updateEditAssignment(
+    index: number,
+    field: 'branchId' | 'departmentId' | 'positionId' | 'managerEmployeeId',
+    value: string,
+  ): void {
+    setEditAssignments((current) =>
+      current.map((assignment, assignmentIndex) =>
+        assignmentIndex === index ? { ...assignment, [field]: value } : assignment,
+      ),
+    );
+  }
+
+  function makePrimary(index: number): void {
+    setEditAssignments((current) =>
+      current.map((assignment, assignmentIndex) => ({
+        ...assignment,
+        isPrimary: assignmentIndex === index,
+      })),
+    );
+  }
+
+  function addEditAssignment(): void {
+    setEditAssignments((current) => [
+      ...current,
+      {
+        key: crypto.randomUUID(),
+        branchId: '',
+        departmentId: '',
+        positionId: '',
+        managerEmployeeId: '',
+        isPrimary: current.length === 0,
+      },
+    ]);
+  }
+
+  function removeEditAssignment(index: number): void {
+    setEditAssignments((current) => {
+      if (current.length === 1) return current;
+      const next = current.filter((_, assignmentIndex) => assignmentIndex !== index);
+      if (!next.some((assignment) => assignment.isPrimary)) {
+        next[0] = { ...next[0], isPrimary: true };
+      }
+      return next;
+    });
+  }
+
+  async function submitEdit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!editing) return;
+    setSaving(true);
     setError('');
-    await apiRequest(`/employees/${employee.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ isActive: !employee.isActive }),
-    })
-      .then(load)
-      .catch((caught: Error) => setError(caught.message));
+    setMessage('');
+    const data = new FormData(event.currentTarget);
+    const value = (key: string) => String(data.get(key) ?? '');
+    try {
+      await apiRequest(`/employees/${editing.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          fullName: value('fullName'),
+          employeeType: value('employeeType'),
+          phone: value('phone') || null,
+          hireDate: value('hireDate') || null,
+          organizationAssignments: editAssignments.map((assignment) => ({
+            branchId: assignment.branchId,
+            departmentId: assignment.departmentId,
+            positionId: assignment.positionId || undefined,
+            managerEmployeeId: assignment.managerEmployeeId || undefined,
+            isPrimary: assignment.isPrimary,
+          })),
+          scopeBranchIds: data.getAll('scopeBranchIds').map(String),
+        }),
+      });
+      setEditing(null);
+      setMessage(`Đã cập nhật hồ sơ ${editing.fullName}.`);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể cập nhật nhân viên.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitStatus(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!statusEmployee) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    const data = new FormData(event.currentTarget);
+    const nextIsActive = !statusEmployee.isActive;
+    try {
+      await apiRequest(`/employees/${statusEmployee.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          isActive: nextIsActive,
+          effectiveDate: data.get('effectiveDate'),
+          reason: data.get('reason'),
+        }),
+      });
+      setMessage(
+        nextIsActive
+          ? `Đã khôi phục hồ sơ ${statusEmployee.fullName}. Nhân viên cần đăng nhập lại trên thiết bị.`
+          : `Đã ghi nhận ${statusEmployee.fullName} ngừng làm việc và thu hồi các phiên đăng nhập.`,
+      );
+      setStatusEmployee(null);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể thay đổi trạng thái nhân viên.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function viewHistory(employee: Employee): Promise<void> {
+    setEditing(null);
+    setStatusEmployee(null);
+    setHistoryState({ employee, data: null });
+    setError('');
+    try {
+      const data = await apiRequest<EmployeeHistory>(`/employees/${employee.id}/history`);
+      setHistoryState({ employee, data });
+      setTimeout(() => document.getElementById('employee-history-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    } catch (caught) {
+      setHistoryState(null);
+      setError(caught instanceof Error ? caught.message : 'Không thể tải lịch sử nhân viên.');
+    }
   }
 
   async function createLookup(
@@ -241,6 +431,225 @@ export default function EmployeesPage() {
           <span>Phạm vi vận hành</span>
         </article>
       </section>
+
+      {canManage && editing && (
+        <section className="editor-panel employee-detail-panel" id="employee-edit-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="mono">{editing.employeeCode}</span>
+              <h2>Sửa hồ sơ {editing.fullName}</h2>
+              <p>Mã nhân viên và tài khoản đăng nhập được giữ nguyên để bảo toàn lịch sử.</p>
+            </div>
+            <button aria-label="Đóng biểu mẫu sửa" className="icon-button" onClick={() => setEditing(null)} type="button">
+              <X aria-hidden="true" size={18} />
+            </button>
+          </div>
+          <form className="form-grid" key={editing.id} onSubmit={submitEdit}>
+            <label>
+              Họ và tên
+              <input defaultValue={editing.fullName} name="fullName" required />
+            </label>
+            <label>
+              Loại nhân viên
+              <select defaultValue={editing.employeeType} name="employeeType">
+                <option value="OFFICE">Văn phòng (Office)</option>
+                <option value="TECHNICAL">Kỹ thuật / Hiện trường</option>
+              </select>
+            </label>
+            <label>
+              Số điện thoại
+              <input defaultValue={editing.phone ?? ''} name="phone" />
+            </label>
+            <label>
+              Ngày vào làm
+              <input defaultValue={editing.hireDate?.slice(0, 10) ?? ''} name="hireDate" type="date" />
+            </label>
+            <label>
+              Tài khoản đăng nhập
+              <input disabled value={editing.accountEmail ?? 'Chưa có tài khoản'} />
+            </label>
+            <label>
+              Vai trò hiện tại
+              <input disabled value={editing.accountRoles.join(', ') || 'Không có'} />
+            </label>
+
+            <fieldset className="assignment-editor span-2">
+              <legend>Phân công tổ chức đang hiệu lực</legend>
+              <div className="assignment-editor-list">
+                {editAssignments.map((assignment, index) => (
+                  <div className="assignment-editor-row" key={assignment.key}>
+                    <label>
+                      Chi nhánh
+                      <select
+                        onChange={(event) => updateEditAssignment(index, 'branchId', event.target.value)}
+                        required
+                        value={assignment.branchId}
+                      >
+                        <option value="">Chọn chi nhánh</option>
+                        {branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Phòng ban
+                      <select
+                        onChange={(event) => updateEditAssignment(index, 'departmentId', event.target.value)}
+                        required
+                        value={assignment.departmentId}
+                      >
+                        <option value="">Chọn phòng ban</option>
+                        {departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Chức vụ
+                      <select
+                        onChange={(event) => updateEditAssignment(index, 'positionId', event.target.value)}
+                        value={assignment.positionId}
+                      >
+                        <option value="">Chưa phân chức vụ</option>
+                        {positions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      Quản lý trực tiếp
+                      <select
+                        onChange={(event) => updateEditAssignment(index, 'managerEmployeeId', event.target.value)}
+                        value={assignment.managerEmployeeId}
+                      >
+                        <option value="">Chưa chỉ định</option>
+                        {items?.filter((item) => item.isActive && item.id !== editing.id).map((item) => (
+                          <option key={item.id} value={item.id}>{item.fullName} · {item.employeeCode}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="check-inline primary-assignment-check">
+                      <input
+                        checked={assignment.isPrimary}
+                        name="primaryAssignment"
+                        onChange={() => makePrimary(index)}
+                        type="radio"
+                      />
+                      Phân công chính
+                    </label>
+                    <button
+                      aria-label="Xóa phân công"
+                      className="icon-button danger-action"
+                      disabled={editAssignments.length === 1}
+                      onClick={() => removeEditAssignment(index)}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="secondary-button compact-button" onClick={addEditAssignment} type="button">
+                <Plus aria-hidden="true" size={16} /> Thêm phân công
+              </button>
+            </fieldset>
+
+            <label className="span-2">
+              Phạm vi chi nhánh quản lý
+              <select defaultValue={editing.scopeBranchIds} multiple name="scopeBranchIds" size={Math.max(3, branches.length)}>
+                {branches.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <small>Chỉ áp dụng cho tài khoản có vai trò Quản lý khu vực.</small>
+            </label>
+            <div className="form-actions span-2">
+              <button className="secondary-button" onClick={() => setEditing(null)} type="button">Hủy</button>
+              <button className="primary-button" disabled={saving}>
+                <Save aria-hidden="true" size={16} /> {saving ? 'Đang lưu…' : 'Lưu thay đổi'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {canManage && statusEmployee && (
+        <section className="editor-panel employee-detail-panel" id="employee-status-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="mono">{statusEmployee.employeeCode}</span>
+              <h2>{statusEmployee.isActive ? 'Ghi nhận ngừng làm việc' : 'Khôi phục hồ sơ nhân viên'}</h2>
+              <p>
+                {statusEmployee.isActive
+                  ? 'Tài khoản, phiên đăng nhập và thiết bị push sẽ bị vô hiệu hóa ngay sau khi xác nhận.'
+                  : 'Tài khoản được mở lại nhưng nhân viên phải đăng nhập lại trên thiết bị.'}
+              </p>
+            </div>
+            <button aria-label="Đóng biểu mẫu trạng thái" className="icon-button" onClick={() => setStatusEmployee(null)} type="button">
+              <X aria-hidden="true" size={18} />
+            </button>
+          </div>
+          <form className="form-grid compact" onSubmit={submitStatus}>
+            <label>
+              {statusEmployee.isActive ? 'Ngày ngừng làm việc' : 'Ngày khôi phục'}
+              <input defaultValue={today()} max={today()} name="effectiveDate" required type="date" />
+            </label>
+            <label>
+              Lý do
+              <textarea
+                minLength={5}
+                name="reason"
+                placeholder={statusEmployee.isActive ? 'VD: Kết thúc hợp đồng lao động' : 'VD: Khôi phục do thao tác nhầm'}
+                required
+              />
+            </label>
+            <div className="form-actions span-2">
+              <button className="secondary-button" onClick={() => setStatusEmployee(null)} type="button">Hủy</button>
+              <button className={statusEmployee.isActive ? 'danger-button' : 'primary-button'} disabled={saving}>
+                {statusEmployee.isActive ? <Archive aria-hidden="true" size={16} /> : <RotateCcw aria-hidden="true" size={16} />}
+                {saving ? 'Đang xử lý…' : statusEmployee.isActive ? 'Xác nhận ngừng làm việc' : 'Khôi phục hồ sơ'}
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {historyState && (
+        <section className="editor-panel employee-detail-panel" id="employee-history-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="mono">{historyState.employee.employeeCode}</span>
+              <h2>Lịch sử {historyState.employee.fullName}</h2>
+              <p>Thay đổi hồ sơ và các giai đoạn phân công tổ chức được giữ để đối soát.</p>
+            </div>
+            <button aria-label="Đóng lịch sử" className="icon-button" onClick={() => setHistoryState(null)} type="button">
+              <X aria-hidden="true" size={18} />
+            </button>
+          </div>
+          {historyState.data === null ? <LoadingState /> : (
+            <div className="employee-history-grid">
+              <div>
+                <h3>Nhật ký hồ sơ</h3>
+                {historyState.data.events.length === 0 ? <p className="muted-copy">Chưa có thay đổi được ghi nhận.</p> : (
+                  <div className="audit-list">
+                    {historyState.data.events.map((event) => (
+                      <div key={event.id}>
+                        <strong>{historyActionLabels[event.action] ?? event.action}</strong>
+                        <span>{event.actorName} · {new Date(event.createdAt).toLocaleString('vi-VN')}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <h3>Lịch sử phân công</h3>
+                <div className="audit-list">
+                  {historyState.data.organizationAssignments.map((assignment) => (
+                    <div key={assignment.id}>
+                      <strong>{assignment.branchName} · {assignment.departmentName}{assignment.isPrimary ? ' · Chính' : ''}</strong>
+                      <span>
+                        {assignment.positionName ?? 'Chưa phân chức vụ'} · {assignment.effectiveFrom ?? '—'} → {assignment.effectiveTo ?? 'Hiện tại'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {canManage && <details className="editor-panel" open>
         <summary><span className="summary-label"><Plus aria-hidden="true" size={16} />Thêm hồ sơ nhân viên mới</span></summary>
@@ -496,15 +905,35 @@ export default function EmployeesPage() {
                   </td>
                   <td>
                     <StatusBadge value={item.isActive ? 'ACTIVE' : 'INACTIVE'} />
+                    {!item.isActive && (
+                      <small className="employee-status-note">
+                        {item.employmentEndDate ? `Từ ${item.employmentEndDate}` : ''}
+                        {item.employmentStatusReason ? ` · ${item.employmentStatusReason}` : ''}
+                      </small>
+                    )}
                   </td>
                   {canManage && <td>
-                    <button
-                      className="table-action"
-                      onClick={() => void toggle(item)}
-                      type="button"
-                    >
-                      {item.isActive ? 'Tạm khóa' : 'Mở khóa'}
-                    </button>
+                    <div className="action-group employee-actions">
+                      <button className="table-action" onClick={() => beginEdit(item)} type="button">
+                        <Pencil aria-hidden="true" size={14} /> Sửa
+                      </button>
+                      <button className="table-action" onClick={() => void viewHistory(item)} type="button">
+                        <History aria-hidden="true" size={14} /> Lịch sử
+                      </button>
+                      <button
+                        className={`table-action ${item.isActive ? 'danger-action' : 'success-action'}`}
+                        onClick={() => {
+                          setEditing(null);
+                          setHistoryState(null);
+                          setStatusEmployee(item);
+                          setTimeout(() => document.getElementById('employee-status-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                        }}
+                        type="button"
+                      >
+                        {item.isActive ? <Archive aria-hidden="true" size={14} /> : <RotateCcw aria-hidden="true" size={14} />}
+                        {item.isActive ? 'Ngừng làm việc' : 'Khôi phục'}
+                      </button>
+                    </div>
                   </td>}
                 </tr>
               ))}
