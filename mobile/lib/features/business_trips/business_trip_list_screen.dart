@@ -465,7 +465,7 @@ class _TripCard extends StatelessWidget {
                   children: <Widget>[
                     Expanded(
                       child: Text(
-                        trip.code,
+                        'MÃ PHIẾU · ${trip.code}',
                         style: const TextStyle(
                           color: brandPurple,
                           fontSize: 12,
@@ -491,6 +491,22 @@ class _TripCard extends StatelessWidget {
                   trip.siteAddress,
                   style: const TextStyle(color: Color(0xFF675D69)),
                 ),
+                if (trip.customerName != null) ...<Widget>[
+                  const SizedBox(height: 9),
+                  _CompactTripInfo(
+                    icon: Icons.apartment_outlined,
+                    text: 'Khách hàng · ${trip.customerName}',
+                  ),
+                ],
+                if (trip.responsibleEmployeeName != null) ...<Widget>[
+                  const SizedBox(height: 7),
+                  _CompactTripInfo(
+                    icon: Icons.badge_outlined,
+                    text: trip.isResponsible
+                        ? 'Bạn là người phụ trách'
+                        : 'Phụ trách · ${trip.responsibleEmployeeName}',
+                  ),
+                ],
                 const SizedBox(height: 11),
                 Text(
                   '${_dateTime(trip.startAt)} → ${_dateTime(trip.endAt)}',
@@ -540,6 +556,16 @@ class _TripSummary extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            Text(
+              'MÃ PHIẾU · ${trip.code}',
+              style: const TextStyle(
+                color: brandPurple,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: .8,
+              ),
+            ),
+            const SizedBox(height: 9),
             Row(
               children: <Widget>[
                 Expanded(
@@ -561,16 +587,17 @@ class _TripSummary extends StatelessWidget {
               icon: Icons.schedule_outlined,
               text: '${_dateTime(trip.startAt)} → ${_dateTime(trip.endAt)}',
             ),
-            if (trip.customerName != null)
-              _InfoLine(
-                icon: Icons.apartment_outlined,
-                text: trip.customerName!,
-              ),
             if (trip.responsibleEmployeeName != null)
               _InfoLine(
                 icon: Icons.badge_outlined,
-                text: 'Phụ trách: ${trip.responsibleEmployeeName}',
+                text: trip.isResponsible
+                    ? 'Người phụ trách: ${trip.responsibleEmployeeName} (Bạn)'
+                    : 'Người phụ trách: ${trip.responsibleEmployeeName}',
               ),
+            if (_hasCustomerDetails(trip)) ...<Widget>[
+              const SizedBox(height: 14),
+              _CustomerDetails(trip: trip),
+            ],
             const Divider(height: 26),
             Text(trip.content, style: const TextStyle(height: 1.5)),
             if (trip.startedAt != null) ...<Widget>[
@@ -585,6 +612,99 @@ class _TripSummary extends StatelessWidget {
               const SizedBox(height: 10),
               Text('Ghi chú: ${trip.note}',
                   style: const TextStyle(fontSize: 12, height: 1.4)),
+            ],
+          ],
+        ),
+      );
+}
+
+class _CompactTripInfo extends StatelessWidget {
+  const _CompactTripInfo({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: <Widget>[
+          Icon(icon, color: brandOrange, size: 16),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Color(0xFF675D69),
+                fontSize: 11.5,
+              ),
+            ),
+          ),
+        ],
+      );
+}
+
+class _CustomerDetails extends StatelessWidget {
+  const _CustomerDetails({required this.trip});
+
+  final BusinessTripAssignment trip;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F4F8),
+          border: Border.all(color: const Color(0xFFE8DFE9)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Row(
+              children: <Widget>[
+                Icon(Icons.apartment_outlined, color: brandPurple, size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'KHÁCH HÀNG / PHÒNG KHÁM',
+                  style: TextStyle(
+                    color: brandPurple,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .6,
+                  ),
+                ),
+              ],
+            ),
+            if (trip.customerName case final String customerName) ...<Widget>[
+              const SizedBox(height: 9),
+              Text(
+                customerName,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+            if (trip.customerAddress case final String address) ...<Widget>[
+              const SizedBox(height: 6),
+              Text(
+                address,
+                style: const TextStyle(
+                  color: Color(0xFF675D69),
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+            if (trip.customerContactName
+                case final String contactName) ...<Widget>[
+              const SizedBox(height: 7),
+              Text(
+                'Liên hệ: $contactName',
+                style: const TextStyle(fontSize: 12),
+              ),
+            ],
+            if (trip.customerContactPhone case final String phone) ...<Widget>[
+              const SizedBox(height: 4),
+              Text(
+                'Điện thoại: $phone',
+                style: const TextStyle(fontSize: 12),
+              ),
             ],
           ],
         ),
@@ -781,6 +901,13 @@ class _EmptyTrips extends StatelessWidget {
 
 String _dateTime(DateTime value) =>
     DateFormat('dd/MM/yyyy HH:mm').format(value);
+
+bool _hasCustomerDetails(BusinessTripAssignment trip) => <String?>[
+      trip.customerName,
+      trip.customerAddress,
+      trip.customerContactName,
+      trip.customerContactPhone,
+    ].any((String? value) => value?.trim().isNotEmpty ?? false);
 
 String _statusLabel(String status) => switch (status) {
       'ASSIGNED' => 'ĐÃ GIAO',

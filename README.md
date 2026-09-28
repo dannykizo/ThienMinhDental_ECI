@@ -22,7 +22,7 @@ Customer alignment C3 đã bổ sung lịch mặc định theo chi nhánh/phòng
 
 Customer alignment C4 gồm giải trình bắt buộc, metadata ảnh/GPS đầy đủ, audit điều chỉnh chỉ Admin, khóa kỳ và quyền mở lại của Kế toán trưởng. Mobile đã có danh sách yêu cầu, phản hồi, chụp/upload ảnh và hàng đợi offline; Admin Web mở được ảnh bằng chứng qua endpoint có xác thực.
 
-Customer alignment C5 hoàn thiện vận hành phiếu công tác: người phụ trách, chỉnh sửa phiếu nháp, giao/hủy có lý do, trạng thái riêng từng thành viên, GPS lúc bắt đầu/kết thúc, ảnh bằng chứng theo cấu hình và audit. Mobile đã có danh sách/chi tiết phân công, bắt đầu/hoàn tất bằng một mẫu GPS, ghi chú và upload ảnh thật; Admin Web mở được ảnh bằng chứng.
+Customer alignment C5 hoàn thiện vận hành phiếu công tác: người phụ trách, chỉnh sửa phiếu nháp, giao/hủy có lý do, trạng thái riêng từng thành viên, GPS lúc bắt đầu/kết thúc, ảnh bằng chứng theo cấu hình và audit. Customer review CR3 bổ sung mã phiếu tự sinh, danh bạ khách hàng và lọc nhân sự cho Admin; Mobile hiển thị mã Backend cấp, khách hàng/địa chỉ/liên hệ và vai trò người phụ trách trong từng phân công. Mobile bắt đầu/hoàn tất bằng một mẫu GPS, ghi chú và upload ảnh thật; Admin Web mở được ảnh bằng chứng.
 
 Customer review CR3 bổ sung mã phiếu tự sinh `CT-YYYYMM-NNNN` tại Backend, bộ lọc người phụ trách/thành viên theo phòng ban và danh bạ khách hàng/phòng khám có tìm kiếm, sửa, ngừng sử dụng/khôi phục. Khách hàng đã phát sinh phiếu không bị xóa khỏi lịch sử.
 

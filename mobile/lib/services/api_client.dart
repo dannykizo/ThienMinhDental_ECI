@@ -178,6 +178,7 @@ class BusinessTripAssignment {
     required this.code,
     required this.completedAt,
     required this.content,
+    required this.customerAddress,
     required this.customerContactName,
     required this.customerContactPhone,
     required this.customerName,
@@ -185,6 +186,7 @@ class BusinessTripAssignment {
     required this.evidenceCapturedAt,
     required this.evidenceImageReference,
     required this.id,
+    required this.isResponsible,
     required this.note,
     required this.participationStatus,
     required this.requiresPhoto,
@@ -204,6 +206,7 @@ class BusinessTripAssignment {
             ? null
             : DateTime.parse(json['completedAt'] as String).toLocal(),
         content: json['content'] as String,
+        customerAddress: json['customerAddress'] as String?,
         customerContactName: json['customerContactName'] as String?,
         customerContactPhone: json['customerContactPhone'] as String?,
         customerName: json['customerName'] as String?,
@@ -213,6 +216,7 @@ class BusinessTripAssignment {
             : DateTime.parse(json['evidenceCapturedAt'] as String).toLocal(),
         evidenceImageReference: json['evidenceImageReference'] as String?,
         id: json['id'] as String,
+        isResponsible: json['isResponsible'] as bool? ?? false,
         note: json['note'] as String?,
         participationStatus: json['participationStatus'] as String,
         requiresPhoto: json['requiresPhoto'] as bool? ?? false,
@@ -230,6 +234,7 @@ class BusinessTripAssignment {
   final String code;
   final DateTime? completedAt;
   final String content;
+  final String? customerAddress;
   final String? customerContactName;
   final String? customerContactPhone;
   final String? customerName;
@@ -237,6 +242,7 @@ class BusinessTripAssignment {
   final DateTime? evidenceCapturedAt;
   final String? evidenceImageReference;
   final String id;
+  final bool isResponsible;
   final String? note;
   final String participationStatus;
   final bool requiresPhoto;

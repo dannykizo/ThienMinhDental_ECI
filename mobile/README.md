@@ -12,7 +12,7 @@ Trước khi check-in lần đầu, Admin phải cấu hình tọa độ văn ph
 
 Giải trình được tải từ Backend theo tài khoản hiện tại. Với bất thường GPS, app bắt buộc chụp ảnh và lấy một mẫu vị trí cùng thời điểm. Khi upload/gửi phản hồi gặp lỗi mạng, nội dung và đường dẫn ảnh được giữ trong secure storage/vùng dữ liệu riêng của app, sau đó tự thử lại khi màn hình được mở lại hoặc người dùng bấm `Gửi lại`.
 
-Tab `Công tác` hiển thị các phiếu được giao cho nhân viên hiện tại. App lấy đúng một mẫu GPS khi bắt đầu và một mẫu mới khi hoàn tất; ghi chú là tùy chọn, còn ảnh hiện trường chỉ bắt buộc khi Admin cấu hình phiếu yêu cầu ảnh. Ảnh được upload qua endpoint có xác thực và có thể mở từ Admin Web.
+Tab `Công tác` hiển thị các phiếu được giao cho nhân viên hiện tại bằng mã `CT-YYYYMM-NNNN` do Backend tự cấp. Danh sách và chi tiết trình bày địa điểm thực hiện, khách hàng/phòng khám, thông tin liên hệ, người phụ trách và đánh dấu khi chính người đang đăng nhập là người phụ trách; app không sửa khách hàng hoặc danh sách thành viên. App lấy đúng một mẫu GPS khi bắt đầu và một mẫu mới khi hoàn tất; ghi chú là tùy chọn, còn ảnh hiện trường chỉ bắt buộc khi Admin cấu hình phiếu yêu cầu ảnh. Ảnh được upload qua endpoint có xác thực và có thể mở từ Admin Web.
 
 Tab `Nghỉ phép` chỉ hiển thị đơn của tài khoản nhân viên hiện tại, số dư theo chính sách và các lựa chọn thời lượng được Backend cho phép. Nhân viên có thể gửi đơn cả ngày, nửa ngày hoặc theo giờ và hủy đơn khi trạng thái/chính sách cho phép. Trùng ngày, kỳ công đã khóa, số phút sử dụng, số dư và quyền hủy đều do Backend quyết định; app không tự suy diễn chính sách.
 
