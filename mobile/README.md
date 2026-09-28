@@ -4,9 +4,9 @@ Flutter app dành cho nhân viên. Vertical slice hiện tại gồm đăng nh�
 
 App không điền sẵn tài khoản demo vào form đăng nhập. Màn khởi động có thương hiệu được hiển thị ngay trong lúc khôi phục phiên an toàn; các tab dùng chung theme, touch target, feedback và hỗ trợ Android autofill/predictive back.
 
-Access token sống 15 phút. Refresh token xoay vòng được lưu trong secure storage để duy trì phiên tối đa 30 ngày và gắn với một định danh thiết bị. Đăng nhập trên máy mới tự thu hồi phiên máy cũ; thao tác đăng xuất gọi Backend để ghi lịch sử trước khi xóa token trên máy.
+Access token sống 15 phút. Refresh token xoay vòng được lưu trong secure storage để duy trì phiên tối đa 30 ngày và gắn với một định danh thiết bị. Đăng nhập trên máy mới tự thu hồi phiên máy cũ; thao tác đăng xuất gọi Backend để ghi lịch sử trước khi xóa token trên máy. App chỉ xóa token khi Backend xác nhận phiên không còn hợp lệ. Nếu Backend hoặc mạng tạm gián đoạn lúc khởi động, token vẫn được giữ và màn đăng nhập cung cấp thao tác thử khôi phục; phiên bị Admin thu hồi, thay thế bởi thiết bị khác hoặc khóa theo vòng đời nhân viên được thông báo rõ cho người dùng.
 
-Vị trí chỉ được lấy khi người dùng chủ động bấm check-in hoặc check-out. App không theo dõi GPS nền hoặc liên tục. Thời gian chính thức, geofence, trạng thái đủ công, OT và risk flags đều do Backend quyết định. Trang chủ hiển thị rõ trạng thái lấy GPS/gửi dữ liệu, độ chính xác của mẫu GPS vừa dùng và hướng dẫn phục hồi quyền vị trí.
+Vị trí chỉ được lấy khi người dùng chủ động bấm check-in hoặc check-out. App không theo dõi GPS nền hoặc liên tục. Thời gian chính thức, geofence, trạng thái đủ công, OT và risk flags đều do Backend quyết định. Sau mỗi lần chấm công thành công, trang chủ hiển thị vị trí văn phòng được Backend đối chiếu, khoảng cách tới tâm, bán kính cấu hình (tối đa 100 m), độ chính xác GPS và trạng thái trong/ngoài vùng; app không tự tính geofence hoặc hiển thị tọa độ chi tiết.
 
 Trước khi check-in lần đầu, Admin phải cấu hình tọa độ văn phòng chính thức và gắn vị trí với đúng chi nhánh trên Admin Web. Development seed không tự tạo tọa độ giả.
 
@@ -14,7 +14,7 @@ Giải trình được tải từ Backend theo tài khoản hiện tại. Với 
 
 Tab `Công tác` hiển thị các phiếu được giao cho nhân viên hiện tại. App lấy đúng một mẫu GPS khi bắt đầu và một mẫu mới khi hoàn tất; ghi chú là tùy chọn, còn ảnh hiện trường chỉ bắt buộc khi Admin cấu hình phiếu yêu cầu ảnh. Ảnh được upload qua endpoint có xác thực và có thể mở từ Admin Web.
 
-Tab `Nghỉ phép` chỉ hiển thị đơn của tài khoản nhân viên hiện tại và cho phép gửi đơn nghỉ nguyên ngày hoặc theo khoảng ngày. Trùng ngày, kỳ công đã khóa và trạng thái duyệt/từ chối đều do Backend quyết định. App chưa suy diễn số dư phép, nghỉ nửa ngày/theo giờ hoặc quyền hủy đơn.
+Tab `Nghỉ phép` chỉ hiển thị đơn của tài khoản nhân viên hiện tại, số dư theo chính sách và các lựa chọn thời lượng được Backend cho phép. Nhân viên có thể gửi đơn cả ngày, nửa ngày hoặc theo giờ và hủy đơn khi trạng thái/chính sách cho phép. Trùng ngày, kỳ công đã khóa, số phút sử dụng, số dư và quyền hủy đều do Backend quyết định; app không tự suy diễn chính sách.
 
 Tab `Hộp thư` đồng bộ thông báo theo tài khoản, bao gồm tin gửi toàn công ty, hiển thị badge chưa đọc, ghi nhận thời điểm mở và yêu cầu nhân viên xác nhận riêng với tin quan trọng. Chạm push sẽ điều hướng về hộp thư; khi app đang mở, tin mới được báo bằng snackbar và danh sách được làm mới. App hiển thị riêng trường hợp chưa cấu hình Firebase, chưa cấp quyền thông báo hoặc chưa nhận được token thiết bị.
 

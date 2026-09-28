@@ -29,6 +29,35 @@ interface TodayAttendanceView {
   isFullWorkday: boolean;
 }
 
+interface OfficeGeofenceResult {
+  accuracyThresholdMeters: number;
+  address: string;
+  distanceMeters: number;
+  id: string;
+  name: string;
+  radiusMeters: number;
+}
+
+interface AttendanceRiskResult {
+  flags: string[];
+  officeLocation: OfficeGeofenceResult | null;
+}
+
+interface RecordedAttendanceEventView {
+  accuracyMeters: number | null;
+  accuracyThresholdMeters: number | null;
+  allowedRadiusMeters: number | null;
+  attendanceType: string;
+  distanceMeters: number | null;
+  eventType: string;
+  id: string;
+  officeLocationAddress: string | null;
+  officeLocationId: string | null;
+  officeLocationName: string | null;
+  riskFlags: string[];
+  serverTime: Date;
+}
+
 @Injectable()
 export class AttendanceService {
   constructor(
@@ -38,7 +67,7 @@ export class AttendanceService {
     @InjectRepository(AttendanceExplanationEntity) private readonly explanations: Repository<AttendanceExplanationEntity>,
   ) {}
 
-  async record(user: AuthenticatedUserView, input: RecordAttendanceEventDto): Promise<AttendanceEventEntity> {
+  async record(user: AuthenticatedUserView, input: RecordAttendanceEventDto): Promise<RecordedAttendanceEventView> {
     if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
     if (input.latitude === undefined || input.longitude === undefined) throw new BadRequestException({ code: 'LOCATION_REQUIRED', message: 'Vị trí là bắt buộc tại sự kiện chấm công.' });
     if (input.attendanceType === 'BUSINESS_TRIP') throw new BadRequestException({ code: 'USE_BUSINESS_TRIP_WORKFLOW', message: 'Chấm công công tác phải dùng thao tác bắt đầu/kết thúc trên phiếu được giao.' });
@@ -51,7 +80,7 @@ export class AttendanceService {
     if (input.eventType === 'CHECK_OUT' && (!last || last.eventType !== 'CHECK_IN')) throw new ConflictException({ code: 'CHECK_IN_REQUIRED', message: 'Phải check-in trước khi check-out.' });
 
     const risk = await this.evaluateRisk(user.employeeId, input, now);
-    return this.events.save(this.events.create({
+    const event = await this.events.save(this.events.create({
       employeeId: user.employeeId,
       eventType: input.eventType,
       attendanceType: input.attendanceType,
@@ -62,8 +91,22 @@ export class AttendanceService {
       accuracyMeters: input.accuracyMeters ?? null,
       riskFlags: risk.flags,
       businessTripId: input.businessTripId ?? null,
-      officeLocationId: risk.officeLocationId,
+      officeLocationId: risk.officeLocation?.id ?? null,
     }));
+    return {
+      accuracyMeters: event.accuracyMeters ?? null,
+      accuracyThresholdMeters: risk.officeLocation?.accuracyThresholdMeters ?? null,
+      allowedRadiusMeters: risk.officeLocation?.radiusMeters ?? null,
+      attendanceType: event.attendanceType,
+      distanceMeters: risk.officeLocation?.distanceMeters ?? null,
+      eventType: event.eventType,
+      id: event.id,
+      officeLocationAddress: risk.officeLocation?.address ?? null,
+      officeLocationId: event.officeLocationId ?? null,
+      officeLocationName: risk.officeLocation?.name ?? null,
+      riskFlags: event.riskFlags,
+      serverTime: event.serverTime,
+    };
   }
 
   async list(date?: string): Promise<unknown[]> {
@@ -168,9 +211,9 @@ export class AttendanceService {
     return this.explanations.save(item);
   }
 
-  private async evaluateRisk(employeeId: string, input: RecordAttendanceEventDto, now: Date): Promise<{ flags: string[]; officeLocationId: string | null }> {
+  private async evaluateRisk(employeeId: string, input: RecordAttendanceEventDto, now: Date): Promise<AttendanceRiskResult> {
     const flags: string[] = [];
-    let officeLocationId: string | null = null;
+    let officeLocation: OfficeGeofenceResult | null = null;
     if (input.mockLocationSignal) flags.push(AttendanceRiskFlag.MockLocationSignal);
     if (input.attendanceType === 'OFFICE') {
       const date = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
@@ -191,13 +234,21 @@ export class AttendanceService {
         .map((candidate) => ({ candidate, geofence: new OfficeGeofence({ latitude: candidate.latitude, longitude: candidate.longitude }, candidate.radiusMeters) }))
         .sort((a, b) => a.geofence.distanceFromCenter(point) - b.geofence.distanceFromCenter(point))[0];
       if (!location) throw new NotFoundException({ code: 'OFFICE_LOCATION_NOT_CONFIGURED', message: 'Chưa cấu hình vị trí làm việc cho chi nhánh của nhân viên.' });
-      officeLocationId = location.candidate.id;
-      if (!location.geofence.contains(point)) flags.push(AttendanceRiskFlag.OutsideGeofence);
+      const distanceMeters = location.geofence.distanceFromCenter(point);
+      officeLocation = {
+        accuracyThresholdMeters: location.candidate.accuracyThresholdMeters,
+        address: location.candidate.address,
+        distanceMeters,
+        id: location.candidate.id,
+        name: location.candidate.name,
+        radiusMeters: location.candidate.radiusMeters,
+      };
+      if (distanceMeters > location.candidate.radiusMeters) flags.push(AttendanceRiskFlag.OutsideGeofence);
       if (input.accuracyMeters !== undefined && input.accuracyMeters > location.candidate.accuracyThresholdMeters) flags.push(AttendanceRiskFlag.LowAccuracy);
     }
     const schedule = await this.resolveSchedule(employeeId, now.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' }));
     if (schedule) flags.push(...evaluateScheduleRisk(input.eventType, localMinutes(now), schedule));
-    return { flags, officeLocationId };
+    return { flags, officeLocation };
   }
 
   private async resolveSchedule(employeeId: string, date: string): Promise<ScheduleRow | null> {

@@ -24,7 +24,7 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 6. Backend gửi email cảnh báo tới danh sách Admin cấu hình qua SMTP. Nếu SMTP chưa cấu hình hoặc gửi lỗi, đăng nhập vẫn thành công và trạng thái được lưu trong lịch sử để Admin nhìn thấy.
 7. Chỉ Admin được xem toàn bộ lịch sử đăng nhập/đăng xuất và chủ động đăng xuất thiết bị.
 
-**Implementation status:** C2 sử dụng bảng `auth_sessions`, endpoint `/auth/refresh`, endpoint quản trị `/auth/admin/sessions` và trang `Tài khoản & thiết bị`. Không triển khai tự đăng ký hoặc tự khôi phục mật khẩu vì tài khoản do Admin cung cấp.
+**Implementation status:** C2 sử dụng bảng `auth_sessions`, endpoint `/auth/refresh`, endpoint quản trị `/auth/admin/sessions` và trang `Tài khoản & thiết bị`. Mobile chỉ xóa token khi Backend từ chối phiên; lỗi mạng tạm thời giữ nguyên phiên để người dùng thử khôi phục lại. Khi Admin thu hồi thiết bị, tài khoản đăng nhập trên máy khác hoặc hồ sơ ngừng hoạt động, app quay về đăng nhập và hiển thị rõ nhóm nguyên nhân thay vì im lặng xóa phiên. Không triển khai tự đăng ký hoặc tự khôi phục mật khẩu vì tài khoản do Admin cung cấp.
 
 ## Admin Web — schedule and workplace configuration
 
@@ -61,7 +61,7 @@ Không dùng `ABSENT` như một nút trong event flow. `ABSENT`, `LEAVE` và `B
 5. Mobile hiển thị một trong các UI state: `SUBMITTING`, `SUCCESS`, `REVIEW_REQUIRED`, `FAILED`.
 6. Không giữ foreground/background location sau khi request hoàn tất.
 
-**Implementation status:** Backend đã có persistence, geofence/accuracy/mock-location validation và risk flags. Mobile Android xin permission khi người dùng bấm chấm công, lấy đúng một mẫu GPS, gửi device time/accuracy/mock-location signal và hiển thị trạng thái ngày từ Backend. Không theo dõi vị trí nền hoặc liên tục.
+**Implementation status:** Backend đã có persistence, geofence/accuracy/mock-location validation và risk flags. Mobile Android xin permission khi người dùng bấm chấm công, lấy đúng một mẫu GPS, gửi device time/accuracy/mock-location signal và hiển thị trạng thái ngày từ Backend. Sau mỗi sự kiện thành công, Backend trả vị trí văn phòng được đối chiếu, khoảng cách đo được, bán kính cấu hình và ngưỡng accuracy; Mobile chỉ trình bày kết quả này, không tự tính geofence và không hiển thị tọa độ chi tiết. Không theo dõi vị trí nền hoặc liên tục.
 
 ## Admin Web + Mobile API — attendance explanation and period closing
 

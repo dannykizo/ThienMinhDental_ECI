@@ -18,6 +18,20 @@ const Color brandOrange = Color(0xFFED851F);
 const Color brandCanvas = Color(0xFFF8F5F8);
 const Color brandInk = Color(0xFF2D2330);
 
+enum SessionNoticeKind { connection, ended }
+
+class SessionNotice {
+  const SessionNotice({
+    required this.kind,
+    required this.message,
+    required this.title,
+  });
+
+  final SessionNoticeKind kind;
+  final String message;
+  final String title;
+}
+
 class SessionController extends ChangeNotifier {
   SessionController({
     required this.api,
@@ -39,6 +53,8 @@ class SessionController extends ChangeNotifier {
   final FlutterSecureStorage _storage;
   SessionUser? user;
   bool isBootstrapping = true;
+  bool isRestoringSession = false;
+  SessionNotice? sessionNotice;
   int inboxNavigationRequest = 0;
   int foregroundAnnouncementRequest = 0;
   int announcementRevision = 0;
@@ -47,7 +63,7 @@ class SessionController extends ChangeNotifier {
 
   Future<void> bootstrap() async {
     try {
-      await restore();
+      await _restoreSession();
       await initializePush();
     } finally {
       isBootstrapping = false;
@@ -82,7 +98,20 @@ class SessionController extends ChangeNotifier {
     }
   }
 
-  Future<void> restore() async {
+  Future<void> retryRestoreSession() async {
+    if (isRestoringSession) return;
+    isRestoringSession = true;
+    sessionNotice = null;
+    notifyListeners();
+    try {
+      await _restoreSession();
+    } finally {
+      isRestoringSession = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _restoreSession() async {
     final String? savedBaseUrl = await _storage.read(key: _apiBaseUrlKey);
     if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
       api.baseUrl = savedBaseUrl;
@@ -93,8 +122,27 @@ class SessionController extends ChangeNotifier {
 
     try {
       user = await api.me();
+      sessionNotice = null;
+    } on ApiException catch (error) {
+      if (error.code == 'NETWORK_UNAVAILABLE') {
+        sessionNotice = const SessionNotice(
+          kind: SessionNoticeKind.connection,
+          title: 'Chưa thể kiểm tra phiên',
+          message:
+              'Kết nối Backend đang gián đoạn. Phiên trên thiết bị vẫn được giữ; hãy kiểm tra mạng rồi thử lại.',
+        );
+        return;
+      }
+      if (api.accessToken != null || api.refreshToken != null) {
+        await _expireSession(error);
+      }
     } on Object {
-      await _clearSession();
+      sessionNotice = const SessionNotice(
+        kind: SessionNoticeKind.connection,
+        title: 'Chưa thể khôi phục phiên',
+        message:
+            'Ứng dụng chưa thể xác minh phiên hiện tại. Dữ liệu đăng nhập vẫn được giữ để bạn thử lại.',
+      );
     }
   }
 
@@ -113,6 +161,7 @@ class SessionController extends ChangeNotifier {
       deviceName: '${Platform.operatingSystem} · Thiên Minh Workforce',
     );
     user = result.user;
+    sessionNotice = null;
     await _storeTokens(result.accessToken, result.refreshToken);
     await pushNotifications.syncCurrentToken();
     await refreshUnreadAnnouncements();
@@ -134,6 +183,7 @@ class SessionController extends ChangeNotifier {
       // Đăng xuất cục bộ vẫn phải thành công khi thiết bị mất mạng.
     }
     await _clearSession();
+    sessionNotice = null;
     notifyListeners();
   }
 
@@ -171,10 +221,23 @@ class SessionController extends ChangeNotifier {
     await _storage.write(key: _refreshTokenKey, value: refreshToken);
   }
 
-  Future<void> _expireSession() async {
+  Future<void> _expireSession(ApiException error) async {
+    sessionNotice = SessionNotice(
+      kind: SessionNoticeKind.ended,
+      title: _sessionEndedTitle(error.code),
+      message: error.message,
+    );
     await _clearSession();
     notifyListeners();
   }
+
+  String _sessionEndedTitle(String? code) => switch (code) {
+        'SESSION_USER_UNAVAILABLE' ||
+        'ACCOUNT_INACTIVE' =>
+          'Tài khoản đã ngừng hoạt động',
+        'SESSION_REVOKED' => 'Phiên đã bị thu hồi',
+        _ => 'Phiên đăng nhập đã kết thúc',
+      };
 
   Future<void> _clearSession() async {
     user = null;

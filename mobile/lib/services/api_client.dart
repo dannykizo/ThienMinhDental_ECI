@@ -99,19 +99,38 @@ class TodayAttendance {
 
 class RecordedAttendanceEvent {
   const RecordedAttendanceEvent({
+    required this.accuracyMeters,
+    required this.accuracyThresholdMeters,
+    required this.allowedRadiusMeters,
+    required this.distanceMeters,
     required this.eventType,
+    required this.officeLocationAddress,
+    required this.officeLocationName,
     required this.riskFlags,
     required this.serverTime,
   });
 
   factory RecordedAttendanceEvent.fromJson(Map<String, dynamic> json) =>
       RecordedAttendanceEvent(
+        accuracyMeters: (json['accuracyMeters'] as num?)?.toDouble(),
+        accuracyThresholdMeters:
+            (json['accuracyThresholdMeters'] as num?)?.toDouble(),
+        allowedRadiusMeters: (json['allowedRadiusMeters'] as num?)?.toDouble(),
+        distanceMeters: (json['distanceMeters'] as num?)?.toDouble(),
         eventType: json['eventType'] as String,
+        officeLocationAddress: json['officeLocationAddress'] as String?,
+        officeLocationName: json['officeLocationName'] as String?,
         riskFlags: (json['riskFlags'] as List<dynamic>).cast<String>(),
         serverTime: DateTime.parse(json['serverTime'] as String).toLocal(),
       );
 
+  final double? accuracyMeters;
+  final double? accuracyThresholdMeters;
+  final double? allowedRadiusMeters;
+  final double? distanceMeters;
   final String eventType;
+  final String? officeLocationAddress;
+  final String? officeLocationName;
   final List<String> riskFlags;
   final DateTime serverTime;
 }
@@ -272,7 +291,8 @@ class EmployeeLeaveRequest {
         id: json['id'] as String,
         leaveType: json['leaveType'] as String,
         policyId: json['policyId'] as String,
-        policyName: json['policyName'] as String? ?? json['leaveType'] as String,
+        policyName:
+            json['policyName'] as String? ?? json['leaveType'] as String,
         reason: json['reason'] as String,
         requestedMinutes: (json['requestedMinutes'] as num?)?.toInt() ?? 480,
         reviewedAt: json['reviewedAt'] == null
@@ -421,6 +441,8 @@ typedef TokensUpdated = Future<void> Function(
   String refreshToken,
 );
 
+typedef SessionEnded = Future<void> Function(ApiException error);
+
 class ApiClient {
   ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? kDefaultApiBaseUrl;
 
@@ -428,7 +450,7 @@ class ApiClient {
   String? accessToken;
   String? refreshToken;
   TokensUpdated? onTokensUpdated;
-  Future<void> Function()? onSessionExpired;
+  SessionEnded? onSessionExpired;
   Future<void>? _refreshing;
 
   Future<LoginSession> login(
@@ -529,6 +551,11 @@ class ApiClient {
         path: '/attendance/evidence',
       );
     }
+    if (response.statusCode == 401) {
+      final ApiException error = _sessionErrorFrom(response);
+      await _endSession(error);
+      throw error;
+    }
     final Map<String, dynamic> json = _parseResponse(response);
     final String? reference = json['reference'] as String?;
     if (reference == null || reference.isEmpty) {
@@ -588,6 +615,11 @@ class ApiClient {
         filePath: filePath,
         path: '/business-trips/evidence',
       );
+    }
+    if (response.statusCode == 401) {
+      final ApiException error = _sessionErrorFrom(response);
+      await _endSession(error);
+      throw error;
     }
     final Map<String, dynamic> json = _parseResponse(response);
     final String? reference = json['reference'] as String?;
@@ -769,6 +801,11 @@ class ApiClient {
       await _refreshAccessToken();
       response = await _sendRequest(path, body: body, method: method);
     }
+    if (response.statusCode == 401 && allowRefresh) {
+      final ApiException error = _sessionErrorFrom(response);
+      await _endSession(error);
+      throw error;
+    }
     return _parseResponse(response);
   }
 
@@ -777,6 +814,11 @@ class ApiClient {
     if (response.statusCode == 401 && refreshToken != null) {
       await _refreshAccessToken();
       response = await _sendRequest(path, method: 'GET');
+    }
+    if (response.statusCode == 401) {
+      final ApiException error = _sessionErrorFrom(response);
+      await _endSession(error);
+      throw error;
     }
     final dynamic decoded = _decodeResponse(response);
     if (decoded is! List<dynamic>) {
@@ -801,30 +843,37 @@ class ApiClient {
   }
 
   Future<void> _performRefresh() async {
-    try {
-      final String? currentRefreshToken = refreshToken;
-      if (currentRefreshToken == null) throw _sessionExpired();
-      final http.Response response = await _sendRequest(
-        '/auth/refresh',
-        body: <String, dynamic>{'refreshToken': currentRefreshToken},
-        includeAccessToken: false,
-        method: 'POST',
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw _sessionExpired();
-      }
-      final Map<String, dynamic> json = _parseResponse(response);
-      final String nextAccessToken = _requiredToken(json, 'accessToken');
-      final String nextRefreshToken = _requiredToken(json, 'refreshToken');
-      accessToken = nextAccessToken;
-      refreshToken = nextRefreshToken;
-      await onTokensUpdated?.call(nextAccessToken, nextRefreshToken);
-    } on Object {
-      accessToken = null;
-      refreshToken = null;
-      await onSessionExpired?.call();
-      rethrow;
+    final String? currentRefreshToken = refreshToken;
+    if (currentRefreshToken == null) {
+      final ApiException error = _sessionExpired();
+      await _endSession(error);
+      throw error;
     }
+
+    final http.Response response = await _sendRequest(
+      '/auth/refresh',
+      body: <String, dynamic>{'refreshToken': currentRefreshToken},
+      includeAccessToken: false,
+      method: 'POST',
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final ApiException error = _sessionErrorFrom(response);
+      await _endSession(error);
+      throw error;
+    }
+
+    final Map<String, dynamic> json = _parseResponse(response);
+    final String nextAccessToken = _requiredToken(json, 'accessToken');
+    final String nextRefreshToken = _requiredToken(json, 'refreshToken');
+    accessToken = nextAccessToken;
+    refreshToken = nextRefreshToken;
+    await onTokensUpdated?.call(nextAccessToken, nextRefreshToken);
+  }
+
+  Future<void> _endSession(ApiException error) async {
+    accessToken = null;
+    refreshToken = null;
+    await onSessionExpired?.call(error);
   }
 
   Future<http.Response> _sendRequest(
@@ -936,6 +985,31 @@ class ApiClient {
     }
     return decoded;
   }
+
+  ApiException _sessionErrorFrom(http.Response response) {
+    try {
+      _decodeResponse(response);
+    } on ApiException catch (error) {
+      return ApiException(
+        _sessionEndedMessage(error.code),
+        code: error.code ?? 'SESSION_EXPIRED',
+        status: error.status ?? 401,
+      );
+    } on Object {
+      // Phản hồi 401 không hợp lệ vẫn phải kết thúc phiên an toàn.
+    }
+    return _sessionExpired();
+  }
+
+  String _sessionEndedMessage(String? code) => switch (code) {
+        'SESSION_USER_UNAVAILABLE' ||
+        'ACCOUNT_INACTIVE' =>
+          'Tài khoản đã ngừng hoạt động. Vui lòng liên hệ Admin nếu cần khôi phục.',
+        'SESSION_REVOKED' =>
+          'Phiên đăng nhập đã bị thu hồi bởi Admin hoặc bởi một lần đăng nhập trên thiết bị khác.',
+        _ =>
+          'Phiên đăng nhập không còn hiệu lực. Tài khoản có thể đã bị thu hồi, đăng nhập trên thiết bị khác hoặc ngừng hoạt động.',
+      };
 
   String _requiredToken(Map<String, dynamic> json, String key) {
     final String? token = json[key] as String?;

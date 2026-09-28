@@ -23,6 +23,7 @@ class _AttendanceHomeState extends State<AttendanceHome> {
   bool _loading = true;
   bool _retryAttendance = false;
   double? _lastAccuracyMeters;
+  RecordedAttendanceEvent? _lastEvent;
   _AttendanceActionState _actionState = _AttendanceActionState.idle;
   _LocationRecovery? _locationRecovery;
 
@@ -61,6 +62,7 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       _error = null;
       _success = null;
       _retryAttendance = true;
+      _lastEvent = null;
       _locationRecovery = null;
       _actionState = _AttendanceActionState.locating;
     });
@@ -121,6 +123,7 @@ class _AttendanceHomeState extends State<AttendanceHome> {
           _success = event.eventType == 'CHECK_IN'
               ? 'Check-in thành công lúc ${DateFormat('HH:mm').format(event.serverTime)}.'
               : 'Check-out thành công lúc ${DateFormat('HH:mm').format(event.serverTime)}.';
+          _lastEvent = event;
           _retryAttendance = false;
         });
       }
@@ -247,7 +250,10 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                   onRecord: _record,
                   today: _today!,
                 ),
-              if (_lastAccuracyMeters != null) ...<Widget>[
+              if (_lastEvent != null) ...<Widget>[
+                const SizedBox(height: 12),
+                _GeofenceResultCard(event: _lastEvent!),
+              ] else if (_lastAccuracyMeters != null) ...<Widget>[
                 const SizedBox(height: 12),
                 _GpsSampleNotice(accuracyMeters: _lastAccuracyMeters!),
               ],
@@ -685,6 +691,155 @@ class _GpsSampleNotice extends StatelessWidget {
                 'Mẫu GPS vừa dùng có độ chính xác khoảng ±${accuracyMeters.round()} m. Tọa độ không hiển thị trên màn hình.',
                 style: const TextStyle(
                     color: Color(0xFF77582F), fontSize: 11, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _GeofenceResultCard extends StatelessWidget {
+  const _GeofenceResultCard({required this.event});
+
+  final RecordedAttendanceEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool outside = event.riskFlags.contains('OUTSIDE_GEOFENCE');
+    final bool lowAccuracy = event.riskFlags.contains('LOW_ACCURACY');
+    final Color statusColor = outside
+        ? const Color(0xFFB85143)
+        : lowAccuracy
+            ? const Color(0xFF9A6B22)
+            : const Color(0xFF338865);
+    final Color backgroundColor = outside
+        ? const Color(0xFFFFF0EE)
+        : lowAccuracy
+            ? const Color(0xFFFFF7EA)
+            : const Color(0xFFEAF7F1);
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        border: Border.all(color: statusColor.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                outside
+                    ? Icons.location_off_outlined
+                    : Icons.location_on_outlined,
+                color: statusColor,
+                size: 21,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  outside
+                      ? 'Ngoài vùng chấm công'
+                      : lowAccuracy
+                          ? 'Trong vùng, GPS cần đối soát'
+                          : 'Trong vùng chấm công',
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (event.officeLocationName case final String name)
+            _GeofenceMetric(
+              icon: Icons.apartment_rounded,
+              label: 'Vị trí đối chiếu',
+              value: name,
+            ),
+          if (event.officeLocationAddress case final String address)
+            _GeofenceMetric(
+              icon: Icons.signpost_outlined,
+              label: 'Địa chỉ',
+              value: address,
+            ),
+          if (event.distanceMeters case final double distance)
+            _GeofenceMetric(
+              icon: Icons.social_distance_rounded,
+              label: 'Khoảng cách tới tâm',
+              value: '${distance.round()} m',
+            ),
+          if (event.allowedRadiusMeters case final double radius)
+            _GeofenceMetric(
+              icon: Icons.radio_button_checked_rounded,
+              label: 'Bán kính cho phép',
+              value: '${radius.round()} m',
+            ),
+          if (event.accuracyMeters case final double accuracy)
+            _GeofenceMetric(
+              icon: Icons.gps_fixed_rounded,
+              label: 'Độ chính xác GPS',
+              value: '±${accuracy.round()} m',
+              isLast: true,
+            ),
+          const SizedBox(height: 5),
+          const Text(
+            'Kết quả do Backend đối chiếu với cấu hình văn phòng. App không hiển thị tọa độ chi tiết.',
+            style: TextStyle(
+              color: Color(0xFF746A77),
+              fontSize: 10.5,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GeofenceMetric extends StatelessWidget {
+  const _GeofenceMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.isLast = false,
+  });
+
+  final IconData icon;
+  final bool isLast;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.only(bottom: isLast ? 0 : 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(icon, size: 16, color: const Color(0xFF746A77)),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 124,
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Color(0xFF746A77),
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: Color(0xFF2F2732),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],

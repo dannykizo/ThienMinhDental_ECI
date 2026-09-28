@@ -96,6 +96,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: brandInk.withValues(alpha: 0.64),
                           height: 1.55),
                     ),
+                    if (widget.session.sessionNotice != null) ...<Widget>[
+                      const SizedBox(height: 24),
+                      _SessionNoticeBox(
+                        notice: widget.session.sessionNotice!,
+                        restoring: widget.session.isRestoringSession,
+                        onRetry: widget.session.sessionNotice!.kind ==
+                                SessionNoticeKind.connection
+                            ? widget.session.retryRestoreSession
+                            : null,
+                      ),
+                    ],
                     const SizedBox(height: 34),
                     _FieldLabel(
                       label: 'Email',
@@ -106,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                         autocorrect: false,
                         controller: _email,
-                        enabled: !_busy,
+                        enabled: !_busy && !widget.session.isRestoringSession,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
                         validator: (String? value) {
@@ -125,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         autofillHints: const <String>[AutofillHints.password],
                         autocorrect: false,
                         controller: _password,
-                        enabled: !_busy,
+                        enabled: !_busy && !widget.session.isRestoringSession,
                         enableSuggestions: false,
                         obscureText: _obscure,
                         onFieldSubmitted: (_) => _submit(),
@@ -156,7 +167,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       height: 54,
                       child: FilledButton(
-                        onPressed: _busy ? null : _submit,
+                        onPressed: _busy || widget.session.isRestoringSession
+                            ? null
+                            : _submit,
                         style: FilledButton.styleFrom(
                           backgroundColor: brandPurple,
                           shape: RoundedRectangleBorder(
@@ -319,4 +332,85 @@ class _MessageBox extends StatelessWidget {
             style: const TextStyle(
                 color: Color(0xFF8E3D33), fontSize: 13, height: 1.4)),
       );
+}
+
+class _SessionNoticeBox extends StatelessWidget {
+  const _SessionNoticeBox({
+    required this.notice,
+    required this.onRetry,
+    required this.restoring,
+  });
+
+  final SessionNotice notice;
+  final Future<void> Function()? onRetry;
+  final bool restoring;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isConnection = notice.kind == SessionNoticeKind.connection;
+    final Color accent =
+        isConnection ? const Color(0xFF9A681A) : const Color(0xFF9D433A);
+    final Color background =
+        isConnection ? const Color(0xFFFFF6E5) : const Color(0xFFFFEFEC);
+
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: background,
+          border: Border(left: BorderSide(color: accent, width: 3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  isConnection
+                      ? Icons.cloud_off_outlined
+                      : Icons.lock_clock_outlined,
+                  color: accent,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    notice.title,
+                    style: TextStyle(
+                      color: accent,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              notice.message,
+              style: TextStyle(color: accent, fontSize: 13, height: 1.45),
+            ),
+            if (onRetry != null) ...<Widget>[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: restoring ? null : onRetry,
+                icon: restoring
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh_rounded, size: 18),
+                label:
+                    Text(restoring ? 'Đang kết nối…' : 'Thử khôi phục phiên'),
+                style: OutlinedButton.styleFrom(foregroundColor: accent),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
