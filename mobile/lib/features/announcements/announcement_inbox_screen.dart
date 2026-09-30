@@ -139,10 +139,12 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
               if (!widget.session.pushNotifications.configured) ...<Widget>[
                 const SizedBox(height: 16),
                 const _PushNotConfigured(),
-              ] else if (!widget.session.pushNotifications.permissionGranted) ...<Widget>[
+              ] else if (!widget
+                  .session.pushNotifications.permissionGranted) ...<Widget>[
                 const SizedBox(height: 16),
                 const _PushPermissionRequired(),
-              ] else if (widget.session.pushNotifications.currentToken == null) ...<Widget>[
+              ] else if (widget.session.pushNotifications.currentToken ==
+                  null) ...<Widget>[
                 const SizedBox(height: 16),
                 const _PushTokenPending(),
               ],
@@ -164,10 +166,15 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
                 ..._items.map(
                   (EmployeeAnnouncement item) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _AnnouncementCard(
-                      item: item,
-                      onTap: () => _open(item),
-                    ),
+                    child: item.isDisciplinary
+                        ? _DisciplinaryCard(
+                            item: item,
+                            onTap: () => _open(item),
+                          )
+                        : _AnnouncementCard(
+                            item: item,
+                            onTap: () => _open(item),
+                          ),
                   ),
                 ),
             ],
@@ -223,6 +230,7 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final EmployeeAnnouncement item = widget.announcement;
+    final bool disciplinary = item.isDisciplinary;
     final bool needsAcknowledgement = item.requiresAcknowledgement &&
         item.acknowledgedAt == null &&
         !_acknowledged;
@@ -231,6 +239,27 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: <Widget>[
+          if (disciplinary)
+            _DisciplinaryWarningBanner(
+              item: item,
+              required: needsAcknowledgement,
+            )
+          else
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _AudienceBadge(item: item),
+                  ),
+                ),
+                if (item.requiresAcknowledgement) ...<Widget>[
+                  const SizedBox(width: 8),
+                  const _ImportantBadge(),
+                ],
+              ],
+            ),
+          const SizedBox(height: 12),
           Text(
             DateFormat('dd/MM/yyyy · HH:mm').format(item.publishedAt),
             style: const TextStyle(
@@ -242,7 +271,7 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            item.title,
+            disciplinary ? _disciplinaryTitle(item) : item.title,
             style: const TextStyle(
               fontFamily: 'serif',
               fontSize: 29,
@@ -262,6 +291,8 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
               style: const TextStyle(fontSize: 15, height: 1.65),
             ),
           ),
+          const SizedBox(height: 14),
+          if (!disciplinary) _AudienceNotice(item: item),
           if (item.requiresAcknowledgement) ...<Widget>[
             const SizedBox(height: 18),
             _AcknowledgementNotice(done: !needsAcknowledgement),
@@ -326,19 +357,21 @@ class _AnnouncementCard extends StatelessWidget {
               Row(
                 children: <Widget>[
                   Expanded(
-                    child: Text(
-                      DateFormat('dd/MM/yyyy · HH:mm').format(item.publishedAt),
-                      style: const TextStyle(
-                        color: Color(0xFF8B7F8E),
-                        fontSize: 10,
-                      ),
-                    ),
+                    child: _AudienceBadge(item: item),
                   ),
                   _InboxStatus(
                     unread: unread,
                     waitingForAcknowledgement: waitingForAcknowledgement,
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                DateFormat('dd/MM/yyyy · HH:mm').format(item.publishedAt),
+                style: const TextStyle(
+                  color: Color(0xFF8B7F8E),
+                  fontSize: 10,
+                ),
               ),
               const SizedBox(height: 9),
               Text(
@@ -436,6 +469,112 @@ class _AcknowledgementNotice extends StatelessWidget {
                     ? 'Bạn đã xác nhận thông báo quan trọng này.'
                     : 'Thông báo quan trọng này yêu cầu xác nhận đã đọc.',
                 style: const TextStyle(fontSize: 12, height: 1.4),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _AudienceBadge extends StatelessWidget {
+  const _AudienceBadge({required this.item});
+
+  final EmployeeAnnouncement item;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        color: item.audienceType == 'ALL'
+            ? const Color(0xFFE8F3ED)
+            : const Color(0xFFF2EAF5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(
+              _audienceIcon(item.audienceType),
+              size: 13,
+              color: item.audienceType == 'ALL'
+                  ? const Color(0xFF287A55)
+                  : brandPurple,
+            ),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                _audienceLabel(item),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: item.audienceType == 'ALL'
+                      ? const Color(0xFF287A55)
+                      : brandPurple,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ImportantBadge extends StatelessWidget {
+  const _ImportantBadge();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        color: const Color(0xFFFFF0DD),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.priority_high_rounded, color: brandOrange, size: 13),
+            SizedBox(width: 4),
+            Text(
+              'QUAN TRỌNG',
+              style: TextStyle(
+                color: Color(0xFF8D5D1B),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _AudienceNotice extends StatelessWidget {
+  const _AudienceNotice({required this.item});
+
+  final EmployeeAnnouncement item;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+          color: item.audienceType == 'ALL'
+              ? const Color(0xFFEAF7F1)
+              : const Color(0xFFF8F4F8),
+          border: Border.all(
+            color: item.audienceType == 'ALL'
+                ? const Color(0xFFC7E4D7)
+                : const Color(0xFFE8DFE9),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(
+              _audienceIcon(item.audienceType),
+              color: item.audienceType == 'ALL'
+                  ? const Color(0xFF287A55)
+                  : brandPurple,
+              size: 20,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                _audienceDescription(item),
+                style: const TextStyle(fontSize: 12, height: 1.45),
               ),
             ),
           ],
@@ -573,5 +712,358 @@ class _PushTokenPending extends StatelessWidget {
             ),
           ],
         ),
+      );
+}
+
+IconData _audienceIcon(String audienceType) => switch (audienceType) {
+      'ALL' => Icons.campaign_outlined,
+      'DEPARTMENT' => Icons.groups_outlined,
+      _ => Icons.person_outline_rounded,
+    };
+
+String _audienceLabel(EmployeeAnnouncement item) => switch (item.audienceType) {
+      'ALL' => 'TOÀN CÔNG TY',
+      'DEPARTMENT' when item.targetName?.isNotEmpty == true =>
+        'PHÒNG BAN · ${item.targetName}',
+      'DEPARTMENT' => 'PHÒNG BAN',
+      _ => 'CÁ NHÂN',
+    };
+
+String _audienceDescription(EmployeeAnnouncement item) =>
+    switch (item.audienceType) {
+      'ALL' =>
+        'Thông báo này được gửi tới toàn bộ nhân viên đang hoạt động tại thời điểm phát hành.',
+      'DEPARTMENT' when item.targetName?.isNotEmpty == true =>
+        'Thông báo dành cho phòng ban ${item.targetName}.',
+      'DEPARTMENT' => 'Thông báo dành cho phòng ban được Admin chỉ định.',
+      _ => 'Thông báo này được gửi riêng tới tài khoản nhân viên của bạn.',
+    };
+
+const Color _disciplinaryWarningSurface = Color(0xFFFFF4EC);
+const Color _disciplinaryRevokedSurface = Color(0xFFF2F0F3);
+const Color _disciplinaryRevokedAccent = Color(0xFF8B7F8E);
+
+String _disciplineLabel(String? type) => switch (type) {
+      'WARNING' => 'Cảnh cáo',
+      'SUSPENSION' => 'Đình chỉ',
+      'DISCIPLINARY_ACTION' => 'Xử lý vi phạm',
+      _ => 'Quyết định kỷ luật',
+    };
+
+IconData _disciplineIcon(String? type) => switch (type) {
+      'WARNING' => Icons.warning_amber_rounded,
+      'SUSPENSION' => Icons.pause_circle_outline_rounded,
+      _ => Icons.gavel_rounded,
+    };
+
+Color _disciplineColor(String? type) => switch (type) {
+      'WARNING' => brandOrange,
+      'SUSPENSION' => const Color(0xFFB3261E),
+      'DISCIPLINARY_ACTION' => const Color(0xFF8B3A62),
+      _ => brandPurple,
+    };
+
+String _disciplinaryTitle(EmployeeAnnouncement item) =>
+    item.disciplinaryTitle?.isNotEmpty == true
+        ? item.disciplinaryTitle!
+        : item.title;
+
+String _disciplinaryEffectivePeriod(EmployeeAnnouncement item) {
+  final DateTime? from = item.disciplinaryEffectiveFrom;
+  final DateTime? to = item.disciplinaryEffectiveTo;
+  if (from == null) return 'Không xác định';
+  final DateFormat format = DateFormat('dd/MM/yyyy');
+  final String fromText = format.format(from);
+  if (to == null) return 'Từ $fromText';
+  return '$fromText - ${format.format(to)}';
+}
+
+class _DisciplinaryCard extends StatelessWidget {
+  const _DisciplinaryCard({required this.item, required this.onTap});
+
+  final EmployeeAnnouncement item;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool unread = item.readAt == null;
+    final bool waitingForAcknowledgement =
+        item.requiresAcknowledgement && item.acknowledgedAt == null;
+    final bool revoked = item.disciplinaryRevoked;
+    final Color accent =
+        revoked ? _disciplinaryRevokedAccent : _disciplineColor(item.disciplinaryActionType);
+    final String category = _disciplineLabel(item.disciplinaryActionType);
+    return Material(
+      color: revoked ? _disciplinaryRevokedSurface : _disciplinaryWarningSurface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: accent, width: unread ? 2 : 1),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(left: BorderSide(color: accent, width: 5)),
+          ),
+          padding: const EdgeInsets.all(17),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        Icon(
+                          revoked
+                              ? Icons.history_rounded
+                              : _disciplineIcon(item.disciplinaryActionType),
+                          size: 15,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            revoked
+                                ? 'THU HỒI · ${category.toUpperCase()}'
+                                : 'KỶ LUẬT · ${category.toUpperCase()}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _DisciplinaryStatus(
+                    unread: unread,
+                    waitingForAcknowledgement: waitingForAcknowledgement,
+                    revoked: revoked,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                DateFormat('dd/MM/yyyy · HH:mm').format(item.publishedAt),
+                style: const TextStyle(color: Color(0xFF8B7F8E), fontSize: 10),
+              ),
+              const SizedBox(height: 9),
+              Text(
+                _disciplinaryTitle(item),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'serif',
+                  fontSize: 20,
+                  fontWeight: unread ? FontWeight.w700 : FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: <Widget>[
+                  const Icon(
+                    Icons.event_available_outlined,
+                    size: 14,
+                    color: Color(0xFF6E646F),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      'Hiệu lực: ${_disciplinaryEffectivePeriod(item)}',
+                      style: const TextStyle(
+                        color: Color(0xFF615764),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Icon(Icons.chevron_right_rounded),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DisciplinaryStatus extends StatelessWidget {
+  const _DisciplinaryStatus({
+    required this.unread,
+    required this.waitingForAcknowledgement,
+    required this.revoked,
+  });
+
+  final bool unread;
+  final bool waitingForAcknowledgement;
+  final bool revoked;
+
+  @override
+  Widget build(BuildContext context) {
+    final String label = revoked
+        ? 'ĐÃ THU HỒI'
+        : unread
+            ? 'CHƯA ĐỌC'
+            : waitingForAcknowledgement
+                ? 'CẦN XÁC NHẬN'
+                : 'ĐÃ XÁC NHẬN';
+    final Color background = revoked
+        ? const Color(0xFFECE7EF)
+        : unread
+            ? const Color(0xFFF0E3F4)
+            : waitingForAcknowledgement
+                ? const Color(0xFFFFE7D1)
+                : const Color(0xFFE8F3ED);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      color: background,
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _DisciplinaryWarningBanner extends StatelessWidget {
+  const _DisciplinaryWarningBanner({required this.item, required this.required});
+
+  final EmployeeAnnouncement item;
+  final bool required;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool revoked = item.disciplinaryRevoked;
+    final Color accent =
+        revoked ? _disciplinaryRevokedAccent : _disciplineColor(item.disciplinaryActionType);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: revoked ? _disciplinaryRevokedSurface : _disciplinaryWarningSurface,
+        border: Border(left: BorderSide(color: accent, width: 4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Icon(
+                revoked
+                    ? Icons.history_rounded
+                    : _disciplineIcon(item.disciplinaryActionType),
+                color: accent,
+                size: 22,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      revoked ? 'THÔNG BÁO THU HỒI' : 'QUYẾT ĐỊNH KỶ LUẬT',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _disciplineLabel(item.disciplinaryActionType),
+                      style: TextStyle(
+                        fontFamily: 'serif',
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
+                        color: accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          _DisciplinaryMetaRow(
+            icon: Icons.event_available_outlined,
+            label: 'Hiệu lực',
+            value: _disciplinaryEffectivePeriod(item),
+          ),
+          if (revoked) ...<Widget>[
+            const SizedBox(height: 8),
+            const _DisciplinaryMetaRow(
+              icon: Icons.info_outline_rounded,
+              label: 'Trạng thái',
+              value: 'Quyết định đã bị thu hồi',
+            ),
+          ],
+          if (required) ...<Widget>[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(11),
+              color: Colors.white,
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(Icons.assignment_turned_in_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Quyết định này bắt buộc bạn xác nhận đã đọc.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DisciplinaryMetaRow extends StatelessWidget {
+  const _DisciplinaryMetaRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Icon(icon, size: 16, color: const Color(0xFF6E646F)),
+          const SizedBox(width: 7),
+          Text(
+            '$label: ',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF6E646F),
+            ),
+          ),
+          Expanded(
+            child: Text(value, style: const TextStyle(fontSize: 12, height: 1.4)),
+          ),
+        ],
       );
 }

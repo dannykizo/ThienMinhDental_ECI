@@ -404,13 +404,21 @@ class LeaveBalance {
 class EmployeeAnnouncement {
   const EmployeeAnnouncement({
     required this.acknowledgedAt,
+    required this.audienceType,
     required this.body,
     required this.deliveredAt,
     required this.id,
     required this.publishedAt,
     required this.readAt,
     required this.requiresAcknowledgement,
+    required this.targetName,
     required this.title,
+    this.source = 'ANNOUNCEMENT',
+    this.disciplinaryActionType,
+    this.disciplinaryEffectiveFrom,
+    this.disciplinaryEffectiveTo,
+    this.disciplinaryTitle,
+    this.disciplinaryRevoked = false,
   });
 
   factory EmployeeAnnouncement.fromJson(Map<String, dynamic> json) =>
@@ -418,6 +426,7 @@ class EmployeeAnnouncement {
         acknowledgedAt: json['acknowledgedAt'] == null
             ? null
             : DateTime.parse(json['acknowledgedAt'] as String).toLocal(),
+        audienceType: json['audienceType'] as String? ?? 'EMPLOYEE',
         body: json['body'] as String,
         deliveredAt: json['deliveredAt'] == null
             ? null
@@ -429,17 +438,40 @@ class EmployeeAnnouncement {
             : DateTime.parse(json['readAt'] as String).toLocal(),
         requiresAcknowledgement:
             json['requiresAcknowledgement'] as bool? ?? false,
+        targetName: json['targetName'] as String?,
         title: json['title'] as String,
+        source: json['source'] as String? ?? 'ANNOUNCEMENT',
+        disciplinaryActionType: json['disciplinaryActionType'] as String?,
+        disciplinaryEffectiveFrom: json['disciplinaryEffectiveFrom'] == null
+            ? null
+            : DateTime.parse(json['disciplinaryEffectiveFrom'] as String)
+                .toLocal(),
+        disciplinaryEffectiveTo: json['disciplinaryEffectiveTo'] == null
+            ? null
+            : DateTime.parse(json['disciplinaryEffectiveTo'] as String).toLocal(),
+        disciplinaryTitle: json['disciplinaryTitle'] as String?,
+        disciplinaryRevoked: json['disciplinaryRevoked'] as bool? ?? false,
       );
 
   final DateTime? acknowledgedAt;
+  final String audienceType;
   final String body;
   final DateTime? deliveredAt;
   final String id;
   final DateTime publishedAt;
   final DateTime? readAt;
   final bool requiresAcknowledgement;
+  final String? targetName;
   final String title;
+  final String source;
+  final String? disciplinaryActionType;
+  final DateTime? disciplinaryEffectiveFrom;
+  final DateTime? disciplinaryEffectiveTo;
+  final String? disciplinaryTitle;
+  final bool disciplinaryRevoked;
+
+  bool get isDisciplinary =>
+      source == 'DISCIPLINARY' && disciplinaryActionType != null;
 }
 
 typedef TokensUpdated = Future<void> Function(

@@ -123,7 +123,7 @@
 - Only `ADMIN` can create, edit, issue or revoke. Draft fields become immutable after issue; revocation requires a reason and every mutation is recorded in `configuration_audit_logs`.
 - Suspension requires a bounded effective period. Other actions may be open-ended. CR5 deliberately does not mutate payroll, attendance, employment status or authentication because those consequences require separate approved policies.
 - Issue creates an important individual announcement and recipient inside the same database transaction. Push delivery runs after commit through the existing tracked FCM adapter, so provider failure never removes the decision or inbox message.
-- Admin Web provides drafting, filtering, issue/revoke confirmation and immutable history. Mobile consumes the generated message through the existing inbox/read/acknowledgement flow; no duplicate disciplinary business rule exists in the client.
+- Admin Web provides drafting, filtering, issue/revoke confirmation and immutable history. `/api/announcements/mine` exposes additive structural fields on the generated message (`source`, `disciplinaryActionType`, `disciplinaryEffectiveFrom`, `disciplinaryEffectiveTo`, `disciplinaryTitle`, `disciplinaryRevoked`) so Mobile renders a dedicated disciplinary warning card and detail banner — category, effective period and mandatory acknowledgement — instead of inferring them from title/body text. Mobile still reuses the existing inbox/read/acknowledgement flow; no duplicate disciplinary business rule exists in the client.
 
 ### Customer review CR6 — configurable leave policy and balance
 
