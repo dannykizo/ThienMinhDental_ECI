@@ -46,7 +46,7 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       if (mounted) setState(() => _today = today);
     } on ApiException catch (error) {
       if (error.status == 401) {
-        await widget.session.logout();
+        // ApiClient đã kết thúc phiên và giữ đúng thông báo thu hồi/hết hạn.
         return;
       }
       if (mounted) setState(() => _error = error.message);
@@ -222,7 +222,8 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                       height: 1.12,
                       letterSpacing: -0.7)),
               const SizedBox(height: 7),
-              Text(_formatDate(_today?.date),
+              Text(
+                  '${_formatDate(_today?.date)} · ${widget.session.appVersionLabel}',
                   style:
                       const TextStyle(color: Color(0xFF807482), fontSize: 13)),
               const SizedBox(height: 24),

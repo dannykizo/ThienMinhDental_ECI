@@ -140,6 +140,8 @@
 
 - App renders immediately into a branded bootstrap state while secure-session restoration and Backend verification continue asynchronously; credentials are never prefilled in the login form.
 - Login exposes local validation, Android autofill and keyboard-safe scrolling. Shared Material theme standardizes app bars, controls, navigation, snackbar feedback and touch targets across the five employee tabs.
+- Mobile CR7 centralizes API availability into `available`, `offline` and `backendUnavailable`. Radio/network loss, timeout and gateway outage preserve secure tokens and expose a retry banner, while refresh responses proving revocation/expiry clear credentials and retain the exact operational reason on the login screen.
+- App version and build number come from installed package metadata through `package_info_plus`; the UI does not duplicate a hard-coded release value.
 - Android uses a branded launch drawable, disables forced dark-mode distortion and enables predictive-back integration. The debug APK remains intended for internal device verification through local HTTP/ADB reverse, not Play Store distribution.
 - Real-device acceptance covers cold session restore, logout/login validation, all five tabs, detail/form navigation, pull-to-refresh, read/acknowledgement state and absence of Flutter layout/runtime exceptions.
 

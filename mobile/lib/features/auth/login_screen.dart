@@ -211,6 +211,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Text(
+                        'ỨNG DỤNG ${widget.session.appVersionLabel}',
+                        style: const TextStyle(
+                          color: Color(0xFFAAA0AC),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

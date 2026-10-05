@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
 
 const String kDefaultApiBaseUrl = String.fromEnvironment(
@@ -15,9 +17,28 @@ class ApiException implements Exception {
   final String message;
   final int? status;
 
+  bool get isConnectionFailure =>
+      code == 'NETWORK_OFFLINE' ||
+      code == 'BACKEND_TIMEOUT' ||
+      code == 'BACKEND_UNAVAILABLE';
+
+  bool get isRetryable => isConnectionFailure || (status ?? 0) >= 500;
+
+  bool get endsSession =>
+      status == 401 ||
+      status == 403 ||
+      code == 'SESSION_EXPIRED' ||
+      code == 'SESSION_REVOKED' ||
+      code == 'SESSION_USER_UNAVAILABLE' ||
+      code == 'ACCOUNT_INACTIVE' ||
+      code == 'REFRESH_TOKEN_INVALID' ||
+      code == 'REFRESH_TOKEN_REUSED';
+
   @override
   String toString() => message;
 }
+
+enum ApiAvailability { available, offline, backendUnavailable }
 
 class SessionUser {
   const SessionUser({
@@ -448,7 +469,8 @@ class EmployeeAnnouncement {
                 .toLocal(),
         disciplinaryEffectiveTo: json['disciplinaryEffectiveTo'] == null
             ? null
-            : DateTime.parse(json['disciplinaryEffectiveTo'] as String).toLocal(),
+            : DateTime.parse(json['disciplinaryEffectiveTo'] as String)
+                .toLocal(),
         disciplinaryTitle: json['disciplinaryTitle'] as String?,
         disciplinaryRevoked: json['disciplinaryRevoked'] as bool? ?? false,
       );
@@ -480,13 +502,19 @@ typedef TokensUpdated = Future<void> Function(
 );
 
 typedef SessionEnded = Future<void> Function(ApiException error);
+typedef ApiAvailabilityChanged = void Function(ApiAvailability availability);
 
 class ApiClient {
-  ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? kDefaultApiBaseUrl;
+  ApiClient({Connectivity? connectivity, String? baseUrl})
+      : _connectivity = connectivity ?? Connectivity(),
+        baseUrl = baseUrl ?? kDefaultApiBaseUrl;
 
+  final Connectivity _connectivity;
   String baseUrl;
   String? accessToken;
   String? refreshToken;
+  ApiAvailability availability = ApiAvailability.available;
+  ApiAvailabilityChanged? onAvailabilityChanged;
   TokensUpdated? onTokensUpdated;
   SessionEnded? onSessionExpired;
   Future<void>? _refreshing;
@@ -527,6 +555,15 @@ class ApiClient {
   Future<SessionUser> me() async {
     final Map<String, dynamic> json = await _request('/auth/me');
     return SessionUser.fromJson(json['user'] as Map<String, dynamic>);
+  }
+
+  Future<void> checkAvailability() async {
+    final http.Response response = await _sendRequest(
+      '/health',
+      includeAccessToken: false,
+      method: 'GET',
+    );
+    _parseResponse(response);
   }
 
   Future<TodayAttendance> today() async {
@@ -894,7 +931,7 @@ class ApiClient {
       includeAccessToken: false,
       method: 'POST',
     );
-    if (response.statusCode < 200 || response.statusCode >= 300) {
+    if (response.statusCode == 401 || response.statusCode == 403) {
       final ApiException error = _sessionErrorFrom(response);
       await _endSession(error);
       throw error;
@@ -921,18 +958,32 @@ class ApiClient {
     required String method,
   }) async {
     try {
-      return await _send(
+      final http.Response response = await _send(
         baseUrl,
         path,
         body: body,
         includeAccessToken: includeAccessToken,
         method: method,
       );
-    } on Object {
-      throw ApiException(
-        'Không thể kết nối Backend tại $baseUrl. Kiểm tra USB/Wi-Fi và máy chủ.',
-        code: 'NETWORK_UNAVAILABLE',
+      _setAvailability(
+        _isBackendUnavailableStatus(response.statusCode)
+            ? ApiAvailability.backendUnavailable
+            : ApiAvailability.available,
       );
+      return response;
+    } on TimeoutException catch (error) {
+      throw await _connectionException(error, timedOut: true);
+    } on SocketException catch (error) {
+      throw await _connectionException(error);
+    } on http.ClientException catch (error) {
+      throw await _connectionException(error);
+    } on FormatException {
+      throw const ApiException(
+        'Địa chỉ Backend không hợp lệ. Hãy kiểm tra lại cấu hình máy chủ.',
+        code: 'API_CONFIGURATION_INVALID',
+      );
+    } on Object catch (error) {
+      throw await _connectionException(error);
     }
   }
 
@@ -987,14 +1038,23 @@ class ApiClient {
       }
       final http.StreamedResponse streamed =
           await request.send().timeout(const Duration(seconds: 20));
-      return await http.Response.fromStream(streamed);
+      final http.Response response = await http.Response.fromStream(streamed);
+      _setAvailability(
+        _isBackendUnavailableStatus(response.statusCode)
+            ? ApiAvailability.backendUnavailable
+            : ApiAvailability.available,
+      );
+      return response;
     } on ApiException {
       rethrow;
-    } on Object {
-      throw ApiException(
-        'Không thể tải ảnh lên Backend tại $baseUrl.',
-        code: 'NETWORK_UNAVAILABLE',
-      );
+    } on TimeoutException catch (error) {
+      throw await _connectionException(error, timedOut: true);
+    } on SocketException catch (error) {
+      throw await _connectionException(error);
+    } on http.ClientException catch (error) {
+      throw await _connectionException(error);
+    } on Object catch (error) {
+      throw await _connectionException(error);
     }
   }
 
@@ -1010,11 +1070,35 @@ class ApiClient {
   }
 
   dynamic _decodeResponse(http.Response response) {
-    final dynamic decoded =
-        response.body.isEmpty ? <String, dynamic>{} : jsonDecode(response.body);
+    dynamic decoded;
+    try {
+      decoded = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body);
+    } on FormatException {
+      if (_isBackendUnavailableStatus(response.statusCode)) {
+        throw ApiException(
+          'Backend đang tạm gián đoạn. Phiên đăng nhập vẫn được giữ để thử lại.',
+          code: 'BACKEND_UNAVAILABLE',
+          status: response.statusCode,
+        );
+      }
+      throw const ApiException(
+        'Phản hồi API không đúng định dạng.',
+        code: 'INVALID_RESPONSE',
+      );
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final Map<String, dynamic> error =
           decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+      if (_isBackendUnavailableStatus(response.statusCode)) {
+        throw ApiException(
+          error['message'] as String? ??
+              'Backend đang tạm gián đoạn. Phiên đăng nhập vẫn được giữ để thử lại.',
+          code: 'BACKEND_UNAVAILABLE',
+          status: response.statusCode,
+        );
+      }
       throw ApiException(
         error['message'] as String? ?? 'Yêu cầu không thành công.',
         code: error['code'] as String?,
@@ -1022,6 +1106,41 @@ class ApiClient {
       );
     }
     return decoded;
+  }
+
+  Future<ApiException> _connectionException(
+    Object error, {
+    bool timedOut = false,
+  }) async {
+    List<ConnectivityResult> connectivity = const <ConnectivityResult>[];
+    try {
+      connectivity = await _connectivity.checkConnectivity();
+    } on Object {
+      // Nếu plugin không đọc được trạng thái radio, vẫn giữ lỗi Backend có thể thử lại.
+    }
+    if (connectivity.contains(ConnectivityResult.none)) {
+      _setAvailability(ApiAvailability.offline);
+      return const ApiException(
+        'Thiết bị đang mất kết nối mạng. Phiên đăng nhập vẫn được giữ để thử lại.',
+        code: 'NETWORK_OFFLINE',
+      );
+    }
+    _setAvailability(ApiAvailability.backendUnavailable);
+    return ApiException(
+      timedOut
+          ? 'Backend phản hồi quá lâu. Phiên đăng nhập vẫn được giữ để thử lại.'
+          : 'Backend đang tạm ngắt hoặc không thể truy cập. Phiên đăng nhập vẫn được giữ để thử lại.',
+      code: timedOut ? 'BACKEND_TIMEOUT' : 'BACKEND_UNAVAILABLE',
+    );
+  }
+
+  bool _isBackendUnavailableStatus(int status) =>
+      status == 502 || status == 503 || status == 504;
+
+  void _setAvailability(ApiAvailability next) {
+    if (availability == next) return;
+    availability = next;
+    onAvailabilityChanged?.call(next);
   }
 
   ApiException _sessionErrorFrom(http.Response response) {

@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'features/auth/login_screen.dart';
 import 'features/shell/employee_shell.dart';
@@ -40,6 +41,7 @@ class SessionController extends ChangeNotifier {
   }) : _storage = storage {
     api.onTokensUpdated = _storeTokens;
     api.onSessionExpired = _expireSession;
+    api.onAvailabilityChanged = _handleAvailabilityChanged;
     explanationQueue = PendingExplanationQueue(api: api, storage: storage);
   }
 
@@ -53,7 +55,10 @@ class SessionController extends ChangeNotifier {
   final FlutterSecureStorage _storage;
   SessionUser? user;
   bool isBootstrapping = true;
+  bool isCheckingAvailability = false;
   bool isRestoringSession = false;
+  ApiAvailability apiAvailability = ApiAvailability.available;
+  String appVersionLabel = 'Phiên bản chưa xác định';
   SessionNotice? sessionNotice;
   int inboxNavigationRequest = 0;
   int foregroundAnnouncementRequest = 0;
@@ -63,6 +68,7 @@ class SessionController extends ChangeNotifier {
 
   Future<void> bootstrap() async {
     try {
+      await _loadAppVersion();
       await _restoreSession();
       await initializePush();
     } finally {
@@ -124,18 +130,27 @@ class SessionController extends ChangeNotifier {
       user = await api.me();
       sessionNotice = null;
     } on ApiException catch (error) {
-      if (error.code == 'NETWORK_UNAVAILABLE') {
-        sessionNotice = const SessionNotice(
+      if (error.isConnectionFailure) {
+        sessionNotice = SessionNotice(
           kind: SessionNoticeKind.connection,
-          title: 'Chưa thể kiểm tra phiên',
-          message:
-              'Kết nối Backend đang gián đoạn. Phiên trên thiết bị vẫn được giữ; hãy kiểm tra mạng rồi thử lại.',
+          title: error.code == 'NETWORK_OFFLINE'
+              ? 'Thiết bị đang mất mạng'
+              : 'Backend tạm gián đoạn',
+          message: error.message,
         );
         return;
       }
-      if (api.accessToken != null || api.refreshToken != null) {
+      if (error.endsSession &&
+          (api.accessToken != null || api.refreshToken != null)) {
         await _expireSession(error);
+        return;
       }
+      sessionNotice = SessionNotice(
+        kind: SessionNoticeKind.connection,
+        title: 'Chưa thể kiểm tra phiên',
+        message:
+            '${error.message} Phiên trên thiết bị vẫn được giữ để thử lại.',
+      );
     } on Object {
       sessionNotice = const SessionNotice(
         kind: SessionNoticeKind.connection,
@@ -150,6 +165,20 @@ class SessionController extends ChangeNotifier {
     api.baseUrl = newUrl.trim().replaceFirst(RegExp(r'/+$'), '');
     await _storage.write(key: _apiBaseUrlKey, value: api.baseUrl);
     notifyListeners();
+  }
+
+  Future<void> retryBackendConnection() async {
+    if (isCheckingAvailability) return;
+    isCheckingAvailability = true;
+    notifyListeners();
+    try {
+      await api.checkAvailability();
+    } on ApiException {
+      // ApiClient đã phân loại trạng thái để banner hiển thị đúng nguyên nhân.
+    } finally {
+      isCheckingAvailability = false;
+      notifyListeners();
+    }
   }
 
   Future<void> login(String email, String password) async {
@@ -255,6 +284,21 @@ class SessionController extends ChangeNotifier {
     } on Object {
       // Hộp thư vẫn là nguồn dữ liệu chính nếu đăng ký push tạm thời thất bại.
     }
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final PackageInfo info = await PackageInfo.fromPlatform();
+      appVersionLabel = 'v${info.version} (${info.buildNumber})';
+    } on Object {
+      appVersionLabel = 'Phiên bản chưa xác định';
+    }
+  }
+
+  void _handleAvailabilityChanged(ApiAvailability availability) {
+    if (apiAvailability == availability) return;
+    apiAvailability = availability;
+    notifyListeners();
   }
 
   Future<String> _getOrCreateDeviceId() async {

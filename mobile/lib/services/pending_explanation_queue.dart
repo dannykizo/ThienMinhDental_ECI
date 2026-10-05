@@ -216,8 +216,7 @@ class PendingExplanationQueue {
     );
   }
 
-  bool _isRetryable(ApiException error) =>
-      error.code == 'NETWORK_UNAVAILABLE' || (error.status ?? 0) >= 500;
+  bool _isRetryable(ApiException error) => error.isRetryable;
 
   static String createEvidenceId() {
     return createUuidV4();
