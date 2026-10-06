@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 import '../../services/uuid_v4.dart';
 
@@ -25,6 +26,13 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
   List<BusinessTripAssignment> _items = <BusinessTripAssignment>[];
   String? _error;
   bool _loading = true;
+  bool _hasLoaded = false;
+  String _filter = 'ALL';
+
+  List<BusinessTripAssignment> get _visibleItems => _items
+      .where((BusinessTripAssignment item) =>
+          _filter == 'ALL' || item.participationStatus == _filter)
+      .toList();
 
   @override
   void initState() {
@@ -42,7 +50,12 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
     try {
       final List<BusinessTripAssignment> items =
           await widget.session.api.myBusinessTrips();
-      if (mounted) setState(() => _items = items);
+      if (mounted) {
+        setState(() {
+          _items = items;
+          _hasLoaded = true;
+        });
+      }
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
@@ -86,7 +99,7 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
             children: <Widget>[
               const AppPageIntro(
                 eyebrow: 'Phân công của bạn',
-                title: 'Công việc hiện trường\nrõ ràng từng bước.',
+                title: 'Phân công công tác',
                 description:
                     'GPS chỉ được lấy khi bạn bắt đầu hoặc hoàn tất công tác.',
               ),
@@ -100,6 +113,22 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
                 ),
               ],
               const SizedBox(height: 20),
+              if (_hasLoaded) ...<Widget>[
+                AppListFilters(
+                  label: 'Phần tham gia của bạn',
+                  options: const <String, String>{
+                    'ALL': 'Tất cả',
+                    'ASSIGNED': 'Được giao',
+                    'IN_PROGRESS': 'Đang thực hiện',
+                    'COMPLETED': 'Hoàn tất',
+                  },
+                  selected: _filter,
+                  onSelected: (String value) => setState(() => _filter = value),
+                  visibleCount: _visibleItems.length,
+                  loadedCount: _items.length,
+                ),
+                const SizedBox(height: 16),
+              ],
               if (_loading && _items.isNotEmpty) ...<Widget>[
                 const LinearProgressIndicator(minHeight: 2),
                 const SizedBox(height: 12),
@@ -116,8 +145,12 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
                   icon: Icons.work_outline_rounded,
                   title: 'Chưa có phiếu công tác',
                 )
+              else if (_visibleItems.isEmpty)
+                AppFilteredEmptyState(
+                  onClear: () => setState(() => _filter = 'ALL'),
+                )
               else
-                ..._items.map(
+                ..._visibleItems.map(
                   (BusinessTripAssignment trip) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _TripCard(
@@ -454,21 +487,29 @@ class _TripCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Row(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        'MÃ PHIẾU · ${trip.code}',
-                        style: const TextStyle(
-                          color: brandPurple,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: .8,
-                        ),
+                    Text(
+                      'MÃ PHIẾU · ${trip.code}',
+                      style: const TextStyle(
+                        color: brandPurple,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: .8,
                       ),
                     ),
-                    _TripStatus(status: trip.participationStatus),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        _TripStatus(status: trip.participationStatus),
+                        Text('Phiếu: ${_statusLabel(trip.status)}',
+                            style: const TextStyle(
+                                color: brandMuted, fontSize: 11)),
+                      ],
+                    ),
                   ],
                 ),
                 const SizedBox(height: 9),
@@ -525,9 +566,10 @@ class _TripCard extends StatelessWidget {
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
-                    const Icon(Icons.chevron_right_rounded),
                   ],
                 ),
+                const SizedBox(height: 12),
+                const AppListOpenHint(),
               ],
             ),
           ),

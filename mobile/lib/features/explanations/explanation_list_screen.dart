@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 import '../../services/pending_explanation_queue.dart';
 
@@ -29,6 +30,13 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
   String? _error;
   bool _loading = true;
   bool _syncing = false;
+  bool _hasLoaded = false;
+  String _filter = 'ALL';
+
+  List<AttendanceExplanation> get _visibleItems => _items
+      .where((AttendanceExplanation item) =>
+          _filter == 'ALL' || item.status == _filter)
+      .toList();
 
   @override
   void initState() {
@@ -61,7 +69,12 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
     try {
       final List<AttendanceExplanation> items =
           await widget.session.api.myAttendanceExplanations();
-      if (mounted) setState(() => _items = items);
+      if (mounted) {
+        setState(() {
+          _items = items;
+          _hasLoaded = true;
+        });
+      }
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
@@ -143,7 +156,7 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
           children: <Widget>[
             const AppPageIntro(
               eyebrow: 'Yêu cầu của bạn',
-              title: 'Phản hồi bất thường\nkhông để thất lạc dữ liệu.',
+              title: 'Yêu cầu giải trình',
               description:
                   'Nếu mạng yếu, nội dung và ảnh được giữ cục bộ trên thiết bị rồi gửi lại khi có kết nối.',
             ),
@@ -168,6 +181,24 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
               ),
             ],
             const SizedBox(height: 20),
+            if (_hasLoaded) ...<Widget>[
+              AppListFilters(
+                scopeNote: 'Chỉ lọc tối đa 100 yêu cầu mới nhất từ Backend. '
+                    'Hàng đợi chờ mạng được hiển thị riêng phía trên.',
+                options: const <String, String>{
+                  'ALL': 'Tất cả',
+                  'REQUESTED': 'Chờ phản hồi',
+                  'SUBMITTED': 'Đã gửi',
+                  'APPROVED': 'Đã duyệt',
+                  'REJECTED': 'Từ chối',
+                },
+                selected: _filter,
+                onSelected: (String value) => setState(() => _filter = value),
+                visibleCount: _visibleItems.length,
+                loadedCount: _items.length,
+              ),
+              const SizedBox(height: 16),
+            ],
             if (_loading && _items.isNotEmpty) ...<Widget>[
               const LinearProgressIndicator(minHeight: 2),
               const SizedBox(height: 12),
@@ -182,10 +213,14 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
               const AppEmptyState(
                 description: 'Các yêu cầu mới từ Admin sẽ xuất hiện tại đây.',
                 icon: Icons.task_alt_rounded,
-                title: 'Không có yêu cầu cần phản hồi',
+                title: 'Chưa có yêu cầu giải trình',
+              )
+            else if (_visibleItems.isEmpty)
+              AppFilteredEmptyState(
+                onClear: () => setState(() => _filter = 'ALL'),
               )
             else
-              ..._items.map(
+              ..._visibleItems.map(
                 (AttendanceExplanation item) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: _ExplanationCard(
@@ -435,13 +470,22 @@ class _ExplanationCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Expanded(
-                  child: Text(_issueLabel(item.issueType),
-                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                Text(_issueLabel(item.issueType),
+                    style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    _StatusPill(status: item.status),
+                    // Local queue is not a replacement for the Backend status.
+                    if (pending) const _StatusPill(status: 'QUEUED'),
+                  ],
                 ),
-                _StatusPill(status: pending ? 'QUEUED' : item.status),
               ],
             ),
             const SizedBox(height: 8),
@@ -449,8 +493,9 @@ class _ExplanationCard extends StatelessWidget {
                 style: const TextStyle(color: Color(0xFF615764), height: 1.45)),
             const SizedBox(height: 10),
             Text(
-              'Ngày công ${_date(item.workDate)} · Hạn ${DateFormat('dd/MM HH:mm').format(item.dueAt)}',
-              style: const TextStyle(color: Color(0xFF8B7F8E), fontSize: 11),
+              'Ngày công: ${_date(item.workDate)}\nHạn phản hồi: ${DateFormat('dd/MM/yyyy HH:mm').format(item.dueAt)}',
+              style:
+                  const TextStyle(color: brandMuted, fontSize: 12, height: 1.5),
             ),
             if (item.responseText != null) ...<Widget>[
               const SizedBox(height: 10),

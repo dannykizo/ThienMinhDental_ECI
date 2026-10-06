@@ -2,7 +2,7 @@
 
 Ngày lập: 2026-10-06. Scope owner: Nguyễn Thành Nam.
 
-Trạng thái: **UX1–UX2 đã hoàn thành ngày 2026-10-06; UX3–UX4 vẫn PROPOSED**. Tài liệu này là kế hoạch bàn giao, không thay thế PROJECT.md, FLOWS.md hoặc IMPLEMENTATION.md. Chỉ bắt đầu task khi Tech Lead giao rõ mã task; không tự chuyển sang task tiếp theo.
+Trạng thái: **UX1–UX3 đã hoàn thành ngày 2026-10-06; UX4 vẫn PROPOSED**. Tài liệu này là kế hoạch bàn giao, không thay thế PROJECT.md, FLOWS.md hoặc IMPLEMENTATION.md. Chỉ bắt đầu task khi Tech Lead giao rõ mã task; không tự chuyển sang task tiếp theo.
 
 ## 1. Mục tiêu và baseline
 
@@ -77,7 +77,9 @@ Nghiệm thu:
 
 ### UX3 — Danh sách công tác, đơn và hộp thư dễ quét
 
-Trạng thái: `NOT_IMPLEMENTED` (đề xuất). Phụ thuộc UX2 đã nghiệm thu.
+Trạng thái: `DONE` (Codex, được Tech Lead giao và triển khai ngày 2026-10-06). Commit có tiêu đề `feat(mobile): improve employee lists and status filters`; xác minh hash/push qua Git khi tiếp quản.
+
+Kết quả thực tế: bốn danh sách có chip lọc cục bộ, số mục hiển thị/đã tải và no-match riêng kèm Bỏ lọc. Thẻ dùng bố cục xuống dòng cho tiêu đề/trạng thái; công tác tách trạng thái phiếu và phần tham gia; giải trình hiển thị trạng thái Backend cùng nhãn chờ mạng riêng, ghi rõ giới hạn 100 yêu cầu mới nhất. Hộp thư giữ nhãn chưa đọc/cần xác nhận/kỷ luật và flow mở chi tiết hiện có; lọc/preview không mutation. Nghỉ phép giữ policy/số dư và chuyển nút tạo đơn sang vùng riêng không đè danh sách. Không sửa form, Backend/API/schema, GPS/session hoặc hàng đợi.
 
 Vùng dự kiến:
 
@@ -141,11 +143,22 @@ Trước khi đổi agent hoặc kết thúc lượt, điền log bên dưới. 
 | Task | Trạng thái | Commit/push | Kiểm tra | Bước còn lại/blocker |
 |---|---|---|---|---|
 | UX1 | DONE | `b03c771`; đối chiếu `origin/main` để xác minh push | Format/debug/manual đạt; analyze có 1 info CR6 sẵn có | Không còn code bắt buộc |
-| UX2 | DONE | `feat(mobile): improve attendance action UX`; xác minh hash/push khi tiếp quản | Format/analyze file đạt; Hot Reload và manual USB đạt | Tech Lead xem UI; chưa làm UX3 |
-| UX3 | PROPOSED | — | Chưa chạy | Chờ UX2 và Tech Lead giao |
+| UX2 | DONE | `e769109`; đối chiếu `origin/main` | Format/analyze file đạt; Hot Reload và manual USB đạt | Không còn code bắt buộc |
+| UX3 | DONE | `feat(mobile): improve employee lists and status filters`; xác minh hash/push khi tiếp quản | Format/diff đạt; analyze chỉ 1 info CR6 có sẵn; manual/Hot Reload đạt | Tech Lead xem UI; chưa làm UX4 |
 | UX4 | PROPOSED | — | Chưa chạy | Chờ UX3 và Tech Lead giao |
 
-Checkpoint gần nhất — UX2:
+Checkpoint gần nhất — UX3:
+
+- Task và agent: UX3 — Codex, đã hoàn thành; không triển khai UX4.
+- File: bốn màn danh sách theo vùng chỉ định, widget presentation dùng chung app_list_controls.dart, IMPLEMENTATION.md/README.md và tài liệu này. Không sửa Backend, Admin Web, API/schema hoặc dịch vụ. Trong leave_request_screen.dart chỉ stage hunk UX3; hai hunk CR6 sẵn có của Tech Lead (dialog hủy và ngày xếp dọc) giữ nguyên, không commit chung.
+- Kiểm tra: `dart format` năm file; `git diff --check`; `flutter analyze --no-pub` chỉ định năm file — exit 1 vì một info deprecated_member_use đã có ở form nghỉ (`value` của DropdownButtonFormField, dòng 467 sau UX3), không error/warning mới. Không chạy automated test suite.
+- Manual USB 32a65649: Hot Reload thành công; lọc cho bốn danh sách, no-match và Bỏ lọc, phục hồi danh sách; refresh lỗi giữ dữ liệu/lựa chọn lọc và phiên. Ngắt reverse tạm để thử lỗi Backend rồi khôi phục/tải lại. Kiểm tra font scale 1.8 cho chip, no-match và thẻ công tác/nghỉ/giải trình/kỷ luật; nút tạo đơn dành chỗ riêng, cuộn đến cuối vẫn đọc được. Phục hồi font 1.15; log không có Flutter exception/overflow trong lượt kiểm tra.
+- Giới hạn: dữ liệu dev hiện có, không tạo/gửi/hủy đơn, không bắt đầu/hoàn tất công tác hoặc xác nhận thông báo mới. Chưa kiểm tra trực tiếp mọi tổ hợp badge, danh sách thật rỗng hoặc pending queue mới bằng giao dịch; logic/flow cũ giữ nguyên. Không build APK mới hoặc APK bàn giao; dùng Hot Reload.
+- GitNexus: runner/index repo vẫn chưa dùng được; rà caller trực tiếp cho thấy bốn list chỉ được tạo từ EmployeeShell. Bộ lọc chỉ setState trên tập đã tải; đường read/acknowledge chỉ giữ ở mở chi tiết/thao tác chủ động.
+- Runtime: Backend health localhost:3001/api/health ok; reverse tcp:3001 đã khôi phục; debug/Hot Reload session 52766 được giữ. Xác minh lại process/session khi tiếp quản.
+- Tiếp theo: Tech Lead xem bốn danh sách; UX4 chỉ bắt đầu khi được giao. Bàn phím/form vẫn thuộc UX4.
+
+Checkpoint trước — UX2 (giữ lịch sử):
 
 - Task và agent: UX2 — Codex, đã hoàn thành; chỉ triển khai task này.
 - File đã sửa: attendance_home.dart; IMPLEMENTATION.md/README.md; tài liệu này. Không chạm Backend, Admin Web, schema hoặc API contract. Diff CR6 của người dùng trong leave_request_screen.dart được giữ nguyên và không stage.

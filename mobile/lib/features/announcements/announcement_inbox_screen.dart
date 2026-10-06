@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 
 class AnnouncementInboxScreen extends StatefulWidget {
@@ -21,6 +22,18 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
   List<EmployeeAnnouncement> _items = <EmployeeAnnouncement>[];
   String? _error;
   bool _loading = true;
+  bool _hasLoaded = false;
+  String _filter = 'ALL';
+
+  List<EmployeeAnnouncement> get _visibleItems => _items
+      .where((EmployeeAnnouncement item) => switch (_filter) {
+            'UNREAD' => item.readAt == null,
+            'NEEDS_ACK' =>
+              item.requiresAcknowledgement && item.acknowledgedAt == null,
+            'DISCIPLINARY' => item.isDisciplinary,
+            _ => true,
+          })
+      .toList();
   late int _revision;
 
   @override
@@ -56,7 +69,12 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
       widget.session.updateUnreadAnnouncementCount(
         items.where((EmployeeAnnouncement item) => item.readAt == null).length,
       );
-      if (mounted) setState(() => _items = items);
+      if (mounted) {
+        setState(() {
+          _items = items;
+          _hasLoaded = true;
+        });
+      }
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } finally {
@@ -110,7 +128,7 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
             children: <Widget>[
               const AppPageIntro(
                 eyebrow: 'Thông báo nội bộ',
-                title: 'Thông tin quan trọng,\nkhông bỏ sót.',
+                title: 'Thông báo của bạn',
                 description:
                     'Tin chưa đọc được đánh dấu rõ. Một số thông báo quan trọng cần bạn xác nhận sau khi xem.',
               ),
@@ -136,6 +154,22 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
                 ),
               ],
               const SizedBox(height: 20),
+              if (_hasLoaded) ...<Widget>[
+                AppListFilters(
+                  label: 'Lọc hộp thư',
+                  options: const <String, String>{
+                    'ALL': 'Tất cả',
+                    'UNREAD': 'Chưa đọc',
+                    'NEEDS_ACK': 'Cần xác nhận',
+                    'DISCIPLINARY': 'Kỷ luật',
+                  },
+                  selected: _filter,
+                  onSelected: (String value) => setState(() => _filter = value),
+                  visibleCount: _visibleItems.length,
+                  loadedCount: _items.length,
+                ),
+                const SizedBox(height: 16),
+              ],
               if (_loading && _items.isNotEmpty) ...<Widget>[
                 const LinearProgressIndicator(minHeight: 2),
                 const SizedBox(height: 12),
@@ -153,8 +187,12 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
                   icon: Icons.mark_email_read_outlined,
                   title: 'Hộp thư đang trống',
                 )
+              else if (_visibleItems.isEmpty)
+                AppFilteredEmptyState(
+                  onClear: () => setState(() => _filter = 'ALL'),
+                )
               else
-                ..._items.map(
+                ..._visibleItems.map(
                   (EmployeeAnnouncement item) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: item.isDisciplinary
@@ -349,15 +387,19 @@ class _AnnouncementCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Row(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: <Widget>[
-                  Expanded(
-                    child: _AudienceBadge(item: item),
-                  ),
+                  _AudienceBadge(item: item),
                   _InboxStatus(
                     unread: unread,
-                    waitingForAcknowledgement: waitingForAcknowledgement,
+                    waitingForAcknowledgement: false,
+                    acknowledged: item.acknowledgedAt != null,
                   ),
+                  if (waitingForAcknowledgement)
+                    const _InboxStatus(
+                        unread: false, waitingForAcknowledgement: true),
                 ],
               ),
               const SizedBox(height: 8),
@@ -391,10 +433,7 @@ class _AnnouncementCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              const Align(
-                alignment: Alignment.centerRight,
-                child: Icon(Icons.chevron_right_rounded),
-              ),
+              const AppListOpenHint(),
             ],
           ),
         ),
@@ -407,10 +446,12 @@ class _InboxStatus extends StatelessWidget {
   const _InboxStatus({
     required this.unread,
     required this.waitingForAcknowledgement,
+    this.acknowledged = false,
   });
 
   final bool unread;
   final bool waitingForAcknowledgement;
+  final bool acknowledged;
 
   @override
   Widget build(BuildContext context) {
@@ -418,7 +459,9 @@ class _InboxStatus extends StatelessWidget {
         ? 'CHƯA ĐỌC'
         : waitingForAcknowledgement
             ? 'CẦN XÁC NHẬN'
-            : 'ĐÃ ĐỌC';
+            : acknowledged
+                ? 'ĐÃ XÁC NHẬN'
+                : 'ĐÃ ĐỌC';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       color: unread
@@ -750,42 +793,54 @@ class _DisciplinaryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Row(
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Icon(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(
+                        revoked
+                            ? Icons.history_rounded
+                            : _disciplineIcon(item.disciplinaryActionType),
+                        size: 15,
+                        color: accent,
+                      ),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
                           revoked
-                              ? Icons.history_rounded
-                              : _disciplineIcon(item.disciplinaryActionType),
-                          size: 15,
-                          color: accent,
-                        ),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            revoked
-                                ? 'THU HỒI · ${category.toUpperCase()}'
-                                : 'KỶ LUẬT · ${category.toUpperCase()}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: accent,
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: .6,
-                            ),
+                              ? 'THU HỒI · ${category.toUpperCase()}'
+                              : 'KỶ LUẬT · ${category.toUpperCase()}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: .6,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  _DisciplinaryStatus(
-                    unread: unread,
-                    waitingForAcknowledgement: waitingForAcknowledgement,
-                    revoked: revoked,
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      _DisciplinaryStatus(
+                        unread: unread,
+                        waitingForAcknowledgement: waitingForAcknowledgement,
+                        revoked: revoked,
+                      ),
+                      if (unread && revoked)
+                        const _InboxStatus(
+                            unread: true, waitingForAcknowledgement: false),
+                      if (waitingForAcknowledgement && (unread || revoked))
+                        const _InboxStatus(
+                            unread: false, waitingForAcknowledgement: true),
+                    ],
                   ),
                 ],
               ),
@@ -827,10 +882,7 @@ class _DisciplinaryCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              const Align(
-                alignment: Alignment.centerRight,
-                child: Icon(Icons.chevron_right_rounded),
-              ),
+              const AppListOpenHint(),
             ],
           ),
         ),

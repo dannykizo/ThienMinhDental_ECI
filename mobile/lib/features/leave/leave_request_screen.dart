@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 
 class LeaveRequestScreen extends StatefulWidget {
@@ -22,6 +23,13 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   List<LeaveBalance> _balances = <LeaveBalance>[];
   String? _error;
   bool _loading = true;
+  bool _hasLoaded = false;
+  String _filter = 'ALL';
+
+  List<EmployeeLeaveRequest> get _visibleItems => _items
+      .where((EmployeeLeaveRequest item) =>
+          _filter == 'ALL' || item.status == _filter)
+      .toList();
 
   @override
   void initState() {
@@ -47,6 +55,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         _items = result[0] as List<EmployeeLeaveRequest>;
         _policies = result[1] as List<LeavePolicy>;
         _balances = result[2] as List<LeaveBalance>;
+        _hasLoaded = true;
       });
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -140,11 +149,11 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
           onRefresh: _load,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
             children: <Widget>[
               const AppPageIntro(
                 eyebrow: 'Nghỉ phép của bạn',
-                title: 'Biết rõ quỹ phép,\ngửi đơn đúng chính sách.',
+                title: 'Đơn nghỉ của bạn',
                 description:
                     'Loại nghỉ, thời lượng và quyền hủy do công ty cấu hình. App hiển thị đúng kết quả do Backend tính toán.',
               ),
@@ -177,6 +186,22 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                 ),
               ],
               const SizedBox(height: 20),
+              if (_hasLoaded) ...<Widget>[
+                AppListFilters(
+                  options: const <String, String>{
+                    'ALL': 'Tất cả',
+                    'SUBMITTED': 'Chờ duyệt',
+                    'APPROVED': 'Đã duyệt',
+                    'REJECTED': 'Từ chối',
+                    'CANCELLED': 'Đã hủy',
+                  },
+                  selected: _filter,
+                  onSelected: (String value) => setState(() => _filter = value),
+                  visibleCount: _visibleItems.length,
+                  loadedCount: _items.length,
+                ),
+                const SizedBox(height: 16),
+              ],
               if (_loading && _items.isNotEmpty) ...<Widget>[
                 const LinearProgressIndicator(minHeight: 2),
                 const SizedBox(height: 12),
@@ -193,8 +218,12 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                   icon: Icons.event_available_rounded,
                   title: 'Bạn chưa có đơn nghỉ nào',
                 )
+              else if (_visibleItems.isEmpty)
+                AppFilteredEmptyState(
+                  onClear: () => setState(() => _filter = 'ALL'),
+                )
               else
-                ..._items.map(
+                ..._visibleItems.map(
                   (EmployeeLeaveRequest item) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _LeaveCard(
@@ -210,12 +239,27 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
             ],
           ),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _loading ? null : _create,
-          backgroundColor: brandPurple,
-          foregroundColor: Colors.white,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Tạo đơn nghỉ'),
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: brandLine)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+              child: FilledButton.icon(
+                onPressed: _loading ? null : _create,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 54),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                ),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Tạo đơn nghỉ'),
+              ),
+            ),
+          ),
         ),
       );
 }
@@ -633,18 +677,18 @@ class _LeaveCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Expanded(
-                  child: Text(
-                    item.policyName,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.35,
-                    ),
+                Text(
+                  item.policyName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.35,
                   ),
                 ),
+                const SizedBox(height: 8),
                 _LeaveStatus(status: item.status),
               ],
             ),
