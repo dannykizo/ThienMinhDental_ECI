@@ -9,9 +9,20 @@ import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
 
 class AttendanceHome extends StatefulWidget {
-  const AttendanceHome({required this.session, super.key});
+  const AttendanceHome({
+    required this.session,
+    required this.onOpenBusinessTrips,
+    required this.onOpenExplanations,
+    required this.onOpenLeave,
+    required this.onOpenInbox,
+    super.key,
+  });
 
   final SessionController session;
+  final VoidCallback onOpenBusinessTrips;
+  final VoidCallback onOpenExplanations;
+  final VoidCallback onOpenLeave;
+  final VoidCallback onOpenInbox;
 
   @override
   State<AttendanceHome> createState() => _AttendanceHomeState();
@@ -191,12 +202,12 @@ class _AttendanceHomeState extends State<AttendanceHome> {
               Row(
                 children: <Widget>[
                   Container(
-                    width: 82,
+                    width: 72,
                     padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFE7E0E9))),
+                        border: Border.all(color: brandLine)),
                     child: Image.asset('assets/brand/thien-minh-logo.png'),
                   ),
                   const Spacer(),
@@ -207,26 +218,14 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                   ),
                 ],
               ),
-              const SizedBox(height: 30),
-              const Text('HÔM NAY',
-                  style: TextStyle(
-                      color: brandPurple,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.5)),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Text('Xin chào, ${user.displayName}',
                   style: const TextStyle(
-                      fontSize: 31,
+                      fontSize: 22,
                       fontWeight: FontWeight.w800,
-                      height: 1.12,
-                      letterSpacing: -0.7)),
-              const SizedBox(height: 7),
-              Text(
-                  '${_formatDate(_today?.date)} · ${widget.session.appVersionLabel}',
-                  style:
-                      const TextStyle(color: Color(0xFF807482), fontSize: 13)),
-              const SizedBox(height: 24),
+                      height: 1.25,
+                      letterSpacing: -0.4)),
+              const SizedBox(height: 16),
               if (_success != null) ...<Widget>[
                 _SuccessBanner(message: _success!),
                 const SizedBox(height: 16),
@@ -257,6 +256,7 @@ class _AttendanceHomeState extends State<AttendanceHome> {
               else if (_today != null)
                 _AttendanceCard(
                   actionState: _actionState,
+                  dateLabel: _formatDate(_today!.date),
                   onRecord: _record,
                   today: _today!,
                 ),
@@ -268,44 +268,48 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                 _GpsSampleNotice(accuracyMeters: _lastAccuracyMeters!),
               ],
               const SizedBox(height: 18),
+              _HomeShortcuts(
+                onOpenBusinessTrips: widget.onOpenBusinessTrips,
+                onOpenExplanations: widget.onOpenExplanations,
+                onOpenLeave: widget.onOpenLeave,
+                onOpenInbox: widget.onOpenInbox,
+              ),
+              const SizedBox(height: 18),
               Container(
-                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                     color: Colors.white,
-                    border: Border.all(color: const Color(0xFFE7E0E9))),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: brandLine)),
+                child: const ExpansionTile(
+                  shape: Border(),
+                  collapsedShape: Border(),
+                  leading: Icon(Icons.location_on_outlined,
+                      color: brandOrange, size: 22),
+                  title: Text('Quyền riêng tư vị trí',
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  childrenPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
                   children: <Widget>[
-                    Icon(Icons.location_on_outlined,
-                        color: brandOrange, size: 22),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text('Quyền riêng tư vị trí',
-                              style: TextStyle(fontWeight: FontWeight.w800)),
-                          SizedBox(height: 6),
-                          Text(
-                              'Ứng dụng chỉ lấy một mẫu GPS khi bạn bấm nút chấm công. Không theo dõi vị trí nền hoặc liên tục.',
-                              style: TextStyle(
-                                  color: Color(0xFF746A77),
-                                  fontSize: 12,
-                                  height: 1.5)),
-                        ],
-                      ),
+                    Text(
+                      'Ứng dụng chỉ lấy một mẫu GPS khi bạn bấm nút chấm công. Không theo dõi vị trí nền hoặc liên tục.',
+                      style: TextStyle(
+                          color: brandMuted, fontSize: 12, height: 1.5),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 22),
-              const Center(
-                  child: Text('THIÊN MINH WORKFORCE · DEVELOPMENT',
-                      style: TextStyle(
-                          color: Color(0xFF998E9B),
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1))),
+              Text(widget.session.appVersionLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: brandMuted, fontSize: 11)),
+              const SizedBox(height: 6),
+              const Text('THIÊN MINH WORKFORCE · DEVELOPMENT',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: brandMuted,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.1)),
             ],
           ),
         ),
@@ -313,9 +317,9 @@ class _AttendanceHomeState extends State<AttendanceHome> {
     );
   }
 
-  static String _formatDate(String? date) {
-    final DateTime value =
-        (date == null ? null : DateTime.tryParse(date)) ?? DateTime.now();
+  static String _formatDate(String date) {
+    final DateTime? value = DateTime.tryParse(date);
+    if (value == null) return date;
     const List<String> weekdays = <String>[
       'Thứ Hai',
       'Thứ Ba',
@@ -329,11 +333,96 @@ class _AttendanceHomeState extends State<AttendanceHome> {
   }
 }
 
+class _HomeShortcuts extends StatelessWidget {
+  const _HomeShortcuts({
+    required this.onOpenBusinessTrips,
+    required this.onOpenExplanations,
+    required this.onOpenLeave,
+    required this.onOpenInbox,
+  });
+
+  final VoidCallback onOpenBusinessTrips;
+  final VoidCallback onOpenExplanations;
+  final VoidCallback onOpenLeave;
+  final VoidCallback onOpenInbox;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text('Truy cập nhanh',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final int columns = constraints.maxWidth < 280 ||
+                      MediaQuery.textScalerOf(context).scale(14) > 21
+                  ? 1
+                  : constraints.maxWidth >= 600
+                      ? 4
+                      : 2;
+              final double width =
+                  (constraints.maxWidth - (columns - 1) * 10) / columns;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: <Widget>[
+                  _shortcut(width, Icons.work_outline_rounded, 'Công tác',
+                      onOpenBusinessTrips),
+                  _shortcut(width, Icons.fact_check_outlined, 'Giải trình',
+                      onOpenExplanations),
+                  _shortcut(width, Icons.event_note_outlined, 'Nghỉ phép',
+                      onOpenLeave),
+                  _shortcut(width, Icons.mail_outline_rounded, 'Hộp thư',
+                      onOpenInbox),
+                ],
+              );
+            },
+          ),
+        ],
+      );
+
+  Widget _shortcut(
+          double width, IconData icon, String label, VoidCallback onPressed) =>
+      SizedBox(
+        width: width,
+        child: OutlinedButton(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: brandPurple,
+            side: const BorderSide(color: brandLine),
+            minimumSize: const Size(0, 64),
+            padding: const EdgeInsets.all(14),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(icon, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(label,
+                    style: const TextStyle(
+                        color: brandInk,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
 class _AttendanceCard extends StatelessWidget {
   const _AttendanceCard(
-      {required this.actionState, required this.onRecord, required this.today});
+      {required this.actionState,
+      required this.dateLabel,
+      required this.onRecord,
+      required this.today});
 
   final _AttendanceActionState actionState;
+  final String dateLabel;
   final VoidCallback onRecord;
   final TodayAttendance today;
 
@@ -341,7 +430,7 @@ class _AttendanceCard extends StatelessWidget {
 
   String get _title => switch (today.status) {
         'CHECKED_IN' => 'Đang trong ca',
-        'CHECKED_OUT' => 'Đã hoàn tất ngày công',
+        'CHECKED_OUT' => 'Đã check-out',
         _ => 'Chưa check-in',
       };
 
@@ -365,14 +454,16 @@ class _AttendanceCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border.all(color: const Color(0xFFE2D9E5)),
+          border: Border.all(color: brandLine),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Container(
-              padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
               decoration: const BoxDecoration(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(11)),
                 gradient: LinearGradient(
                     colors: <Color>[brandPurpleDark, brandPurple],
                     begin: Alignment.topLeft,
@@ -381,6 +472,13 @@ class _AttendanceCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  Text('HÔM NAY · $dateLabel',
+                      style: const TextStyle(
+                          color: Color(0xFFF2EAF5),
+                          fontSize: 12,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 14),
                   Row(
                     children: <Widget>[
                       Container(
@@ -392,19 +490,20 @@ class _AttendanceCard extends StatelessWidget {
                                   : brandOrange,
                               shape: BoxShape.circle)),
                       const SizedBox(width: 8),
-                      Text(_statusLabel,
-                          style: const TextStyle(
-                              color: Color(0xFFF2EAF5),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.1)),
+                      Expanded(
+                          child: Text(_statusLabel,
+                              style: const TextStyle(
+                                  color: Color(0xFFF2EAF5),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.1))),
                     ],
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 8),
                   Text(_title,
                       style: const TextStyle(
                           color: Colors.white,
-                          fontSize: 29,
+                          fontSize: 25,
                           fontWeight: FontWeight.w800,
                           letterSpacing: -0.6)),
                   if (today.riskFlags.isNotEmpty) ...<Widget>[
@@ -420,7 +519,7 @@ class _AttendanceCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(22),
+              padding: const EdgeInsets.all(18),
               child: Column(
                 children: <Widget>[
                   Row(
@@ -437,6 +536,40 @@ class _AttendanceCard extends StatelessWidget {
                               value: _formatTime(today.checkedOutAt))),
                     ],
                   ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _submitting || today.status == 'CHECKED_OUT'
+                          ? null
+                          : onRecord,
+                      style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 54),
+                          backgroundColor: brandPurple,
+                          disabledBackgroundColor: const Color(0xFFE3DCE5),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5))),
+                      icon: _submitting
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
+                          : Icon(today.status == 'CHECKED_IN'
+                              ? Icons.logout_rounded
+                              : Icons.login_rounded),
+                      label: Text(
+                          today.status == 'CHECKED_OUT'
+                              ? 'Đã ghi nhận check-out'
+                              : _submitting
+                                  ? _progressLabel
+                                  : _button,
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('Thời gian chính thức do Backend ghi nhận',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: brandMuted, fontSize: 11)),
                   const SizedBox(height: 18),
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -500,39 +633,6 @@ class _AttendanceCard extends StatelessWidget {
                       ],
                     ),
                   ],
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 54,
-                    child: FilledButton.icon(
-                      onPressed: _submitting || today.status == 'CHECKED_OUT'
-                          ? null
-                          : onRecord,
-                      style: FilledButton.styleFrom(
-                          backgroundColor: brandPurple,
-                          disabledBackgroundColor: const Color(0xFFE3DCE5),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5))),
-                      icon: _submitting
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : Icon(today.status == 'CHECKED_IN'
-                              ? Icons.logout_rounded
-                              : Icons.login_rounded),
-                      label: Text(
-                          today.status == 'CHECKED_OUT'
-                              ? 'Ngày công đã hoàn tất'
-                              : _submitting
-                                  ? _progressLabel
-                                  : _button,
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text('Thời gian chính thức do Backend ghi nhận',
-                      style: TextStyle(color: Color(0xFF8A7F8C), fontSize: 11)),
                 ],
               ),
             ),

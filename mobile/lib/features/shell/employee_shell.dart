@@ -71,12 +71,23 @@ class _EmployeeShellState extends State<EmployeeShell> {
     }
   }
 
+  void _selectDestination(int index) {
+    HapticFeedback.selectionClick();
+    setState(() => _selectedIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         body: IndexedStack(
           index: _selectedIndex,
           children: <Widget>[
-            AttendanceHome(session: widget.session),
+            AttendanceHome(
+              session: widget.session,
+              onOpenBusinessTrips: () => _selectDestination(1),
+              onOpenLeave: () => _selectDestination(2),
+              onOpenExplanations: () => _selectDestination(3),
+              onOpenInbox: () => _selectDestination(4),
+            ),
             BusinessTripListScreen(session: widget.session),
             LeaveRequestScreen(session: widget.session),
             ExplanationListScreen(session: widget.session),
@@ -90,10 +101,7 @@ class _EmployeeShellState extends State<EmployeeShell> {
               _ApiAvailabilityBanner(session: widget.session),
             NavigationBar(
               selectedIndex: _selectedIndex,
-              onDestinationSelected: (int index) {
-                HapticFeedback.selectionClick();
-                setState(() => _selectedIndex = index);
-              },
+              onDestinationSelected: _selectDestination,
               destinations: <NavigationDestination>[
                 const NavigationDestination(
                   icon: Icon(Icons.home_outlined),
