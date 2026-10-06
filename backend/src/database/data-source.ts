@@ -24,6 +24,7 @@ import { OrganizationManagementAccess1791504000000 } from './migrations/17915040
 import { ManagerChannelSessions1791590400000 } from './migrations/1791590400000-manager-channel-sessions.js';
 import { ExplanationTwoStepWorkflow1791676800000 } from './migrations/1791676800000-explanation-two-step-workflow.js';
 import { LeaveTwoStepWorkflow1791763200000 } from './migrations/1791763200000-leave-two-step-workflow.js';
+import { AdminFallbackReview1791849600000 } from './migrations/1791849600000-admin-fallback-review.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -59,6 +60,7 @@ export const applicationDataSource = new DataSource({
     ManagerChannelSessions1791590400000,
     ExplanationTwoStepWorkflow1791676800000,
     LeaveTwoStepWorkflow1791763200000,
+    AdminFallbackReview1791849600000,
   ],
   migrationsTableName: 'schema_migrations',
 });

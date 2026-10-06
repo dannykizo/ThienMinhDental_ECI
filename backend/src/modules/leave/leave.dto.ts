@@ -17,6 +17,7 @@ export class CreateLeaveRequestDto extends CreateOwnLeaveRequestDto {
 }
 
 export class ReviewLeaveRequestDto {
+  @IsOptional() @IsString() @MinLength(5) @MaxLength(2000) adminOverrideReason?: string;
   @IsInt() @Min(0) expectedVersion!: number;
   @IsIn(['APPROVED', 'REJECTED']) status!: 'APPROVED' | 'REJECTED';
   @IsOptional() @IsString() @MaxLength(2000) reviewNote?: string;

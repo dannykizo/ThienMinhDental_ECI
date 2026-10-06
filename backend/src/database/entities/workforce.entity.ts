@@ -148,6 +148,8 @@ export class AttendanceAdjustmentEntity {
 
 @Entity({ name: 'attendance_explanation_requests' })
 export class AttendanceExplanationEntity {
+  @Column({ type: 'varchar', length: 20, name: 'decision_method', nullable: true }) decisionMethod!: 'ROUTED' | 'ADMIN_FALLBACK' | null;
+  @Column({ type: 'text', name: 'admin_override_reason', nullable: true }) adminOverrideReason!: string | null;
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'uuid', name: 'employee_id' }) employeeId!: string;
   @Column({ type: 'date', name: 'work_date' }) workDate!: string;
@@ -196,6 +198,8 @@ export class AttendancePeriodEntity {
 
 @Entity({ name: 'leave_requests' })
 export class LeaveRequestEntity {
+  @Column({ type: 'varchar', length: 20, name: 'decision_method', nullable: true }) decisionMethod!: 'ROUTED' | 'ADMIN_FALLBACK' | null;
+  @Column({ type: 'text', name: 'admin_override_reason', nullable: true }) adminOverrideReason!: string | null;
   @Column({ type: 'varchar', length: 30, name: 'approval_stage', nullable: true }) approvalStage!: import('../../modules/leave/domain/leave-workflow.js').LeaveStage | null;
   @Column({ type: 'uuid', name: 'workflow_team_id', nullable: true }) workflowTeamId!: string | null;
   @Column({ type: 'uuid', name: 'leader_user_id', nullable: true }) leaderUserId!: string | null;

@@ -48,6 +48,7 @@ export class SubmitEmployeeExplanationDto extends RespondAttendanceExplanationDt
 }
 
 export class ReviewAttendanceExplanationDto {
+  @IsOptional() @IsString() @MinLength(5) @MaxLength(2000) adminOverrideReason?: string;
   @IsIn(['APPROVED', 'REJECTED']) status!: 'APPROVED' | 'REJECTED';
   @IsOptional() @IsString() @MaxLength(2000) reviewNote?: string;
   @IsInt() @Min(0) expectedVersion!: number;

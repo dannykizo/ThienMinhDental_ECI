@@ -23,7 +23,7 @@ export function independentReviewers(ownerId: string | null, leaderId: string | 
   return Boolean(leaderId && headId && leaderId !== headId && leaderId !== ownerId && headId !== ownerId && headId !== confirmedBy);
 }
 
-export function workflowPermissions(item: LeaveWorkflow, actorId: string, actorEmployeeId: string | null | undefined, grants: ManagementGrant[], team: WorkflowTeam | null, now: Date): { canConfirm: boolean; canReview: boolean; canRead: boolean; routingRequired: boolean } {
+export function workflowPermissions(item: LeaveWorkflow, actorId: string, actorEmployeeId: string | null | undefined, grants: ManagementGrant[], team: WorkflowTeam | null, now: Date, isAdmin = false): { canConfirm: boolean; canReview: boolean; canAdminReview: boolean; canRead: boolean; routingRequired: boolean } {
   const independent = independentReviewers(item.submittedBy ?? null, item.leaderUserId, item.headUserId, item.confirmedBy);
   const leader = independent && actorEmployeeId !== item.employeeId && actorId === item.leaderUserId && hasWorkflowGrant(grants, actorId, 'TEAM_LEADER', team, now);
   const head = independent && actorEmployeeId !== item.employeeId && actorId === item.headUserId && hasWorkflowGrant(grants, actorId, 'DEPARTMENT_HEAD', team, now);
@@ -34,6 +34,8 @@ export function workflowPermissions(item: LeaveWorkflow, actorId: string, actorE
   return {
     canConfirm: open && !routingRequired && item.approvalStage === 'LEADER_CONFIRMATION' && !item.confirmedBy && leader,
     canReview: open && !routingRequired && item.approvalStage === 'HEAD_APPROVAL' && Boolean(item.confirmedBy) && head,
+    // Explicit fallback only: never grant a healthy-route bypass or self review.
+    canAdminReview: isAdmin && open && routingRequired && item.approvalStage !== 'COMPLETED' && actorEmployeeId !== item.employeeId && actorId !== item.submittedBy && actorId !== item.confirmedBy,
     canRead: leader || head,
     routingRequired,
   };

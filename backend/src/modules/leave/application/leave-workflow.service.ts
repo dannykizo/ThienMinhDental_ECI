@@ -50,7 +50,7 @@ export class LeaveWorkflowService {
     if (periods.some(p=>p.status==='LOCKED')) throw new ConflictException({code:'ATTENDANCE_PERIOD_LOCKED',message:'Kỳ công đã chốt; cần mở lại trước khi xử lý nghỉ phép.'});
   }
   private summary(item: LeaveRequestEntity): Record<string, unknown> {
-    return { status: item.status, approvalStage: item.approvalStage, teamId: item.workflowTeamId, leaderUserId: item.leaderUserId, headUserId: item.headUserId, routeVersion: item.routeVersion, confirmedBy: item.confirmedBy, confirmedAt: item.confirmedAt, confirmationNote: item.confirmationNote, reviewedBy: item.reviewedBy, reviewedAt: item.reviewedAt, reviewNote: item.reviewNote };
+    return { status: item.status, approvalStage: item.approvalStage, teamId: item.workflowTeamId, leaderUserId: item.leaderUserId, headUserId: item.headUserId, routeVersion: item.routeVersion, confirmedBy: item.confirmedBy, confirmedAt: item.confirmedAt, confirmationNote: item.confirmationNote, reviewedBy: item.reviewedBy, reviewedAt: item.reviewedAt, reviewNote: item.reviewNote, decisionMethod: item.decisionMethod, adminOverrideReason: item.adminOverrideReason };
   }
   private async audit(manager: EntityManager, userId: string, id: string, action: string, oldValue: unknown, newValue: unknown, reason?: string): Promise<void> {
     await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,old_value,new_value,created_by) VALUES('LEAVE_REQUEST',$1,$2,$3::jsonb,$4::jsonb,$5)`, [id, action, oldValue == null ? null : JSON.stringify(oldValue), JSON.stringify({ ...newValue as object, ...(reason ? { reason } : {}) }), userId]);
@@ -81,7 +81,7 @@ export class LeaveWorkflowService {
     else if (item.approvalStage === 'HEAD_APPROVAL') await this.notify(manager, pushes, actorId, item.headUserId, 'Nghỉ phép chờ Trưởng phòng duyệt', item, 'Leader đã xác nhận. Bạn được chỉ định xử lý bước 2.');
     else if (item.approvalStage === 'WAITING_ROUTING') {
       const admins = await manager.query<Array<{ id: string }>>(`SELECT DISTINCT u.id FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id WHERE r.code='ADMIN' AND u.is_active`);
-      for (const admin of admins) await this.notify(manager, pushes, actorId, admin.id, 'Nghỉ phép cần Admin phân tuyến', item, 'Đơn đã tiếp nhận nhưng chưa có tuyến hợp lệ. Không bỏ qua bước xác nhận.');
+      for (const admin of admins) await this.notify(manager, pushes, actorId, admin.id, 'Nghỉ phép cần Admin phân tuyến', item, 'Đơn đã tiếp nhận nhưng chưa có tuyến hợp lệ. Admin có thể phân tuyến hoặc quyết định thay với lý do và audit.');
     }
   }
   async initialize(manager: EntityManager, item: LeaveRequestEntity, actorId: string, pushes: Push[]): Promise<LeaveRequestEntity> {
@@ -120,7 +120,7 @@ export class LeaveWorkflowService {
       x.leave_type AS "leaveType",x.duration_type AS "durationType",x.half_day_period AS "halfDayPeriod",x.start_time::text AS "startTime",x.end_time::text AS "endTime",
       x.requested_minutes AS "requestedMinutes",p.day_minutes AS "dayMinutes",p.allow_approved_cancellation AS "allowApprovedCancellation",
       x.submitted_at AS "submittedAt",COALESCE(se.full_name,su.email) AS "submittedByName",x.reviewed_by AS "reviewedBy",
-      x.reviewed_at AS "reviewedAt",x.review_note AS "reviewNote",x.cancelled_at AS "cancelledAt",x.cancellation_reason AS "cancellationReason",
+      x.reviewed_at AS "reviewedAt",x.decision_method AS "decisionMethod",x.admin_override_reason AS "adminOverrideReason",x.review_note AS "reviewNote",x.cancelled_at AS "cancelledAt",x.cancellation_reason AS "cancellationReason",
       x.approval_stage AS "approvalStage",x.workflow_team_id AS "workflowTeamId",x.leader_user_id AS "leaderUserId",x.head_user_id AS "headUserId",x.route_version AS "routeVersion",
       x.confirmed_by AS "confirmedBy",x.confirmed_at AS "confirmedAt",x.confirmation_note AS "confirmationNote",
       e.employee_code AS "employeeCode",e.full_name AS "fullName",e.full_name AS "employeeName",t.name AS "teamName",t.department_id AS "departmentId",
@@ -134,11 +134,11 @@ export class LeaveWorkflowService {
       ORDER BY CASE WHEN x.status='SUBMITTED' THEN 0 ELSE 1 END,x.submitted_at DESC`,
       [admin,mine,user.employeeId ?? null,user.id]);
     return rows.flatMap(item => {
-      const permissions = workflowPermissions(item,user.id,user.employeeId,grants,item.workflowTeamId && item.departmentId ? {id:item.workflowTeamId,departmentId:item.departmentId,isActive:Boolean(item.teamActive)} : null,new Date());
+      const permissions = workflowPermissions(item,user.id,user.employeeId,grants,item.workflowTeamId && item.departmentId ? {id:item.workflowTeamId,departmentId:item.departmentId,isActive:Boolean(item.teamActive)} : null,new Date(),admin);
       if (!admin && !mine && !permissions.canRead) return [];
       const {teamActive: _active,departmentId: _department,...view}=item; void _active;
       return [{...view,workflowDepartmentId:_department,approvalStage:permissions.routingRequired ? 'WAITING_ROUTING' : item.approvalStage,
-        canConfirm:!mine && permissions.canConfirm,canReview:!mine && permissions.canReview,canReroute:admin && item.status==='SUBMITTED',routingRequired:permissions.routingRequired}];
+        canConfirm:!mine && permissions.canConfirm,canReview:!mine && permissions.canReview,canAdminReview:!mine && permissions.canAdminReview,canReroute:admin && item.status==='SUBMITTED',routingRequired:permissions.routingRequired}];
     });
   }
   async history(user: AuthenticatedUserView, id: string): Promise<unknown[]> {
@@ -156,20 +156,24 @@ export class LeaveWorkflowService {
       await this.periodOpen(manager, initial.startDate, initial.endDate);
       const item = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } }); if (!item) this.missing();
       this.stale(item.routeVersion, input.expectedVersion);
-      const permissions = workflowPermissions(item, user.id, user.employeeId, await readManagementGrants(manager), await this.team(manager, item.workflowTeamId), new Date());
-      if (confirm ? !permissions.canConfirm : !permissions.canReview) throw new ForbiddenException({ code: 'LEAVE_STEP_FORBIDDEN', message: 'Không được xử lý bước này. Kiểm tra tuyến, thứ tự bước và quyền hiện hành; Admin không duyệt thay.' });
+      const permissions = workflowPermissions(item, user.id, user.employeeId, await readManagementGrants(manager), await this.team(manager, item.workflowTeamId), new Date(), user.roles.includes(RoleCode.Admin));
+      const fallbackReason = !confirm ? (input as ReviewLeaveRequestDto).adminOverrideReason ?? undefined : undefined;
+      const fallback = fallbackReason !== undefined;
+      if (confirm ? !permissions.canConfirm : fallback ? !permissions.canAdminReview : !permissions.canReview) throw new ForbiddenException({ code: 'LEAVE_STEP_FORBIDDEN', message: 'Không được xử lý bước này. Admin chỉ duyệt thay khi tuyến thiếu hoặc không còn hợp lệ; không tự duyệt đơn mình.' });
+      if (fallback && fallbackReason.trim().length < 5) throw new BadRequestException({ code: 'LEAVE_OVERRIDE_REASON_REQUIRED', message: 'Lý do Admin duyệt thay cần ít nhất 5 ký tự.' });
       if (!confirm && (input as ReviewLeaveRequestDto).status === 'APPROVED') await beforeApproval?.(manager,item);
       const old = this.summary(item);
       if (confirm) {
         item.confirmedBy = user.id; item.confirmedAt = new Date(); item.confirmationNote = (input as ConfirmLeaveRequestDto).confirmationNote?.trim() || null; item.approvalStage = 'HEAD_APPROVAL';
       } else {
-        item.status = (input as ReviewLeaveRequestDto).status; item.reviewNote = (input as ReviewLeaveRequestDto).reviewNote?.trim() || null; item.reviewedBy = user.id; item.reviewedAt = new Date(); item.approvalStage = 'COMPLETED';
+        item.status = (input as ReviewLeaveRequestDto).status; item.reviewNote = (input as ReviewLeaveRequestDto).reviewNote?.trim() || null; item.reviewedBy = user.id; item.reviewedAt = new Date(); item.approvalStage = 'COMPLETED'; item.decisionMethod = fallback ? 'ADMIN_FALLBACK' : 'ROUTED'; item.adminOverrideReason = fallbackReason?.trim() || null;
       }
       item.routeVersion++;
       await repo.save(item);
-      await this.audit(manager, user.id, id, confirm ? 'LEADER_CONFIRM' : 'HEAD_REVIEW', old, this.summary(item));
+      await this.audit(manager, user.id, id, confirm ? 'LEADER_CONFIRM' : fallback ? 'ADMIN_FALLBACK_REVIEW' : 'HEAD_REVIEW', old, this.summary(item));
       if (confirm) await this.notifyNext(manager, pushes, user.id, item);
-      await this.notify(manager, pushes, user.id, await this.ownerUserId(manager, item), confirm ? 'Nghỉ phép đã được Leader xác nhận' : item.status === 'APPROVED' ? 'Nghỉ phép đã được duyệt' : 'Nghỉ phép bị từ chối', item, confirm ? 'Đơn chuyển sang Trưởng phòng duyệt.' : `Quyết định: ${item.status === 'APPROVED' ? 'Đã duyệt' : 'Từ chối'}.${item.reviewNote ? `\nGhi chú: ${item.reviewNote}` : ''}`);
+      const [actor] = await manager.query<Array<{ name: string }>>('SELECT COALESCE(e.full_name,u.email) AS name FROM users u LEFT JOIN employees e ON e.user_id=u.id WHERE u.id=$1',[user.id]);
+      await this.notify(manager, pushes, user.id, await this.ownerUserId(manager, item), confirm ? 'Nghỉ phép đã được Leader xác nhận' : item.status === 'APPROVED' ? 'Nghỉ phép đã được duyệt' : 'Nghỉ phép bị từ chối', item, confirm ? 'Đơn chuyển sang Trưởng phòng duyệt.' : `Quyết định: ${item.status === 'APPROVED' ? 'Đã duyệt' : 'Từ chối'} bởi ${actor?.name ?? user.displayName ?? 'người xử lý'}${fallback ? ' (Admin duyệt thay)' : ''}.${item.reviewNote ? `\nGhi chú: ${item.reviewNote}` : ''}`);
       return item;
     });
     await this.deliver(pushes); return saved;

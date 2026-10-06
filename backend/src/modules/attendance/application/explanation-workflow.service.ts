@@ -51,7 +51,7 @@ export class ExplanationWorkflowService {
     if (period.status === 'LOCKED') throw new ConflictException({ code: 'ATTENDANCE_PERIOD_LOCKED', message: 'Kỳ công đã chốt; cần mở lại trước khi xử lý giải trình.' });
   }
   private summary(item: AttendanceExplanationEntity): Record<string, unknown> {
-    return { status: item.status, approvalStage: item.approvalStage, teamId: item.workflowTeamId, leaderUserId: item.leaderUserId, headUserId: item.headUserId, routeVersion: item.routeVersion, confirmedBy: item.confirmedBy, confirmedAt: item.confirmedAt, confirmationNote: item.confirmationNote, reviewedBy: item.reviewedBy, reviewedAt: item.reviewedAt, reviewNote: item.reviewNote };
+    return { status: item.status, approvalStage: item.approvalStage, teamId: item.workflowTeamId, leaderUserId: item.leaderUserId, headUserId: item.headUserId, routeVersion: item.routeVersion, confirmedBy: item.confirmedBy, confirmedAt: item.confirmedAt, confirmationNote: item.confirmationNote, reviewedBy: item.reviewedBy, reviewedAt: item.reviewedAt, reviewNote: item.reviewNote, decisionMethod: item.decisionMethod, adminOverrideReason: item.adminOverrideReason };
   }
   private async audit(manager: EntityManager, userId: string, id: string, action: string, oldValue: unknown, newValue: unknown, reason?: string): Promise<void> {
     await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,old_value,new_value,created_by) VALUES('ATTENDANCE_EXPLANATION',$1,$2,$3::jsonb,$4::jsonb,$5)`, [id, action, oldValue == null ? null : JSON.stringify(oldValue), JSON.stringify({ ...newValue as object, ...(reason ? { reason } : {}) }), userId]);
@@ -83,7 +83,7 @@ export class ExplanationWorkflowService {
     else if (item.approvalStage === 'HEAD_APPROVAL') await this.notify(manager, pushes, actorId, item.headUserId, 'Giải trình chờ Trưởng phòng duyệt', item, 'Leader đã xác nhận. Bạn được chỉ định xử lý bước 2.');
     else if (item.approvalStage === 'WAITING_ROUTING') {
       const admins = await manager.query<Array<{ id: string }>>(`SELECT DISTINCT u.id FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id WHERE r.code='ADMIN' AND u.is_active`);
-      for (const admin of admins) await this.notify(manager, pushes, actorId, admin.id, 'Giải trình cần Admin phân tuyến', item, 'Đơn đã tiếp nhận nhưng chưa có tuyến hợp lệ. Không bỏ qua bước xác nhận.');
+      for (const admin of admins) await this.notify(manager, pushes, actorId, admin.id, 'Giải trình cần Admin phân tuyến', item, 'Đơn đã tiếp nhận nhưng chưa có tuyến hợp lệ. Admin có thể phân tuyến hoặc quyết định thay với lý do và audit.');
     }
   }
   async initialize(manager: EntityManager, item: AttendanceExplanationEntity, actorId: string, pushes: Push[]): Promise<AttendanceExplanationEntity> {
@@ -114,7 +114,7 @@ export class ExplanationWorkflowService {
     if (date && !validExplanationDate(date)) throw new BadRequestException({ code: 'INVALID_EXPLANATION_DATE', message: 'Ngày lọc phải có định dạng YYYY-MM-DD hợp lệ.' });
     if (mine && !user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
     const admin = !mine && user.roles.includes(RoleCode.Admin);
-    const rows = await this.db.query<ExplanationView[]>(`SELECT x.id,x.employee_id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "fullName",x.work_date::text AS "workDate",x.issue_type AS "issueType",x.source,x.request_note AS "requestNote",x.status,x.due_at AS "dueAt",x.response_text AS "responseText",x.evidence_image_reference AS "evidenceImageReference",x.evidence_captured_at AS "evidenceCapturedAt",x.review_note AS "reviewNote",x.reviewed_at AS "reviewedAt",x.reviewed_by AS "reviewedBy",x.submitted_by AS "submittedBy",x.created_at AS "createdAt",x.approval_stage AS "approvalStage",x.workflow_team_id AS "workflowTeamId",x.leader_user_id AS "leaderUserId",x.head_user_id AS "headUserId",x.route_version AS "routeVersion",x.confirmed_by AS "confirmedBy",x.confirmed_at AS "confirmedAt",x.confirmation_note AS "confirmationNote",x.attendance_event_id AS "attendanceEventId",x.requested_by AS "requestedBy",x.submission_id AS "submissionId",x.evidence_latitude AS "evidenceLatitude",x.evidence_longitude AS "evidenceLongitude",x.updated_at AS "updatedAt",t.name AS "teamName",t.department_id AS "departmentId",(t.is_active AND d.is_active) AS "teamActive",d.name AS "departmentName",le.full_name AS "leaderName",he.full_name AS "headName",ce.full_name AS "confirmedByName",COALESCE(re.full_name,ru.email) AS "reviewedByName"
+    const rows = await this.db.query<ExplanationView[]>(`SELECT x.id,x.employee_id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "fullName",x.work_date::text AS "workDate",x.issue_type AS "issueType",x.source,x.request_note AS "requestNote",x.status,x.due_at AS "dueAt",x.response_text AS "responseText",x.evidence_image_reference AS "evidenceImageReference",x.evidence_captured_at AS "evidenceCapturedAt",x.decision_method AS "decisionMethod",x.admin_override_reason AS "adminOverrideReason",x.review_note AS "reviewNote",x.reviewed_at AS "reviewedAt",x.reviewed_by AS "reviewedBy",x.submitted_by AS "submittedBy",x.created_at AS "createdAt",x.approval_stage AS "approvalStage",x.workflow_team_id AS "workflowTeamId",x.leader_user_id AS "leaderUserId",x.head_user_id AS "headUserId",x.route_version AS "routeVersion",x.confirmed_by AS "confirmedBy",x.confirmed_at AS "confirmedAt",x.confirmation_note AS "confirmationNote",x.attendance_event_id AS "attendanceEventId",x.requested_by AS "requestedBy",x.submission_id AS "submissionId",x.evidence_latitude AS "evidenceLatitude",x.evidence_longitude AS "evidenceLongitude",x.updated_at AS "updatedAt",t.name AS "teamName",t.department_id AS "departmentId",(t.is_active AND d.is_active) AS "teamActive",d.name AS "departmentName",le.full_name AS "leaderName",he.full_name AS "headName",ce.full_name AS "confirmedByName",COALESCE(re.full_name,ru.email) AS "reviewedByName"
       FROM attendance_explanation_requests x JOIN employees e ON e.id=x.employee_id LEFT JOIN organization_teams t ON t.id=x.workflow_team_id LEFT JOIN departments d ON d.id=t.department_id LEFT JOIN employees le ON le.user_id=x.leader_user_id LEFT JOIN employees he ON he.user_id=x.head_user_id LEFT JOIN employees ce ON ce.user_id=x.confirmed_by LEFT JOIN users ru ON ru.id=x.reviewed_by LEFT JOIN employees re ON re.user_id=ru.id
       WHERE ($1::date IS NULL OR x.work_date=$1::date) AND ($2::boolean OR CASE WHEN $4::boolean THEN x.employee_id=$5::uuid ELSE (x.leader_user_id=$3::uuid OR x.head_user_id=$3::uuid) END)
       ORDER BY ${mine ? '' : "CASE WHEN x.status IN ('REQUESTED','SUBMITTED') THEN 0 ELSE 1 END,"}x.created_at DESC ${mine ? 'LIMIT 100' : ''}`, [date ?? null, admin, user.id, mine, user.employeeId ?? null]);
@@ -122,11 +122,11 @@ export class ExplanationWorkflowService {
     if (!admin && !mine && !grants.some((g) => g.userId === user.id && grantStatus(g, new Date()) === 'ACTIVE')) throw new ForbiddenException({ code: 'EXPLANATION_SCOPE_REQUIRED', message: 'Không có quyền quản lý giải trình hiện hành.' });
     return rows.flatMap((item) => {
       const team = item.workflowTeamId && item.departmentId ? { id: item.workflowTeamId, departmentId: item.departmentId, isActive: Boolean(item.teamActive) } : null;
-      const permissions = workflowPermissions(item, user.id, user.employeeId, grants, team, new Date());
+      const permissions = workflowPermissions(item, user.id, user.employeeId, grants, team, new Date(), admin);
       if (!admin && !mine && !permissions.canRead) return [];
       // Internal eligibility metadata never leaves this API.
       const { teamActive: _teamActive, departmentId: _departmentId, ...view } = item; void _teamActive; void _departmentId;
-      return [{ ...view, workflowDepartmentId: _departmentId, approvalStage: permissions.routingRequired ? 'WAITING_ROUTING' : item.approvalStage, pendingStep: item.confirmedBy ? 'HEAD_APPROVAL' : 'LEADER_CONFIRMATION', canConfirm: !mine && permissions.canConfirm, canReview: !mine && permissions.canReview, canReroute: admin && ['REQUESTED', 'SUBMITTED'].includes(item.status), routingRequired: permissions.routingRequired }];
+      return [{ ...view, workflowDepartmentId: _departmentId, approvalStage: permissions.routingRequired ? 'WAITING_ROUTING' : item.approvalStage, pendingStep: item.confirmedBy ? 'HEAD_APPROVAL' : 'LEADER_CONFIRMATION', canConfirm: !mine && permissions.canConfirm, canReview: !mine && permissions.canReview, canAdminReview: !mine && permissions.canAdminReview, canReroute: admin && ['REQUESTED', 'SUBMITTED'].includes(item.status), routingRequired: permissions.routingRequired }];
     });
   }
   async canReadEvidence(user: AuthenticatedUserView, filename: string): Promise<boolean> {
@@ -149,19 +149,23 @@ export class ExplanationWorkflowService {
       await this.periodOpen(manager, initial.workDate);
       const item = await repo.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } }); if (!item) this.missing();
       this.stale(item.routeVersion, input.expectedVersion);
-      const permissions = workflowPermissions(item, user.id, user.employeeId, await readManagementGrants(manager), await this.team(manager, item.workflowTeamId), new Date());
-      if (confirm ? !permissions.canConfirm : !permissions.canReview) throw new ForbiddenException({ code: 'EXPLANATION_STEP_FORBIDDEN', message: 'Không được xử lý bước này. Kiểm tra tuyến, thứ tự bước và quyền hiện hành; Admin không duyệt thay.' });
+      const permissions = workflowPermissions(item, user.id, user.employeeId, await readManagementGrants(manager), await this.team(manager, item.workflowTeamId), new Date(), user.roles.includes(RoleCode.Admin));
+      const fallbackReason = !confirm ? (input as ReviewAttendanceExplanationDto).adminOverrideReason ?? undefined : undefined;
+      const fallback = fallbackReason !== undefined;
+      if (confirm ? !permissions.canConfirm : fallback ? !permissions.canAdminReview : !permissions.canReview) throw new ForbiddenException({ code: 'EXPLANATION_STEP_FORBIDDEN', message: 'Không được xử lý bước này. Admin chỉ duyệt thay khi tuyến thiếu hoặc không còn hợp lệ; không tự duyệt đơn mình.' });
+      if (fallback && fallbackReason.trim().length < 5) throw new BadRequestException({ code: 'EXPLANATION_OVERRIDE_REASON_REQUIRED', message: 'Lý do Admin duyệt thay cần ít nhất 5 ký tự.' });
       const old = this.summary(item);
       if (confirm) {
         item.confirmedBy = user.id; item.confirmedAt = new Date(); item.confirmationNote = (input as ConfirmAttendanceExplanationDto).confirmationNote?.trim() || null; item.approvalStage = 'HEAD_APPROVAL';
       } else {
-        item.status = (input as ReviewAttendanceExplanationDto).status; item.reviewNote = (input as ReviewAttendanceExplanationDto).reviewNote?.trim() || null; item.reviewedBy = user.id; item.reviewedAt = new Date(); item.approvalStage = 'COMPLETED';
+        item.status = (input as ReviewAttendanceExplanationDto).status; item.reviewNote = (input as ReviewAttendanceExplanationDto).reviewNote?.trim() || null; item.reviewedBy = user.id; item.reviewedAt = new Date(); item.approvalStage = 'COMPLETED'; item.decisionMethod = fallback ? 'ADMIN_FALLBACK' : 'ROUTED'; item.adminOverrideReason = fallbackReason?.trim() || null;
       }
       item.routeVersion++;
       await repo.save(item);
-      await this.audit(manager, user.id, id, confirm ? 'LEADER_CONFIRM' : 'HEAD_REVIEW', old, this.summary(item));
+      await this.audit(manager, user.id, id, confirm ? 'LEADER_CONFIRM' : fallback ? 'ADMIN_FALLBACK_REVIEW' : 'HEAD_REVIEW', old, this.summary(item));
       if (confirm) await this.notifyNext(manager, pushes, user.id, item);
-      await this.notify(manager, pushes, user.id, await this.ownerUserId(manager, item), confirm ? 'Giải trình đã được Leader xác nhận' : item.status === 'APPROVED' ? 'Giải trình đã được duyệt' : 'Giải trình bị từ chối', item, confirm ? 'Đơn chuyển sang Trưởng phòng duyệt.' : `Quyết định: ${item.status === 'APPROVED' ? 'Đã duyệt' : 'Từ chối'}.${item.reviewNote ? `\nGhi chú: ${item.reviewNote}` : ''}\nDuyệt giải trình không tự điều chỉnh bảng công.`);
+      const [actor] = await manager.query<Array<{ name: string }>>('SELECT COALESCE(e.full_name,u.email) AS name FROM users u LEFT JOIN employees e ON e.user_id=u.id WHERE u.id=$1',[user.id]);
+      await this.notify(manager, pushes, user.id, await this.ownerUserId(manager, item), confirm ? 'Giải trình đã được Leader xác nhận' : item.status === 'APPROVED' ? 'Giải trình đã được duyệt' : 'Giải trình bị từ chối', item, confirm ? 'Đơn chuyển sang Trưởng phòng duyệt.' : `Quyết định: ${item.status === 'APPROVED' ? 'Đã duyệt' : 'Từ chối'} bởi ${actor?.name ?? user.displayName ?? 'người xử lý'}${fallback ? ' (Admin duyệt thay)' : ''}.${item.reviewNote ? `\nGhi chú: ${item.reviewNote}` : ''}\nDuyệt giải trình không tự điều chỉnh bảng công.`);
       return item;
     });
     await this.deliver(pushes); return saved;
