@@ -2,7 +2,7 @@
 
 Ngày lập: 2026-10-06. Scope owner: Nguyễn Thành Nam.
 
-Trạng thái: **UX1 đã hoàn thành ngày 2026-10-06; UX2–UX4 vẫn PROPOSED**. Tài liệu này là kế hoạch bàn giao, không thay thế PROJECT.md, FLOWS.md hoặc IMPLEMENTATION.md. Chỉ bắt đầu task khi Tech Lead giao rõ mã task; không tự chuyển sang task tiếp theo.
+Trạng thái: **UX1–UX2 đã hoàn thành ngày 2026-10-06; UX3–UX4 vẫn PROPOSED**. Tài liệu này là kế hoạch bàn giao, không thay thế PROJECT.md, FLOWS.md hoặc IMPLEMENTATION.md. Chỉ bắt đầu task khi Tech Lead giao rõ mã task; không tự chuyển sang task tiếp theo.
 
 ## 1. Mục tiêu và baseline
 
@@ -55,7 +55,9 @@ Nghiệm thu:
 
 ### UX2 — Thao tác chấm công dễ tiếp cận, khó bấm nhầm
 
-Trạng thái: `NOT_IMPLEMENTED` (đề xuất). Phụ thuộc UX1 đã nghiệm thu.
+Trạng thái: `DONE` (Codex, được Tech Lead giao và triển khai ngày 2026-10-06). Commit triển khai có tiêu đề `feat(mobile): improve attendance action UX`; xác minh hash và push qua Git khi tiếp quản.
+
+Kết quả thực tế: một nút cố định phía trên thanh tab, dành chỗ riêng bằng Scaffold/SafeArea; nhãn giờ vào/ra bằng tiếng Việt; trạng thái lấy GPS/gửi/tải lại tách biệt. Guard đồng bộ khóa cả nút chính và retry, không để refresh xóa feedback đang xử lý. Lỗi tải trạng thái yêu cầu reload trước khi chấm công; thành công dùng giờ sự kiện Backend, có cảnh báo đối soát nếu Backend trả risk flags. Không đổi GPS/session/queue/API hoặc rule nghiệp vụ.
 
 Vùng dự kiến: `mobile/lib/features/attendance/attendance_home.dart`; widget cục bộ liên quan nếu cần.
 
@@ -138,12 +140,23 @@ Trước khi đổi agent hoặc kết thúc lượt, điền log bên dưới. 
 
 | Task | Trạng thái | Commit/push | Kiểm tra | Bước còn lại/blocker |
 |---|---|---|---|---|
-| UX1 | DONE | `b03c771`; đối chiếu `origin/main` để xác minh push | Format/debug/manual đạt; analyze có 1 info CR6 sẵn có | Tech Lead xem UI; chưa làm UX2 |
-| UX2 | PROPOSED | — | Chưa chạy | Chờ UX1 và Tech Lead giao |
+| UX1 | DONE | `b03c771`; đối chiếu `origin/main` để xác minh push | Format/debug/manual đạt; analyze có 1 info CR6 sẵn có | Không còn code bắt buộc |
+| UX2 | DONE | `feat(mobile): improve attendance action UX`; xác minh hash/push khi tiếp quản | Format/analyze file đạt; Hot Reload và manual USB đạt | Tech Lead xem UI; chưa làm UX3 |
 | UX3 | PROPOSED | — | Chưa chạy | Chờ UX2 và Tech Lead giao |
 | UX4 | PROPOSED | — | Chưa chạy | Chờ UX3 và Tech Lead giao |
 
-Checkpoint chi tiết khi đang dở:
+Checkpoint gần nhất — UX2:
+
+- Task và agent: UX2 — Codex, đã hoàn thành; chỉ triển khai task này.
+- File đã sửa: attendance_home.dart; IMPLEMENTATION.md/README.md; tài liệu này. Không chạm Backend, Admin Web, schema hoặc API contract. Diff CR6 của người dùng trong leave_request_screen.dart được giữ nguyên và không stage.
+- Kiểm tra: `dart format` file attendance; `flutter analyze --no-pub lib/features/attendance/attendance_home.dart` đạt, không có issue; `git diff --check` đạt. Không chạy automated test suite hoặc full-project analyze trong UX2.
+- Manual USB `32a65649`: Hot Reload thành công; nút cố định không che tab/nội dung; tắt GPS báo lỗi có hướng dẫn bật lại; bấm liên tiếp trong lúc lấy GPS thấy nút disabled. Ngắt ADB reverse trước khi chấm công để không tạo giao dịch: nhận lỗi Backend, giữ phiên; phục hồi reverse và pull-to-refresh tải lại thành công. Font scale 1.8 vẫn cuộn tới version/build ở footer, không che nội dung; đã phục hồi font 1.15 và GPS bật. Log app trong lượt kiểm tra không có Flutter exception/overflow.
+- Giới hạn: không tạo check-in/out thành công mới; chưa nghiệm thu trực tiếp trạng thái đã vào/đã ra, success/risk flags bằng giao dịch mới hoặc luồng từ chối quyền GPS. Home không có input nên không có bài kiểm tra bàn phím; keyboard/form thuộc UX4. Không xuất APK release/bàn giao.
+- GitNexus: runner local thiếu, chưa có index repo dùng được; kiểm tra trực tiếp cho thấy AttendanceHome chỉ được gọi từ EmployeeShell. Không thay caller hoặc cơ chế IndexedStack.
+- Runtime cuối lượt: Backend health localhost:3001/api/health trả ok; ADB reverse tcp:3001 đã khôi phục; Flutter run session `52766` giữ debug/Hot Reload. Agent sau phải xác minh lại thiết bị/process/session.
+- Bước tiếp theo: Tech Lead xem UI; chỉ bắt đầu UX3 khi được giao.
+
+Checkpoint trước — UX1 (giữ lịch sử):
 
 - Task và agent: UX1 — Codex, đã hoàn thành.
 - Commit triển khai: `b03c771`, branch `main`; commit tài liệu kế hoạch theo sau. Xác minh HEAD/origin khi tiếp quản.

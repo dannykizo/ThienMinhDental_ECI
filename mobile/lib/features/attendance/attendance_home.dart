@@ -33,11 +33,21 @@ class _AttendanceHomeState extends State<AttendanceHome> {
   String? _error;
   String? _success;
   bool _loading = true;
+  bool _refreshInFlight = false;
   bool _retryAttendance = false;
   double? _lastAccuracyMeters;
   RecordedAttendanceEvent? _lastEvent;
   _AttendanceActionState _actionState = _AttendanceActionState.idle;
   _LocationRecovery? _locationRecovery;
+
+  bool get _recording => _actionState != _AttendanceActionState.idle;
+
+  bool get _canRecord =>
+      _today != null &&
+      _today!.status != 'CHECKED_OUT' &&
+      !_recording &&
+      !_loading &&
+      (_error == null || _retryAttendance);
 
   @override
   void initState() {
@@ -46,6 +56,9 @@ class _AttendanceHomeState extends State<AttendanceHome> {
   }
 
   Future<void> _load({bool clearFeedback = true}) async {
+    // Không để refresh/thử lại làm mất feedback của thao tác đang xử lý.
+    if (_refreshInFlight || (_recording && clearFeedback)) return;
+    _refreshInFlight = true;
     setState(() {
       _error = null;
       if (clearFeedback) _success = null;
@@ -63,11 +76,14 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       }
       if (mounted) setState(() => _error = error.message);
     } finally {
+      _refreshInFlight = false;
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _record() async {
+    // Guard đồng bộ bảo vệ cả nút chính và nút thử lại trước lần rebuild kế tiếp.
+    if (!_canRecord) return;
     final TodayAttendance? today = _today;
     if (today == null || today.status == 'CHECKED_OUT') return;
     setState(() {
@@ -132,9 +148,10 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       );
       if (mounted) {
         setState(() {
-          _success = event.eventType == 'CHECK_IN'
-              ? 'Check-in thành công lúc ${DateFormat('HH:mm').format(event.serverTime)}.'
-              : 'Check-out thành công lúc ${DateFormat('HH:mm').format(event.serverTime)}.';
+          final String action = event.eventType == 'CHECK_IN' ? 'vào' : 'ra';
+          _success =
+              'Đã ghi nhận giờ $action lúc ${DateFormat('HH:mm').format(event.serverTime)}.'
+              '${event.riskFlags.isEmpty ? '' : ' Cần đối soát theo thông tin bên dưới.'}';
           _lastEvent = event;
           _retryAttendance = false;
         });
@@ -192,6 +209,15 @@ class _AttendanceHomeState extends State<AttendanceHome> {
   Widget build(BuildContext context) {
     final SessionUser user = widget.session.user!;
     return Scaffold(
+      bottomNavigationBar: _AttendanceActionBar(
+        actionState: _actionState,
+        canRecord: _canRecord,
+        loading: _loading,
+        needsReload: _today == null || (_error != null && !_retryAttendance),
+        onRecord: _record,
+        onReload: _load,
+        today: _today,
+      ),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
@@ -227,16 +253,28 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                       letterSpacing: -0.4)),
               const SizedBox(height: 16),
               if (_success != null) ...<Widget>[
-                _SuccessBanner(message: _success!),
+                _SuccessBanner(
+                  message: _success!,
+                  reviewRequired: _lastEvent?.riskFlags.isNotEmpty ?? false,
+                ),
                 const SizedBox(height: 16),
               ],
               if (_error != null) ...<Widget>[
                 AppErrorState(
                   compact: true,
                   message: _error!,
-                  onRetry: _retryAttendance ? _record : _load,
+                  onRetry: _recording || _loading
+                      ? null
+                      : _retryAttendance
+                          ? _record
+                          : _load,
+                  retryLabel: _retryAttendance
+                      ? 'Thử chấm công lại'
+                      : 'Tải lại trạng thái',
                   onSecondaryAction:
-                      _locationRecovery == null ? null : _recoverLocation,
+                      _recording || _loading || _locationRecovery == null
+                          ? null
+                          : _recoverLocation,
                   secondaryActionLabel:
                       _locationRecovery == null ? null : 'Mở cài đặt',
                   title: _retryAttendance
@@ -255,9 +293,7 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                 )
               else if (_today != null)
                 _AttendanceCard(
-                  actionState: _actionState,
                   dateLabel: _formatDate(_today!.date),
-                  onRecord: _record,
                   today: _today!,
                 ),
               if (_lastEvent != null) ...<Widget>[
@@ -414,40 +450,138 @@ class _HomeShortcuts extends StatelessWidget {
       );
 }
 
-class _AttendanceCard extends StatelessWidget {
-  const _AttendanceCard(
-      {required this.actionState,
-      required this.dateLabel,
-      required this.onRecord,
-      required this.today});
+class _AttendanceActionBar extends StatelessWidget {
+  const _AttendanceActionBar({
+    required this.actionState,
+    required this.canRecord,
+    required this.loading,
+    required this.needsReload,
+    required this.onRecord,
+    required this.onReload,
+    required this.today,
+  });
 
   final _AttendanceActionState actionState;
-  final String dateLabel;
+  final bool canRecord;
+  final bool loading;
+  final bool needsReload;
   final VoidCallback onRecord;
-  final TodayAttendance today;
+  final VoidCallback onReload;
+  final TodayAttendance? today;
 
-  bool get _submitting => actionState != _AttendanceActionState.idle;
+  @override
+  Widget build(BuildContext context) {
+    final bool recording = actionState != _AttendanceActionState.idle;
+    final bool busy = recording || loading;
+    final bool checkedOut = today?.status == 'CHECKED_OUT';
+    final bool checkingOut = today?.status == 'CHECKED_IN';
+    final String label = switch (actionState) {
+      _AttendanceActionState.locating => 'Đang lấy vị trí…',
+      _AttendanceActionState.sending => 'Đang gửi chấm công…',
+      _AttendanceActionState.idle => loading
+          ? 'Đang tải trạng thái…'
+          : needsReload
+              ? 'Tải lại trạng thái'
+              : checkedOut
+                  ? 'Đã chấm công ra'
+                  : checkingOut
+                      ? 'Chấm công ra'
+                      : 'Chấm công vào',
+    };
+    final String hint = switch (actionState) {
+      _AttendanceActionState.locating => 'Giữ ứng dụng mở trong khi lấy GPS.',
+      _AttendanceActionState.sending => 'Vui lòng chờ kết quả từ Backend.',
+      _AttendanceActionState.idle => loading
+          ? 'Đang kiểm tra trạng thái mới nhất của bạn.'
+          : needsReload
+              ? 'Cần tải lại trạng thái trước khi chấm công.'
+              : checkedOut
+                  ? 'Giờ ra đã được Backend ghi nhận.'
+                  : 'GPS chỉ được lấy khi bạn bấm chấm công.',
+    };
+
+    // Scaffold dành chỗ riêng cho thanh này, không overlay danh sách hay tab.
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: brandLine)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  hint,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: brandMuted, fontSize: 11, height: 1.4),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: busy
+                      ? null
+                      : needsReload
+                          ? onReload
+                          : canRecord
+                              ? onRecord
+                              : null,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 54),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 14),
+                    backgroundColor: brandPurple,
+                    disabledBackgroundColor: brandPurpleLight,
+                    disabledForegroundColor: brandPurpleDark,
+                  ),
+                  icon: busy
+                      ? const SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(needsReload
+                          ? Icons.refresh_rounded
+                          : checkedOut
+                              ? Icons.check_circle_outline_rounded
+                              : checkingOut
+                                  ? Icons.logout_rounded
+                                  : Icons.login_rounded),
+                  label: Text(label,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AttendanceCard extends StatelessWidget {
+  const _AttendanceCard({required this.dateLabel, required this.today});
+
+  final String dateLabel;
+  final TodayAttendance today;
 
   String get _title => switch (today.status) {
         'CHECKED_IN' => 'Đang trong ca',
-        'CHECKED_OUT' => 'Đã check-out',
-        _ => 'Chưa check-in',
+        'CHECKED_OUT' => 'Đã chấm công ra',
+        _ => 'Chưa chấm công vào',
       };
-
-  String get _button => today.status == 'CHECKED_IN'
-      ? 'Check-out tại văn phòng'
-      : 'Check-in tại văn phòng';
 
   String get _statusLabel => switch (today.status) {
         'CHECKED_IN' => 'ĐANG TRONG CA',
-        'CHECKED_OUT' => 'ĐÃ CHECK-OUT',
-        _ => 'CHƯA CHECK-IN',
-      };
-
-  String get _progressLabel => switch (actionState) {
-        _AttendanceActionState.locating => 'Đang lấy vị trí…',
-        _AttendanceActionState.sending => 'Đang ghi nhận…',
-        _AttendanceActionState.idle => _button,
+        'CHECKED_OUT' => 'ĐÃ CHẤM CÔNG RA',
+        _ => 'CHƯA CHẤM CÔNG VÀO',
       };
 
   @override
@@ -526,47 +660,17 @@ class _AttendanceCard extends StatelessWidget {
                     children: <Widget>[
                       Expanded(
                           child: _TimeCell(
-                              label: 'CHECK-IN',
+                              label: 'GIỜ VÀO',
                               value: _formatTime(today.checkedInAt))),
                       Container(
                           width: 1, height: 52, color: const Color(0xFFE8E1EA)),
                       Expanded(
                           child: _TimeCell(
-                              label: 'CHECK-OUT',
+                              label: 'GIỜ RA',
                               value: _formatTime(today.checkedOutAt))),
                     ],
                   ),
                   const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _submitting || today.status == 'CHECKED_OUT'
-                          ? null
-                          : onRecord,
-                      style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 54),
-                          backgroundColor: brandPurple,
-                          disabledBackgroundColor: const Color(0xFFE3DCE5),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5))),
-                      icon: _submitting
-                          ? const SizedBox.square(
-                              dimension: 18,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : Icon(today.status == 'CHECKED_IN'
-                              ? Icons.logout_rounded
-                              : Icons.login_rounded),
-                      label: Text(
-                          today.status == 'CHECKED_OUT'
-                              ? 'Đã ghi nhận check-out'
-                              : _submitting
-                                  ? _progressLabel
-                                  : _button,
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
                   const Text('Thời gian chính thức do Backend ghi nhận',
                       textAlign: TextAlign.center,
                       style: TextStyle(color: brandMuted, fontSize: 11)),
@@ -710,33 +814,47 @@ class _TimeCell extends StatelessWidget {
 }
 
 class _SuccessBanner extends StatelessWidget {
-  const _SuccessBanner({required this.message});
+  const _SuccessBanner({required this.message, required this.reviewRequired});
 
   final String message;
+  final bool reviewRequired;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) {
+    final Color accent =
+        reviewRequired ? const Color(0xFF9A681A) : const Color(0xFF338865);
+    return Semantics(
+      liveRegion: true,
+      child: Container(
         width: double.infinity,
         padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(
-          color: Color(0xFFEAF7F1),
-          border: Border(left: BorderSide(color: Color(0xFF338865), width: 3)),
+        decoration: BoxDecoration(
+          color: reviewRequired
+              ? const Color(0xFFFFF6E5)
+              : const Color(0xFFEAF7F1),
+          border: Border(left: BorderSide(color: accent, width: 3)),
         ),
         child: Row(
           children: <Widget>[
-            const Icon(Icons.check_circle_outline_rounded,
-                size: 18, color: Color(0xFF338865)),
+            Icon(
+                reviewRequired
+                    ? Icons.info_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+                size: 18,
+                color: accent),
             const SizedBox(width: 9),
             Expanded(
               child: Text(message,
-                  style: const TextStyle(
-                      color: Color(0xFF286E52),
+                  style: TextStyle(
+                      color: accent,
                       fontSize: 12,
                       fontWeight: FontWeight.w700)),
             ),
           ],
         ),
-      );
+      ),
+    );
+  }
 }
 
 class _GpsSampleNotice extends StatelessWidget {
