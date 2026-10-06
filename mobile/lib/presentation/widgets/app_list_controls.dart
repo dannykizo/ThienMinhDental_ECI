@@ -32,20 +32,24 @@ class AppListFilters extends StatelessWidget {
               style: const TextStyle(
                   color: brandInk, fontSize: 13, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: options.entries
-                .map((MapEntry<String, String> option) => ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: ChoiceChip(
-                        showCheckmark: false,
-                        label: Text(option.value),
-                        selected: selected == option.key,
-                        onSelected: (_) => onSelected(option.key),
-                      ),
-                    ))
-                .toList(),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: options.entries
+                  .map((MapEntry<String, String> option) => Padding(
+                        padding: const EdgeInsetsDirectional.only(end: 8),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: ChoiceChip(
+                            showCheckmark: false,
+                            label: Text(option.value),
+                            selected: selected == option.key,
+                            onSelected: (_) => onSelected(option.key),
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
           ),
           const SizedBox(height: 8),
           Semantics(

@@ -92,6 +92,7 @@ Phạm vi:
 
 - Chuẩn hóa thứ bậc trên thẻ: tiêu đề/mã phiếu, nhãn trạng thái, thời gian, thông tin chính và nút xem/phản hồi.
 - Cải thiện hoặc bổ sung chip lọc trạng thái trên chính dữ liệu đã tải. Giữ mã trạng thái Backend; không tạo trạng thái giải trình mới giống app tham khảo.
+- Theo chỉnh sửa Tech Lead ngày 2026-10-06: chip ở cả bốn danh sách nằm trên một hàng ngang vuốt được, không Wrap xuống nhiều hàng; giữ vùng chạm tối thiểu và chiều cao thích ứng cỡ chữ.
 - Bộ lọc client chỉ áp dụng tập dữ liệu hiện có; nếu API phân trang hoặc chưa đủ dữ liệu phải ghi rõ phạm vi, không công bố tổng toàn bộ. Không thêm bộ lọc ngày hoặc đổi API trong task này.
 - Phân biệt danh sách rỗng với không có kết quả theo bộ lọc; có thao tác bỏ lọc.
 - Hộp thư tiếp tục phân biệt chưa đọc, cần xác nhận và quyết định kỷ luật; lọc hoặc xem preview không gọi read/acknowledge. Mở chi tiết vẫn giữ flow đọc hiện tại.
@@ -150,6 +151,7 @@ Trước khi đổi agent hoặc kết thúc lượt, điền log bên dưới. 
 Checkpoint gần nhất — UX3:
 
 - Task và agent: UX3 — Codex, đã hoàn thành; không triển khai UX4.
+- Tinh chỉnh sau bàn giao theo Tech Lead: chỉ đổi AppListFilters trong app_list_controls.dart sang SingleChildScrollView ngang + Row, áp dụng cho bốn màn; không đổi callbacks/filter/API hoặc diff CR6. Format/analyze file đạt (không issue), diff check đạt; Hot Reload và vuốt đến/chọn chip cuối ở Nghỉ phép hoạt động; kiểm tra chữ lớn 1.8, đã phục hồi 1.15, log không có Flutter overflow/exception. Không chạy test tự động hoặc xuất APK.
 - File: bốn màn danh sách theo vùng chỉ định, widget presentation dùng chung app_list_controls.dart, IMPLEMENTATION.md/README.md và tài liệu này. Không sửa Backend, Admin Web, API/schema hoặc dịch vụ. Trong leave_request_screen.dart chỉ stage hunk UX3; hai hunk CR6 sẵn có của Tech Lead (dialog hủy và ngày xếp dọc) giữ nguyên, không commit chung.
 - Kiểm tra: `dart format` năm file; `git diff --check`; `flutter analyze --no-pub` chỉ định năm file — exit 1 vì một info deprecated_member_use đã có ở form nghỉ (`value` của DropdownButtonFormField, dòng 467 sau UX3), không error/warning mới. Không chạy automated test suite.
 - Manual USB 32a65649: Hot Reload thành công; lọc cho bốn danh sách, no-match và Bỏ lọc, phục hồi danh sách; refresh lỗi giữ dữ liệu/lựa chọn lọc và phiên. Ngắt reverse tạm để thử lỗi Backend rồi khôi phục/tải lại. Kiểm tra font scale 1.8 cho chip, no-match và thẻ công tác/nghỉ/giải trình/kỷ luật; nút tạo đơn dành chỗ riêng, cuộn đến cuối vẫn đọc được. Phục hồi font 1.15; log không có Flutter exception/overflow trong lượt kiểm tra.
