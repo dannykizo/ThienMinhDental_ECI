@@ -83,9 +83,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text(
                       'Chấm công rõ ràng,\nngay tại nơi làm việc.',
                       style: TextStyle(
-                          fontFamily: 'serif',
                           fontSize: 38,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w800,
                           height: 1.08,
                           letterSpacing: -1.2),
                     ),

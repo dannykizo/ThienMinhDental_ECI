@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../app.dart';
+import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
 import '../../services/uuid_v4.dart';
 
@@ -35,7 +36,7 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
     if (mounted) {
       setState(() {
         _error = null;
-        _loading = _items.isEmpty;
+        _loading = true;
       });
     }
     try {
@@ -68,7 +69,6 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
           surfaceTintColor: Colors.transparent,
           title: const Text(
             'Phiếu công tác',
-            style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.w600),
           ),
           actions: <Widget>[
             IconButton(
@@ -84,48 +84,38 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
             children: <Widget>[
-              const Text(
-                'PHÂN CÔNG CỦA BẠN',
-                style: TextStyle(
-                  color: brandPurple,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.4,
-                ),
+              const AppPageIntro(
+                eyebrow: 'Phân công của bạn',
+                title: 'Công việc hiện trường\nrõ ràng từng bước.',
+                description:
+                    'GPS chỉ được lấy khi bạn bắt đầu hoặc hoàn tất công tác.',
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Công việc hiện trường\nrõ ràng từng bước.',
-                style: TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 29,
-                  fontWeight: FontWeight.w500,
-                  height: 1.12,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'GPS chỉ được lấy khi bạn bắt đầu hoặc hoàn tất công tác.',
-                style: TextStyle(
-                  color: Color(0xFF746A77),
-                  fontSize: 12,
-                  height: 1.5,
-                ),
-              ),
-              if (_error != null) ...<Widget>[
+              if (_error != null && _items.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 16),
-                _TripError(message: _error!, onRetry: _load),
+                AppErrorState(
+                  compact: true,
+                  message: _error!,
+                  onRetry: _load,
+                  title: 'Chưa thể làm mới danh sách',
+                ),
               ],
               const SizedBox(height: 20),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 80),
-                  child: Center(
-                    child: CircularProgressIndicator(color: brandPurple),
-                  ),
+              if (_loading && _items.isNotEmpty) ...<Widget>[
+                const LinearProgressIndicator(minHeight: 2),
+                const SizedBox(height: 12),
+              ],
+              if (_loading && _items.isEmpty)
+                const AppLoadingState(
+                  label: 'Đang tải phiếu công tác…',
                 )
+              else if (_error != null && _items.isEmpty)
+                AppErrorState(message: _error!, onRetry: _load)
               else if (_items.isEmpty)
-                const _EmptyTrips()
+                const AppEmptyState(
+                  description: 'Phiếu được Admin giao sẽ xuất hiện tại đây.',
+                  icon: Icons.work_outline_rounded,
+                  title: 'Chưa có phiếu công tác',
+                )
               else
                 ..._items.map(
                   (BusinessTripAssignment trip) => Padding(
@@ -347,7 +337,11 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
           _TripSummary(trip: trip),
           if (_error != null) ...<Widget>[
             const SizedBox(height: 16),
-            _TripError(message: _error!),
+            AppErrorState(
+              compact: true,
+              message: _error!,
+              title: null,
+            ),
           ],
           if (trip.participationStatus == 'ASSIGNED' &&
               !<String>['CANCELLED', 'COMPLETED']
@@ -481,9 +475,9 @@ class _TripCard extends StatelessWidget {
                 Text(
                   trip.siteName,
                   style: const TextStyle(
-                    fontFamily: 'serif',
                     fontSize: 21,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.35,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -572,9 +566,9 @@ class _TripSummary extends StatelessWidget {
                   child: Text(
                     trip.siteName,
                     style: const TextStyle(
-                      fontFamily: 'serif',
                       fontSize: 25,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.45,
                     ),
                   ),
                 ),
@@ -793,31 +787,6 @@ class _PrivacyNotice extends StatelessWidget {
       );
 }
 
-class _TripError extends StatelessWidget {
-  const _TripError({required this.message, this.onRetry});
-
-  final String message;
-  final Future<void> Function()? onRetry;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFEFEC),
-          border: Border(left: BorderSide(color: Color(0xFFB85D50), width: 3)),
-        ),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(message, style: const TextStyle(fontSize: 12)),
-            ),
-            if (onRetry != null)
-              TextButton(onPressed: onRetry, child: const Text('Thử lại')),
-          ],
-        ),
-      );
-}
-
 class _TripStatus extends StatelessWidget {
   const _TripStatus({required this.status});
 
@@ -868,33 +837,6 @@ class _CancelledNotice extends StatelessWidget {
           reason?.isNotEmpty == true
               ? 'Phiếu đã hủy: $reason'
               : 'Phiếu công tác đã bị hủy.',
-        ),
-      );
-}
-
-class _EmptyTrips extends StatelessWidget {
-  const _EmptyTrips();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          border: Border(left: BorderSide(color: brandPurple, width: 3)),
-        ),
-        child: const Column(
-          children: <Widget>[
-            Icon(Icons.work_outline_rounded, color: brandPurple, size: 36),
-            SizedBox(height: 12),
-            Text('Chưa có phiếu công tác',
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            SizedBox(height: 6),
-            Text(
-              'Phiếu được Admin giao sẽ xuất hiện tại đây.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF746A77), fontSize: 12),
-            ),
-          ],
         ),
       );
 }

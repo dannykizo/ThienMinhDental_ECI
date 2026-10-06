@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../app.dart';
+import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
 
 class LeaveRequestScreen extends StatefulWidget {
@@ -32,7 +33,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
     if (mounted) {
       setState(() {
         _error = null;
-        _loading = _items.isEmpty;
+        _loading = true;
       });
     }
     try {
@@ -126,7 +127,6 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
           surfaceTintColor: Colors.transparent,
           title: const Text(
             'Đơn nghỉ phép',
-            style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.w600),
           ),
           actions: <Widget>[
             IconButton(
@@ -142,37 +142,20 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 110),
             children: <Widget>[
-              const Text(
-                'NGHỈ PHÉP CỦA BẠN',
-                style: TextStyle(
-                  color: brandPurple,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.4,
-                ),
+              const AppPageIntro(
+                eyebrow: 'Nghỉ phép của bạn',
+                title: 'Biết rõ quỹ phép,\ngửi đơn đúng chính sách.',
+                description:
+                    'Loại nghỉ, thời lượng và quyền hủy do công ty cấu hình. App hiển thị đúng kết quả do Backend tính toán.',
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Biết rõ quỹ phép,\ngửi đơn đúng chính sách.',
-                style: TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 29,
-                  fontWeight: FontWeight.w500,
-                  height: 1.12,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Loại nghỉ, thời lượng và quyền hủy do công ty cấu hình. App hiển thị đúng kết quả do Backend tính toán.',
-                style: TextStyle(
-                  color: Color(0xFF746A77),
-                  fontSize: 12,
-                  height: 1.5,
-                ),
-              ),
-              if (_error != null) ...<Widget>[
+              if (_error != null && _items.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 16),
-                _LeaveError(message: _error!, onRetry: _load),
+                AppErrorState(
+                  compact: true,
+                  message: _error!,
+                  onRetry: _load,
+                  title: 'Chưa thể làm mới dữ liệu phép',
+                ),
               ],
               if (_balances.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 20),
@@ -194,15 +177,22 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                 ),
               ],
               const SizedBox(height: 20),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 80),
-                  child: Center(
-                    child: CircularProgressIndicator(color: brandPurple),
-                  ),
+              if (_loading && _items.isNotEmpty) ...<Widget>[
+                const LinearProgressIndicator(minHeight: 2),
+                const SizedBox(height: 12),
+              ],
+              if (_loading && _items.isEmpty)
+                const AppLoadingState(
+                  label: 'Đang tải đơn và số dư phép…',
                 )
+              else if (_error != null && _items.isEmpty)
+                AppErrorState(message: _error!, onRetry: _load)
               else if (_items.isEmpty)
-                const _EmptyLeaveRequests()
+                const AppEmptyState(
+                  description: 'Nhấn “Tạo đơn nghỉ” để gửi yêu cầu đầu tiên.',
+                  icon: Icons.event_available_rounded,
+                  title: 'Bạn chưa có đơn nghỉ nào',
+                )
               else
                 ..._items.map(
                   (EmployeeLeaveRequest item) => Padding(
@@ -333,8 +323,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
         durationType: _durationType,
         endDate: _apiDate(_durationType == 'FULL_DAY' ? _endDate : _startDate),
         endTime: _durationType == 'HOURS' ? _apiTime(_endTime) : null,
-        halfDayPeriod:
-            _durationType == 'HALF_DAY' ? _halfDayPeriod : null,
+        halfDayPeriod: _durationType == 'HALF_DAY' ? _halfDayPeriod : null,
         policyId: _policy.id,
         reason: reason,
         startDate: _apiDate(_startDate),
@@ -360,7 +349,6 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
         appBar: AppBar(
           title: const Text(
             'Tạo đơn nghỉ',
-            style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.w600),
           ),
         ),
         body: ListView(
@@ -521,7 +509,11 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
             ),
             if (_error != null) ...<Widget>[
               const SizedBox(height: 4),
-              _LeaveError(message: _error!),
+              AppErrorState(
+                compact: true,
+                message: _error!,
+                title: null,
+              ),
             ],
             const SizedBox(height: 22),
             SizedBox(
@@ -586,7 +578,8 @@ class _BalanceCard extends StatelessWidget {
 }
 
 class _DateField extends StatelessWidget {
-  const _DateField({required this.label, required this.onTap, required this.value});
+  const _DateField(
+      {required this.label, required this.onTap, required this.value});
   final String label;
   final VoidCallback? onTap;
   final String value;
@@ -605,7 +598,8 @@ class _DateField extends StatelessWidget {
 }
 
 class _TimeField extends StatelessWidget {
-  const _TimeField({required this.label, required this.onTap, required this.value});
+  const _TimeField(
+      {required this.label, required this.onTap, required this.value});
   final String label;
   final VoidCallback? onTap;
   final String value;
@@ -645,9 +639,9 @@ class _LeaveCard extends StatelessWidget {
                   child: Text(
                     item.policyName,
                     style: const TextStyle(
-                      fontFamily: 'serif',
                       fontSize: 20,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.35,
                     ),
                   ),
                 ),
@@ -730,55 +724,10 @@ class _LeaveStatus extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       color: background,
       child: Text(_statusLabel(status),
-          style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w800)),
+          style: TextStyle(
+              color: color, fontSize: 9, fontWeight: FontWeight.w800)),
     );
   }
-}
-
-class _LeaveError extends StatelessWidget {
-  const _LeaveError({required this.message, this.onRetry});
-  final String message;
-  final Future<void> Function()? onRetry;
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFEFEC),
-          border: Border(left: BorderSide(color: Color(0xFFB85D50), width: 3)),
-        ),
-        child: Row(
-          children: <Widget>[
-            Expanded(child: Text(message, style: const TextStyle(fontSize: 12))),
-            if (onRetry != null)
-              TextButton(onPressed: onRetry, child: const Text('Thử lại')),
-          ],
-        ),
-      );
-}
-
-class _EmptyLeaveRequests extends StatelessWidget {
-  const _EmptyLeaveRequests();
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 50),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFE5DDE7)),
-        ),
-        child: const Column(
-          children: <Widget>[
-            Icon(Icons.event_available_rounded, color: brandPurple, size: 34),
-            SizedBox(height: 12),
-            Text('Bạn chưa có đơn nghỉ nào',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            SizedBox(height: 6),
-            Text('Nhấn “Tạo đơn nghỉ” để gửi yêu cầu đầu tiên.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF817683), fontSize: 12)),
-          ],
-        ),
-      );
 }
 
 String _apiDate(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
@@ -795,8 +744,10 @@ String _dateRange(String start, String end) {
 }
 
 String _durationLabel(EmployeeLeaveRequest item) => switch (item.durationType) {
-      'HALF_DAY' => item.halfDayPeriod == 'AM' ? 'Nửa ngày sáng' : 'Nửa ngày chiều',
-      'HOURS' => '${item.startTime?.substring(0, 5)}–${item.endTime?.substring(0, 5)}',
+      'HALF_DAY' =>
+        item.halfDayPeriod == 'AM' ? 'Nửa ngày sáng' : 'Nửa ngày chiều',
+      'HOURS' =>
+        '${item.startTime?.substring(0, 5)}–${item.endTime?.substring(0, 5)}',
       _ => 'Cả ngày',
     };
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../app.dart';
+import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
 
 class AnnouncementInboxScreen extends StatefulWidget {
@@ -46,7 +47,7 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
     if (mounted) {
       setState(() {
         _error = null;
-        _loading = _items.isEmpty;
+        _loading = true;
       });
     }
     try {
@@ -92,7 +93,6 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
           surfaceTintColor: Colors.transparent,
           title: const Text(
             'Hộp thư',
-            style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.w600),
           ),
           actions: <Widget>[
             IconButton(
@@ -108,33 +108,11 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
             children: <Widget>[
-              const Text(
-                'THÔNG BÁO NỘI BỘ',
-                style: TextStyle(
-                  color: brandPurple,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.4,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Thông tin quan trọng,\nkhông bỏ sót.',
-                style: TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 29,
-                  fontWeight: FontWeight.w500,
-                  height: 1.12,
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Tin chưa đọc được đánh dấu rõ. Một số thông báo quan trọng cần bạn xác nhận sau khi xem.',
-                style: TextStyle(
-                  color: Color(0xFF746A77),
-                  fontSize: 12,
-                  height: 1.5,
-                ),
+              const AppPageIntro(
+                eyebrow: 'Thông báo nội bộ',
+                title: 'Thông tin quan trọng,\nkhông bỏ sót.',
+                description:
+                    'Tin chưa đọc được đánh dấu rõ. Một số thông báo quan trọng cần bạn xác nhận sau khi xem.',
               ),
               if (!widget.session.pushNotifications.configured) ...<Widget>[
                 const SizedBox(height: 16),
@@ -148,20 +126,33 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
                 const SizedBox(height: 16),
                 const _PushTokenPending(),
               ],
-              if (_error != null) ...<Widget>[
+              if (_error != null && _items.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 16),
-                _InboxError(message: _error!, onRetry: _load),
+                AppErrorState(
+                  compact: true,
+                  message: _error!,
+                  onRetry: _load,
+                  title: 'Chưa thể làm mới hộp thư',
+                ),
               ],
               const SizedBox(height: 20),
-              if (_loading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 80),
-                  child: Center(
-                    child: CircularProgressIndicator(color: brandPurple),
-                  ),
+              if (_loading && _items.isNotEmpty) ...<Widget>[
+                const LinearProgressIndicator(minHeight: 2),
+                const SizedBox(height: 12),
+              ],
+              if (_loading && _items.isEmpty)
+                const AppLoadingState(
+                  label: 'Đang tải hộp thư…',
                 )
+              else if (_error != null && _items.isEmpty)
+                AppErrorState(message: _error!, onRetry: _load)
               else if (_items.isEmpty)
-                const _EmptyInbox()
+                const AppEmptyState(
+                  description:
+                      'Thông báo được Admin xuất bản cho bạn sẽ xuất hiện tại đây.',
+                  icon: Icons.mark_email_read_outlined,
+                  title: 'Hộp thư đang trống',
+                )
               else
                 ..._items.map(
                   (EmployeeAnnouncement item) => Padding(
@@ -273,10 +264,10 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
           Text(
             disciplinary ? _disciplinaryTitle(item) : item.title,
             style: const TextStyle(
-              fontFamily: 'serif',
               fontSize: 29,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w800,
               height: 1.15,
+              letterSpacing: -0.6,
             ),
           ),
           const SizedBox(height: 18),
@@ -299,7 +290,11 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
           ],
           if (_error != null) ...<Widget>[
             const SizedBox(height: 14),
-            _InboxError(message: _error!),
+            AppErrorState(
+              compact: true,
+              message: _error!,
+              title: null,
+            ),
           ],
           if (needsAcknowledgement) ...<Widget>[
             const SizedBox(height: 18),
@@ -379,9 +374,9 @@ class _AnnouncementCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'serif',
                   fontSize: 20,
-                  fontWeight: unread ? FontWeight.w700 : FontWeight.w600,
+                  fontWeight: unread ? FontWeight.w800 : FontWeight.w700,
+                  letterSpacing: -0.35,
                 ),
               ),
               const SizedBox(height: 7),
@@ -582,61 +577,6 @@ class _AudienceNotice extends StatelessWidget {
       );
 }
 
-class _InboxError extends StatelessWidget {
-  const _InboxError({required this.message, this.onRetry});
-
-  final String message;
-  final Future<void> Function()? onRetry;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFEFEC),
-          border: Border(left: BorderSide(color: Color(0xFFB85D50), width: 3)),
-        ),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-              child: Text(message, style: const TextStyle(fontSize: 12)),
-            ),
-            if (onRetry != null)
-              TextButton(onPressed: onRetry, child: const Text('Thử lại')),
-          ],
-        ),
-      );
-}
-
-class _EmptyInbox extends StatelessWidget {
-  const _EmptyInbox();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 50),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFE5DDE7)),
-        ),
-        child: const Column(
-          children: <Widget>[
-            Icon(Icons.mark_email_read_outlined, color: brandPurple, size: 34),
-            SizedBox(height: 12),
-            Text(
-              'Hộp thư đang trống',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            SizedBox(height: 6),
-            Text(
-              'Thông báo được Admin xuất bản cho bạn sẽ xuất hiện tại đây.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF817683), fontSize: 12),
-            ),
-          ],
-        ),
-      );
-}
-
 class _PushNotConfigured extends StatelessWidget {
   const _PushNotConfigured();
 
@@ -790,11 +730,13 @@ class _DisciplinaryCard extends StatelessWidget {
     final bool waitingForAcknowledgement =
         item.requiresAcknowledgement && item.acknowledgedAt == null;
     final bool revoked = item.disciplinaryRevoked;
-    final Color accent =
-        revoked ? _disciplinaryRevokedAccent : _disciplineColor(item.disciplinaryActionType);
+    final Color accent = revoked
+        ? _disciplinaryRevokedAccent
+        : _disciplineColor(item.disciplinaryActionType);
     final String category = _disciplineLabel(item.disciplinaryActionType);
     return Material(
-      color: revoked ? _disciplinaryRevokedSurface : _disciplinaryWarningSurface,
+      color:
+          revoked ? _disciplinaryRevokedSurface : _disciplinaryWarningSurface,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: accent, width: unread ? 2 : 1),
       ),
@@ -858,9 +800,9 @@ class _DisciplinaryCard extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontFamily: 'serif',
                   fontSize: 20,
-                  fontWeight: unread ? FontWeight.w700 : FontWeight.w600,
+                  fontWeight: unread ? FontWeight.w800 : FontWeight.w700,
+                  letterSpacing: -0.35,
                 ),
               ),
               const SizedBox(height: 8),
@@ -936,7 +878,8 @@ class _DisciplinaryStatus extends StatelessWidget {
 }
 
 class _DisciplinaryWarningBanner extends StatelessWidget {
-  const _DisciplinaryWarningBanner({required this.item, required this.required});
+  const _DisciplinaryWarningBanner(
+      {required this.item, required this.required});
 
   final EmployeeAnnouncement item;
   final bool required;
@@ -944,12 +887,14 @@ class _DisciplinaryWarningBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool revoked = item.disciplinaryRevoked;
-    final Color accent =
-        revoked ? _disciplinaryRevokedAccent : _disciplineColor(item.disciplinaryActionType);
+    final Color accent = revoked
+        ? _disciplinaryRevokedAccent
+        : _disciplineColor(item.disciplinaryActionType);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: revoked ? _disciplinaryRevokedSurface : _disciplinaryWarningSurface,
+        color:
+            revoked ? _disciplinaryRevokedSurface : _disciplinaryWarningSurface,
         border: Border(left: BorderSide(color: accent, width: 4)),
       ),
       child: Column(
@@ -981,9 +926,9 @@ class _DisciplinaryWarningBanner extends StatelessWidget {
                     Text(
                       _disciplineLabel(item.disciplinaryActionType),
                       style: TextStyle(
-                        fontFamily: 'serif',
                         fontSize: 21,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.35,
                         color: accent,
                       ),
                     ),
@@ -1062,7 +1007,8 @@ class _DisciplinaryMetaRow extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 12, height: 1.4)),
+            child:
+                Text(value, style: const TextStyle(fontSize: 12, height: 1.4)),
           ),
         ],
       );

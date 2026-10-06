@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 import '../../app.dart';
+import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
 
 class AttendanceHome extends StatefulWidget {
@@ -216,9 +217,8 @@ class _AttendanceHomeState extends State<AttendanceHome> {
               const SizedBox(height: 8),
               Text('Xin chào, ${user.displayName}',
                   style: const TextStyle(
-                      fontFamily: 'serif',
                       fontSize: 31,
-                      fontWeight: FontWeight.w500,
+                      fontWeight: FontWeight.w800,
                       height: 1.12,
                       letterSpacing: -0.7)),
               const SizedBox(height: 7),
@@ -232,19 +232,28 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                 const SizedBox(height: 16),
               ],
               if (_error != null) ...<Widget>[
-                _ErrorBanner(
+                AppErrorState(
+                  compact: true,
                   message: _error!,
-                  onRecover:
-                      _locationRecovery == null ? null : _recoverLocation,
                   onRetry: _retryAttendance ? _record : _load,
+                  onSecondaryAction:
+                      _locationRecovery == null ? null : _recoverLocation,
+                  secondaryActionLabel:
+                      _locationRecovery == null ? null : 'Mở cài đặt',
+                  title: _retryAttendance
+                      ? 'Chưa thể ghi nhận chấm công'
+                      : 'Chưa thể tải trạng thái hôm nay',
                 ),
                 const SizedBox(height: 16),
               ],
+              if (_loading && _today != null) ...<Widget>[
+                const LinearProgressIndicator(minHeight: 2),
+                const SizedBox(height: 12),
+              ],
               if (_loading && _today == null)
-                const SizedBox(
-                    height: 300,
-                    child: Center(
-                        child: CircularProgressIndicator(color: brandPurple)))
+                const AppLoadingState(
+                  label: 'Đang tải trạng thái chấm công…',
+                )
               else if (_today != null)
                 _AttendanceCard(
                   actionState: _actionState,
@@ -395,9 +404,9 @@ class _AttendanceCard extends StatelessWidget {
                   Text(_title,
                       style: const TextStyle(
                           color: Colors.white,
-                          fontFamily: 'serif',
                           fontSize: 29,
-                          fontWeight: FontWeight.w500)),
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.6)),
                   if (today.riskFlags.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 10),
                     Text(
@@ -593,51 +602,10 @@ class _TimeCell extends StatelessWidget {
           const SizedBox(height: 7),
           Text(value,
               style: const TextStyle(
-                  fontFamily: 'serif',
                   fontSize: 28,
-                  fontWeight: FontWeight.w500)),
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5)),
         ],
-      );
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({
-    required this.message,
-    required this.onRetry,
-    this.onRecover,
-  });
-
-  final String message;
-  final Future<void> Function()? onRecover;
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(15),
-        decoration: const BoxDecoration(
-            color: Color(0xFFFFEFEC),
-            border:
-                Border(left: BorderSide(color: Color(0xFFB85D50), width: 3))),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(message,
-                style: const TextStyle(
-                    color: Color(0xFF8E3D33), fontSize: 12, height: 1.4)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              children: <Widget>[
-                TextButton(onPressed: onRetry, child: const Text('Thử lại')),
-                if (onRecover != null)
-                  TextButton(
-                    onPressed: onRecover,
-                    child: const Text('Mở cài đặt'),
-                  ),
-              ],
-            ),
-          ],
-        ),
       );
 }
 

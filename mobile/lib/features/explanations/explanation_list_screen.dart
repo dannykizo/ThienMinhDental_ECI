@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../app.dart';
+import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
 import '../../services/pending_explanation_queue.dart';
 
@@ -53,7 +54,7 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
     if (mounted) {
       setState(() {
         _error = null;
-        _loading = _items.isEmpty;
+        _loading = true;
       });
     }
     if (syncQueue) await _syncPending(showResult: false);
@@ -125,8 +126,7 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
       appBar: AppBar(
         backgroundColor: brandCanvas,
         surfaceTintColor: Colors.transparent,
-        title: const Text('Giải trình chấm công',
-            style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.w600)),
+        title: const Text('Giải trình chấm công'),
         actions: <Widget>[
           IconButton(
             tooltip: 'Làm mới',
@@ -141,26 +141,11 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
           children: <Widget>[
-            const Text('YÊU CẦU CỦA BẠN',
-                style: TextStyle(
-                    color: brandPurple,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.4)),
-            const SizedBox(height: 8),
-            const Text(
-              'Phản hồi bất thường\nkhông để thất lạc dữ liệu.',
-              style: TextStyle(
-                  fontFamily: 'serif',
-                  fontSize: 29,
-                  fontWeight: FontWeight.w500,
-                  height: 1.12),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Nếu mạng yếu, nội dung và ảnh được giữ cục bộ trên thiết bị rồi gửi lại khi có kết nối.',
-              style: TextStyle(
-                  color: Color(0xFF746A77), fontSize: 12, height: 1.5),
+            const AppPageIntro(
+              eyebrow: 'Yêu cầu của bạn',
+              title: 'Phản hồi bất thường\nkhông để thất lạc dữ liệu.',
+              description:
+                  'Nếu mạng yếu, nội dung và ảnh được giữ cục bộ trên thiết bị rồi gửi lại khi có kết nối.',
             ),
             if (_pending.isNotEmpty) ...<Widget>[
               const SizedBox(height: 18),
@@ -173,19 +158,32 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
                 },
               ),
             ],
-            if (_error != null) ...<Widget>[
+            if (_error != null && _items.isNotEmpty) ...<Widget>[
               const SizedBox(height: 16),
-              _ExplanationError(message: _error!, onRetry: _load),
+              AppErrorState(
+                compact: true,
+                message: _error!,
+                onRetry: _load,
+                title: 'Chưa thể làm mới danh sách',
+              ),
             ],
             const SizedBox(height: 20),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 80),
-                child: Center(
-                    child: CircularProgressIndicator(color: brandPurple)),
+            if (_loading && _items.isNotEmpty) ...<Widget>[
+              const LinearProgressIndicator(minHeight: 2),
+              const SizedBox(height: 12),
+            ],
+            if (_loading && _items.isEmpty)
+              const AppLoadingState(
+                label: 'Đang tải yêu cầu giải trình…',
               )
+            else if (_error != null && _items.isEmpty)
+              AppErrorState(message: _error!, onRetry: _load)
             else if (_items.isEmpty)
-              const _EmptyExplanations()
+              const AppEmptyState(
+                description: 'Các yêu cầu mới từ Admin sẽ xuất hiện tại đây.',
+                icon: Icons.task_alt_rounded,
+                title: 'Không có yêu cầu cần phản hồi',
+              )
             else
               ..._items.map(
                 (AttendanceExplanation item) => Padding(
@@ -381,7 +379,12 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
               ),
             if (_error != null) ...<Widget>[
               const SizedBox(height: 14),
-              _ExplanationError(message: _error!, onRetry: _submit),
+              AppErrorState(
+                compact: true,
+                message: _error!,
+                onRetry: _submit,
+                title: null,
+              ),
             ],
             const SizedBox(height: 22),
             SizedBox(
@@ -580,55 +583,6 @@ class _StatusPill extends StatelessWidget {
                 : const Color(0xFFF2EAF5),
         child: Text(_statusLabel(status),
             style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800)),
-      );
-}
-
-class _ExplanationError extends StatelessWidget {
-  const _ExplanationError({required this.message, required this.onRetry});
-
-  final String message;
-  final Future<void> Function() onRetry;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(
-          color: Color(0xFFFFEFEC),
-          border: Border(left: BorderSide(color: Color(0xFFB85D50), width: 3)),
-        ),
-        child: Row(
-          children: <Widget>[
-            Expanded(
-                child: Text(message, style: const TextStyle(fontSize: 12))),
-            TextButton(onPressed: onRetry, child: const Text('Thử lại')),
-          ],
-        ),
-      );
-}
-
-class _EmptyExplanations extends StatelessWidget {
-  const _EmptyExplanations();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 50),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFE5DDE7)),
-        ),
-        child: const Column(
-          children: <Widget>[
-            Icon(Icons.task_alt_rounded, color: Color(0xFF338865), size: 34),
-            SizedBox(height: 12),
-            Text('Không có yêu cầu cần phản hồi',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontWeight: FontWeight.w800)),
-            SizedBox(height: 6),
-            Text('Các yêu cầu mới từ Admin sẽ xuất hiện tại đây.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF817683), fontSize: 12)),
-          ],
-        ),
       );
 }
 

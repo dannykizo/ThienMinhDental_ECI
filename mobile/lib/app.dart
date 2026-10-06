@@ -13,11 +13,16 @@ import 'services/api_client.dart';
 import 'services/pending_explanation_queue.dart';
 import 'services/push_notification_service.dart';
 
-const Color brandPurple = Color(0xFF6E3786);
-const Color brandPurpleDark = Color(0xFF351942);
-const Color brandOrange = Color(0xFFED851F);
-const Color brandCanvas = Color(0xFFF8F5F8);
-const Color brandInk = Color(0xFF2D2330);
+const Color brandPurple = Color(0xFF5E2D91);
+const Color brandPurpleDark = Color(0xFF381559);
+const Color brandPurpleLight = Color(0xFFF5F0FA);
+const Color brandOrange = Color(0xFFF97316);
+const Color brandCanvas = Color(0xFFF8FAFC);
+const Color brandInk = Color(0xFF0F172A);
+const Color brandMuted = Color(0xFF64748B);
+const Color brandLine = Color(0xFFE2E8F0);
+const Color brandDanger = Color(0xFFEF4444);
+const Color brandDangerLight = Color(0xFFFEF2F2);
 
 enum SessionNoticeKind { connection, ended }
 
@@ -339,6 +344,12 @@ class WorkforceApp extends StatelessWidget {
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
           systemOverlayStyle: SystemUiOverlayStyle.dark,
+          titleTextStyle: TextStyle(
+            color: brandInk,
+            fontSize: 19,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.35,
+          ),
         ),
         filledButtonTheme: FilledButtonThemeData(
           style: FilledButton.styleFrom(
@@ -375,6 +386,10 @@ class WorkforceApp extends StatelessWidget {
           behavior: SnackBarBehavior.floating,
           contentTextStyle: TextStyle(color: Colors.white),
         ),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: brandPurple,
+        ),
+        dividerTheme: const DividerThemeData(color: brandLine, thickness: 1),
         textTheme: ThemeData.light().textTheme.apply(
               bodyColor: brandInk,
               displayColor: brandInk,
