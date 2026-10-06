@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   ACCESS_TOKEN_SERVICE,
+  type AccessTokenPayload,
   type AccessTokenService,
 } from '../application/auth.ports.js';
 import { AuthService } from '../application/auth.service.js';
@@ -33,16 +34,19 @@ export class JwtAuthGuard implements CanActivate {
       throw this.unauthorized();
     }
 
+    let payload: AccessTokenPayload;
     try {
-      const payload = await this.accessTokens.verify(token);
-      if (!payload.sid) throw this.unauthorized();
-      (request as AuthenticatedRequest).user =
-        await this.authService.getAuthenticatedUser(payload.sub, payload.sid);
-      (request as AuthenticatedRequest).authSessionId = payload.sid;
-      return true;
+      payload = await this.accessTokens.verify(token);
+      if (!payload.sid || !payload.sub) throw this.unauthorized();
     } catch {
       throw this.unauthorized();
     }
+    // DB/network faults must remain server errors, not a false "invalid session"
+    // which would cause clients to delete otherwise valid credentials.
+    (request as AuthenticatedRequest).user =
+      await this.authService.getAuthenticatedUser(payload.sub, payload.sid);
+    (request as AuthenticatedRequest).authSessionId = payload.sid;
+    return true;
   }
 
   private extractToken(request: HttpAuthRequest): string | null {

@@ -48,7 +48,18 @@
 - Admin manages teams, membership and grants from `/dashboard/organization`; grants are changed by revoke/reissue rather than rewriting historical decisions. Team deactivation temporarily disables its grants; reactivation allows unexpired/unrevoked grants to become effective again. Expired/revoked grants never regain access.
 - Read-only scoped organization endpoints return only identity/code/name and branches relevant to the granted department/team. Current account, employee, scope and grant validity are checked each request, independent of role snapshots in JWT. Existing privileged roles and existing module access are not silently reconfigured.
 - Down migration refuses to run once organization data exists; export/migrate data first. No automatic backfill of teams/grants and no fake workflow confirmations.
-- PQ2 dual-channel sessions, PQ3 approval routing/Admin immediate reroute, PQ4 manager app and PQ5 per-module rollout remain `NOT_IMPLEMENTED`. See `docs/PERMISSIONS_PLAN.md` for the approved plan and handoff.
+- PQ2 dual-channel sessions and read-only manager Web entry are implemented below. PQ3 approval routing/Admin immediate reroute, PQ4 manager app and PQ5 per-module rollout remain `NOT_IMPLEMENTED`. See `docs/PERMISSIONS_PLAN.md` for the approved plan and handoff.
+
+### PQ2 — current manager access and channel sessions
+
+- Migration `1791590400000-manager-channel-sessions` replaces the partial per-user unique index with `(user_id,client_type)` uniqueness for unrevoked sessions. Existing sessions/history are untouched. Down refuses if multiple unrevoked rows per account remain; explicitly revoke extra sessions first, never silently delete/log out accounts during rollback.
+- The pure `auth/domain/portal-access` policy consumes the PQ1 Domain grant policy. Auth and organization share one grant persistence reader rather than circular NestJS module imports or duplicate eligibility logic. Domain remains independent of ORM. Scoped grants never become `user_roles`/JWT global roles.
+- Auth persistence locks the account row before fresh policy selection and session replacement. Appointed active managers replace only the incoming channel; ordinary/global-role-only accounts keep account-wide replacement pending an explicit expansion decision. Web login without portal access is rejected before replacing a valid Mobile session.
+- Authentication and refresh reconcile policy changes transactionally on the next request. Ineligible accounts retire both channels. Loss of the last grant retires unsupported Web access and preserves Mobile; independent global Web roles retain module rights but return to single-account policy (Mobile wins if both exist). Revoked sessions never revive automatically.
+- `user.portal` is additive to login/refresh/current-user/admin-session responses: Web eligibility, session mode, Backend-provided routes/home/scope label and sanitized active grants. Role guards of existing business modules are unchanged. Web navigation mirrors these routes; it is not a replacement for Backend authorization.
+- `/dashboard/managed` reads only scoped PQ1 directory endpoints. Department heads get their granted department selectors plus visible teams; Leaders do not get department-wide selectors. Loading/error/empty/success and list pagination reuse existing components. Direct disallowed pages do not mount their business components.
+- JWT guard distinguishes signature/auth failures from persistence outages; database failures remain server errors. Web refresh also propagates network/server failures as retryable errors, rather than declaring the existing session expired. Lifetimes, idle timeout, refresh rotation and per-SID logout/revocation/reuse behavior are unchanged.
+- Deploy the migration and Backend before the updated Web (including Cloudflare static output). Mobile code/UX and approval workflows are not part of PQ2. Manual checks and limitations, including Chrome API access blocking, are recorded in the permissions handoff.
 
 ### Customer review CR1 — employee lifecycle
 
@@ -62,7 +73,7 @@
 - Migration `1790121600000-auth-sessions` lưu vòng đời phiên, thiết bị, client Web/Mobile, thời điểm đăng nhập/thu hồi và trạng thái cảnh báo email. Migration `1790640000000-refresh-token-sessions` bổ sung hash refresh token hiện tại/trước đó và `last_seen_at`.
 - JWT truy cập mang `sid`, sống mặc định 15 phút và chỉ hợp lệ khi phiên tương ứng còn hoạt động. Refresh token là credential opaque, được hash trong database và xoay vòng sau mỗi lần sử dụng.
 - Admin Web dùng access cookie và refresh cookie HttpOnly; phiên tối đa 24 giờ, timeout không hoạt động 30 phút. Mobile lưu cặp token trong secure storage và duy trì phiên tối đa 30 ngày trên đúng thiết bị.
-- Mỗi tài khoản chỉ có một phiên hoạt động. Repository thay thế phiên trong transaction và database có partial unique index để bảo vệ invariant.
+- C2 ban đầu dùng một phiên/tài khoản; PQ2 ở trên bổ sung ngoại lệ một Web + một Mobile cho quản lý có grant hiện hành. Repository khóa tài khoản và thay phiên trong transaction; database bảo vệ duy nhất theo kênh, policy tài khoản thông thường do Backend bảo vệ.
 - Email cảnh báo dùng SMTP qua port `LoginAlertSender`; secret chỉ đến từ environment. Thiếu cấu hình được lưu là `SKIPPED`, lỗi giao nhận là `FAILED`, không chặn nhân viên đăng nhập.
 - Admin Web có trang lịch sử phiên và quyền thu hồi; Mobile tự refresh khi access token hết hạn, gọi logout Backend trước khi xóa token cục bộ và quay về đăng nhập khi refresh token không còn hợp lệ.
 

@@ -118,8 +118,9 @@ export default function AccessPage() {
       </header>
 
       <div className="notice notice-info">
-        Mỗi tài khoản chỉ có một phiên hoạt động. Đăng nhập trên thiết bị mới sẽ
-        tự động đăng xuất thiết bị cũ; phiên hợp lệ tối đa 30 ngày.
+        Trưởng phòng/Leader có quyền còn hiệu lực dùng một phiên Web và một thiết bị Mobile đồng thời;
+        đăng nhập lại cùng kênh thay phiên cũ. Nhân viên thường vẫn chỉ một phiên.
+        Web tối đa 24 giờ, hết phiên sau 30 phút không hoạt động; Mobile tối đa 30 ngày.
       </div>
 
       {message && state !== 'error' && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}

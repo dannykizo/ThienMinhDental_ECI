@@ -29,7 +29,6 @@ import {
   ApiError,
   getAdminSession,
   logout,
-  type RoleCode,
   type SessionUser,
 } from '@/lib/auth-api';
 
@@ -69,6 +68,13 @@ const navigation: NavItem[] = [
     href: '/dashboard/organization',
     ready: true,
     icon: Network,
+  },
+  {
+    group: 'NHÂN SỰ',
+    label: 'Phạm vi quản lý',
+    href: '/dashboard/managed',
+    ready: true,
+    icon: UsersRound,
   },
   {
     group: 'VẬN HÀNH',
@@ -142,31 +148,11 @@ const navigation: NavItem[] = [
   },
 ];
 
-const chiefAccountantRoutes = new Set([
-  '/dashboard',
-  '/dashboard/employees',
-  '/dashboard/attendance',
-  '/dashboard/reports',
-  '/dashboard/kpi',
-]);
-
-const scopedManagerRoutes = new Set([
-  '/dashboard',
-  '/dashboard/employees',
-  '/dashboard/announcements',
-]);
-
 const environmentLabel = process.env.NEXT_PUBLIC_APP_ENV?.toUpperCase() || 'DEVELOPMENT';
 
-function canAccessNavigation(item: NavItem, roles: RoleCode[]): boolean {
-  if (roles.includes('ADMIN')) return true;
-  if (roles.includes('CHIEF_ACCOUNTANT')) {
-    return chiefAccountantRoutes.has(item.href);
-  }
-  if (roles.includes('AREA_MANAGER') || roles.includes('MANAGER')) {
-    return scopedManagerRoutes.has(item.href);
-  }
-  return false;
+function canAccessPath(user: SessionUser | null, path: string): boolean {
+  const normalized = path.replace(/\/$/, '');
+  return user?.portal?.navigation.some((href) => normalized === href || (href !== '/dashboard' && normalized.startsWith(`${href}/`))) ?? false;
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
@@ -177,9 +163,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [error, setError] = useState('');
   const [menuPath, setMenuPath] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
-  const dataScopeLabel = user?.roles.some((role) => role === 'ADMIN' || role === 'CHIEF_ACCOUNTANT')
-    ? 'Toàn bộ chi nhánh'
-    : 'Chi nhánh được phân quyền';
+  const dataScopeLabel = user?.portal?.scopeLabel ?? 'Đang kiểm tra phạm vi';
   const [currentDateString] = useState(() => {
     try {
       const now = new Date();
@@ -221,6 +205,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         if (active) {
           setUser(currentUser);
           setState('ready');
+          if (pathname.replace(/\/$/, '') === '/dashboard' && currentUser.portal?.homePath !== '/dashboard') {
+            router.replace(currentUser.portal?.homePath ?? '/login');
+          }
         }
       })
       .catch((caughtError: unknown) => {
@@ -239,6 +226,20 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
+  }, [router, pathname]);
+
+  useEffect(() => {
+    let active = true;
+    const refreshAccess = () => {
+      getAdminSession().then((currentUser) => { if (active) setUser(currentUser); })
+        .catch((caught: unknown) => {
+          if (!active) return;
+          if (caught instanceof ApiError && (caught.status === 401 || caught.status === 403)) router.replace('/login');
+          else { setError('Chưa kiểm tra lại được quyền. Kết nối Backend rồi thử lại.'); setState('error'); }
+        });
+    };
+    window.addEventListener('focus', refreshAccess);
+    return () => { active = false; window.removeEventListener('focus', refreshAccess); };
   }, [router]);
 
   useEffect(() => {
@@ -309,7 +310,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         <nav aria-label="Điều hướng quản trị" className="sidebar-nav">
           {(['TỔNG QUAN', 'NHÂN SỰ', 'VẬN HÀNH', 'HỆ THỐNG'] as const).map((group) => {
-            const groupItems = navigation.filter((item) => item.group === group && canAccessNavigation(item, user?.roles ?? []));
+            const groupItems = navigation.filter((item) => item.group === group && canAccessPath(user, item.href));
             if (groupItems.length === 0) return null;
             return <div className="nav-group" key={group}><p className="nav-label">{group}</p>{groupItems.map((item) => item.ready ? (
               <Link
@@ -380,7 +381,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        {children}
+        {canAccessPath(user, pathname) ? children : (
+          <section className="route-state">
+            <ShieldAlert aria-hidden="true" size={32} />
+            <h1>Trang này nằm ngoài quyền hiện tại</h1>
+            <p>Quyền và phạm vi truy cập do Backend kiểm tra. Bạn vẫn có thể dùng khu vực được cấp.</p>
+            <Link className="secondary-button" href={user?.portal?.homePath ?? '/login'}>Về khu vực của tôi</Link>
+          </section>
+        )}
       </main>
     </div>
   );

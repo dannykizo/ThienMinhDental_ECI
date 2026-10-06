@@ -11,6 +11,20 @@ export interface SessionUser {
   employeeId: string | null;
   displayName: string;
   roles: RoleCode[];
+  portal?: PortalAccess;
+}
+
+export interface PortalAccess {
+  webAllowed: boolean;
+  sessionMode: 'SINGLE_ACCOUNT' | 'WEB_AND_MOBILE';
+  homePath: '/dashboard' | '/dashboard/managed';
+  navigation: string[];
+  scopeLabel: string;
+  managementGrants: Array<{
+    id: string; roleCode: 'DEPARTMENT_HEAD' | 'TEAM_LEADER';
+    departmentId: string; departmentName: string; teamId: string | null; teamName: string | null;
+    appointmentType: 'TEMPORARY' | 'OFFICIAL'; validFrom: string; validUntil: string | null;
+  }>;
 }
 
 interface SessionResponse {
@@ -77,8 +91,13 @@ async function refreshWebSession(): Promise<boolean> {
       body: '{}',
       cache: 'no-store',
     })
-      .then((response) => response.ok)
-      .catch(() => false)
+      .then(async (response) => {
+        if (response.status === 401) return false;
+        // Outage/network errors are not proof of a revoked refresh credential.
+        // Let the caller show a retry state without declaring session expiry.
+        await parseResponse<SessionResponse>(response);
+        return true;
+      })
       .finally(() => {
         refreshRequest = null;
       });

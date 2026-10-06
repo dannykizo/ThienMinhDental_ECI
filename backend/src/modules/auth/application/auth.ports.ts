@@ -1,5 +1,6 @@
 import type { RoleCode } from '../domain/role-code.js';
 import type { UserAccount } from '../domain/user-account.js';
+import type { PortalAccess } from '../domain/portal-access.js';
 
 export interface AccessTokenPayload {
   sub: string;
@@ -40,6 +41,7 @@ export interface AuthSessionAuditRecord extends AuthSessionRecord {
 }
 
 export interface AuthSessionRepository {
+  getPortalAccess(userId: string): Promise<PortalAccess>;
   replaceActiveSession(
     userId: string,
     context: LoginContext,

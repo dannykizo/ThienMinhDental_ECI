@@ -129,15 +129,9 @@ export class AuthController {
   }
 
   @Get('admin-session')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(
-    RoleCode.Admin,
-    RoleCode.ChiefAccountant,
-    RoleCode.AreaManager,
-    RoleCode.Manager,
-  )
-  adminSession(@CurrentUser() user: AuthenticatedUserView): SessionResponse {
-    return { user };
+  @UseGuards(JwtAuthGuard)
+  async adminSession(@CurrentUser() user: AuthenticatedUserView): Promise<SessionResponse> {
+    return { user: await this.authService.adminSession(user) };
   }
 
   private setSessionCookies(

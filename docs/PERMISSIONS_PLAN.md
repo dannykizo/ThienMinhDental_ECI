@@ -14,7 +14,7 @@
 | Lát cắt | Phạm vi | Trạng thái |
 |---|---|---|
 | PQ1 | Team, thành viên, quyền theo phạm vi/thời hạn, Admin Web, danh sách tổ chức cơ bản có scope | Implemented; API và Web đã kiểm tra |
-| PQ2 | Quản lý đăng nhập Web + một Mobile đồng thời; refresh/revocation và quyền hiện hành | NOT_IMPLEMENTED |
+| PQ2 | Quản lý đăng nhập Web + một Mobile đồng thời; refresh/revocation và quyền hiện hành | Implemented; API đã kiểm tra, UI authenticated chưa xác nhận do Chrome chặn API |
 | PQ3 | Giải trình: Leader xác nhận → Trưởng phòng duyệt, bằng chứng có scope, Admin đổi tuyến trực tiếp, audit/thông báo | NOT_IMPLEMENTED |
 | PQ4 | Khu vực quản lý trong app hiện tại, dùng cùng API | NOT_IMPLEMENTED |
 | PQ5 | Nghỉ phép trước; quyền công tác/chấm công/báo cáo/thông báo theo từng module đã xác định | NOT_IMPLEMENTED |
@@ -65,4 +65,31 @@ Các danh sách scoped không trả email/số điện thoại/tài khoản/phâ
 4. Chuyển đơn cũ đang chờ sang tuyến mới; giữ lịch sử hoàn tất, không tạo xác nhận giả.
 5. Phạm vi áp dụng hai bước theo từng module; không sao chép sang công tác có vòng đời giao việc khác.
 
-Điểm dừng: PQ1. Chưa triển khai PQ2 hoặc mở quyền duyệt mới.
+## PQ2 — phạm vi bàn giao
+
+- Đăng nhập quản lý dùng tài khoản nhân viên hiện có, không tạo tài khoản/app quản lý riêng. Người có grant Trưởng phòng/Leader `ACTIVE` được một Web + một Mobile; membership không tự cấp quyền. Role toàn cục chưa có grant giữ policy phiên cũ; đang chờ Tech Lead chốt có mở ngoại lệ cho Admin/Kế toán trưởng/Quản lý khu vực hay không.
+- Migration `1791590400000-manager-channel-sessions` đổi unique index sang `(user_id,client_type)`; không đăng xuất/backfill/xóa phiên hiện có. Backend khóa row tài khoản và đọc policy mới trong transaction để serialize cả login cùng kênh và khác kênh. Rollback bị chặn nếu còn nhiều phiên chưa thu hồi/tài khoản; phải chủ động thu hồi phiên dư trước.
+- Xác thực và refresh kiểm tra grant, account, employee và scope hiện hành. Grant mất hiệu lực làm Web không đủ quyền bị thu hồi ở request tiếp theo; Mobile nhân viên được giữ. Nếu còn role Web độc lập thì giữ quyền module cũ nhưng trở lại một phiên: Mobile được ưu tiên nếu cả hai đang hoạt động. Grant còn hiệu lực khác giữ ngoại lệ; cấp lại quyền không hồi sinh SID đã thu hồi.
+- Logout, Admin thu hồi và refresh reuse chỉ ảnh hưởng SID liên quan; offboarding vẫn thu hồi tất cả. Web 24h/idle30m, Mobile30d, JWT15m và hạn tuyệt đối không đổi. Nhân viên thường login Web bị từ chối trước khi thay phiên app.
+- `user.portal` bổ sung `webAllowed`, `sessionMode`, `homePath`, `navigation`, `scopeLabel`, `managementGrants` vào login/refresh/me/admin-session. Role/JWT không được nâng thành MANAGER; grant view không lộ reason/actor/grant history.
+- Web `/dashboard/managed` chỉ đọc scoped directory: Trưởng phòng được chọn phòng/team của mình; Leader chỉ team được cấp. Sidebar/route mặc định và chặn page ngoài quyền dùng contract Backend; không mount page nghiệp vụ ngoài quyền. Revalidate khi đổi trang/focus, không heartbeat kéo dài idle.
+- Tái sử dụng grant reader chung ở persistence để Auth không import OrganizationAccessModule vòng tròn hoặc copy rule. JWT guard không đổi lỗi DB thành lỗi phiên; Web refresh không biến lỗi mạng/server thành hết phiên.
+
+### File/module và phạm vi
+
+- Backend: `auth` (Domain policy, session port/repository/service/controller/JWT guard), migration/data-source; `organization-access` chỉ tách query đọc grant dùng chung, không đổi rule/team API.
+- Web: auth client, login, dashboard layout/menu, diễn giải policy tại Tài khoản & thiết bị, page mới `dashboard/managed` dùng component hiện có; không redesign toàn bộ Admin.
+- Tests: cập nhật `auth.service.spec.ts`, bổ sung `manager-channel-policy.spec.ts`, `manager-session.repository.spec.ts`, `jwt-session-access.spec.ts`. Có policy boundary, lock/replacement, current rights, outage-vs-revocation và per-SID isolation cases; không chạy suite theo chỉ thị Tech Lead.
+- Canonical docs: `PROJECT.md`, `FLOWS.md`, `IMPLEMENTATION.md`, `README.md`, file kế hoạch này. Không sửa Mobile; vẫn loại thay đổi có sẵn `mobile/lib/features/leave/leave_request_screen.dart` khỏi commit.
+
+### Kiểm tra và giới hạn PQ2
+
+- Đã áp dụng migration local. Backend health `ok`; Web `/dashboard/managed` HTTP200. Typecheck, lint, build thường và build static Cloudflare đều đạt; test suite tự động chưa chạy.
+- API development-only: nhân viên Web403 và Mobile cũ200; Mobile mới thay Mobile cũ401; Leader role vẫn EMPLOYEE, portal chỉ `/dashboard/managed`; Web+Mobile200; thay Web cũ401/Mobile200, thay Mobile cũ401/Web200; refresh hai kênh thành công; logout Web giữ Mobile200. Thu hồi grant: Web401/refresh401/Mobile200; grant hết hạn: Web401/Mobile200. Trưởng phòng có portal scope đúng phòng.
+- Chrome hiển thị trang login mới và lỗi kết nối có thể thử lại, nhưng truy cập thẳng health3001 bị `ERR_BLOCKED_BY_CLIENT`. Không thay extension/privacy/security settings. Chưa xác nhận authenticated UI, scoped selectors, responsive manager page trên Chrome; không coi HTTP200/static build là bằng chứng login UI thành công.
+- Ban đầu kiểm tra thêm bị HTTP429; đã đợi cửa sổ giới hạn hết hạn, không tắt/nới/reset limiter. Lượt cuối: hai Mobile login đồng thời cùng nhân viên đều HTTP200 nhưng chỉ một SID còn dùng được (401/200); Web + Mobile concurrent của Leader đều login200 và authenticated200/200; logout Mobile giữ Web200; reuse refresh Mobile401 và SID đó401, Web200; Admin thu hồi Web401, Mobile200; ngừng team Web401, Mobile200. Trưởng phòng đọc danh sách phòng200, chỉ các trường `id/employeeCode/fullName/branches`; Admin không có grant vẫn `SINGLE_ACCOUNT`.
+- Fixture `PQ2-DEV-220C3A7E` là development-only: tài khoản/hồ sơ đã ngừng hoạt động và mọi phiên bị thu hồi, các grant hiện hành đã thu hồi (grant ngắn giữ trạng thái hết hạn), membership đã kết thúc, team đã ngừng hoạt động. Dọn qua API có audit, không xóa vật lý và không thay quyền/phiên tài khoản Mobile demo trên điện thoại. Không có credential fixture trong Git.
+- GitNexus MCP không có index repo này và local runner không tồn tại; dùng search/diff/call-site inspection, không query graph repo khác hoặc giả định đã chạy impact/detect_changes.
+- Deploy cần migration + Backend trước Web; schema mới bảo vệ duy nhất theo kênh, invariant nhân viên một phiên được thực thi bởi transaction account-lock. Chưa kiểm chứng mọi concurrency/DB outage/rollback variant trên môi trường production.
+
+Điểm dừng: PQ2. PQ3–PQ5 vẫn `NOT_IMPLEMENTED`; chưa mở quyền duyệt mới.

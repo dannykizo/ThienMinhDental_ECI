@@ -21,9 +21,9 @@ export default function LoginPage() {
     setError('');
 
     try {
-      await login(email, password);
+      const user = await login(email, password);
       setState('success');
-      router.replace('/dashboard');
+      router.replace(user.portal?.homePath ?? '/dashboard');
       router.refresh();
     } catch (caughtError) {
       setError(
@@ -69,7 +69,7 @@ export default function LoginPage() {
         <form className="login-card" onSubmit={handleSubmit}>
           <div className="login-heading">
             <p className="eyebrow">WORKFORCE PORTAL</p>
-            <h2>Đăng nhập quản trị</h2>
+            <h2>Đăng nhập quản lý</h2>
             <p>Nhập tài khoản được cấp quyền để tiếp tục.</p>
           </div>
 

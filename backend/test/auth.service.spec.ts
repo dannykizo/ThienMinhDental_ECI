@@ -16,6 +16,7 @@ import {
   hashRefreshSecret,
 } from '../src/modules/auth/domain/refresh-token.js';
 import { RoleCode } from '../src/modules/auth/domain/role-code.js';
+import { portalAccess } from '../src/modules/auth/domain/portal-access.js';
 import { UserAccount } from '../src/modules/auth/domain/user-account.js';
 
 const sessionId = '11111111-1111-4111-8111-111111111111';
@@ -56,6 +57,8 @@ interface AuthTestHarness {
   signMock: Mock<AccessTokenService['sign']>;
   findActiveMock: Mock<AuthSessionRepository['findActive']>;
   rotateRefreshTokenMock: Mock<AuthSessionRepository['rotateRefreshToken']>;
+  getPortalAccessMock: Mock<AuthSessionRepository['getPortalAccess']>;
+  revokeMock: Mock<AuthSessionRepository['revoke']>;
 }
 
 function createService(options?: {
@@ -83,12 +86,15 @@ function createService(options?: {
   const replaceActiveSessionMock = vi.fn(() => Promise.resolve(activeSession));
   const findActiveMock = vi.fn(() => Promise.resolve(activeSession));
   const rotateRefreshTokenMock = vi.fn(() => Promise.resolve(true));
+  const getPortalAccessMock = vi.fn(() => Promise.resolve(portalAccess((options?.user ?? activeAdmin).roles, [], new Date())));
+  const revokeMock = vi.fn(() => Promise.resolve(true));
   const sessions: AuthSessionRepository = {
+    getPortalAccess: getPortalAccessMock,
     replaceActiveSession: replaceActiveSessionMock,
     findActive: findActiveMock,
     rotateRefreshToken: rotateRefreshTokenMock,
     touch: vi.fn(() => Promise.resolve()),
-    revoke: vi.fn(() => Promise.resolve(true)),
+    revoke: revokeMock,
     listAll: vi.fn(() => Promise.resolve([])),
     markLoginAlert: vi.fn(() => Promise.resolve()),
   };
@@ -117,6 +123,8 @@ function createService(options?: {
     signMock,
     findActiveMock,
     rotateRefreshTokenMock,
+    getPortalAccessMock,
+    revokeMock,
   };
 }
 
@@ -194,5 +202,53 @@ describe('AuthService', () => {
     await expect(
       service.getAuthenticatedUser(activeAdmin.id, sessionId),
     ).rejects.toMatchObject({ response: { code: 'SESSION_REVOKED' } });
+  });
+
+  it('checks current portal access instead of a stale user snapshot', async () => {
+    const { service, getPortalAccessMock } = createService();
+    getPortalAccessMock.mockResolvedValue(portalAccess([RoleCode.Employee], [], new Date()));
+    await expect(service.adminSession({ ...activeAdmin })).rejects.toMatchObject({ response: { code: 'WEB_ACCESS_DENIED' } });
+  });
+
+  it('does not revoke a counterpart channel on logout or admin session revocation', async () => {
+    const { service, revokeMock } = createService();
+    await service.logout('web-sid');
+    await service.revokeSession('mobile-sid');
+    expect(revokeMock.mock.calls).toEqual([['web-sid', 'USER_LOGOUT'], ['mobile-sid', 'ADMIN_REVOKED']]);
+  });
+
+  it('refresh preserves the absolute lifetime rather than granting another 30 days', async () => {
+    const { service, findActiveMock } = createService();
+    findActiveMock.mockResolvedValue({ ...activeSession, clientType: 'MOBILE' });
+    const result = await service.refresh(formatRefreshToken(sessionId, refreshSecret));
+    expect(result.sessionExpiresAt).toBe(activeSession.expiresAt.toISOString());
+  });
+
+  it('preserves the Web 24-hour and Mobile 30-day login lifetimes', async () => {
+    const { service } = createService();
+    for (const [clientType, lifetime] of [['WEB', 24 * 60 * 60 * 1000], ['MOBILE', 30 * 24 * 60 * 60 * 1000]] as const) {
+      const before = Date.now();
+      const result = await service.login(activeAdmin.email, 'valid-password', { ...loginContext, clientType });
+      expect(Date.parse(result.sessionExpiresAt)).toBeGreaterThanOrEqual(before + lifetime);
+      expect(Date.parse(result.sessionExpiresAt)).toBeLessThanOrEqual(Date.now() + lifetime);
+    }
+  });
+
+  it('Web idle timeout revokes only that SID and does not apply to Mobile', async () => {
+    const { service, findActiveMock, revokeMock } = createService();
+    const idle = new Date(Date.now() - 31 * 60 * 1000);
+    findActiveMock.mockResolvedValue({ ...activeSession, lastSeenAt: idle });
+    await expect(service.getAuthenticatedUser(activeAdmin.id, sessionId)).rejects.toMatchObject({ response: { code: 'SESSION_IDLE_TIMEOUT' } });
+    expect(revokeMock).toHaveBeenCalledWith(sessionId, 'IDLE_TIMEOUT');
+    findActiveMock.mockResolvedValue({ ...activeSession, id: 'mobile-session', clientType: 'MOBILE', lastSeenAt: idle });
+    await expect(service.getAuthenticatedUser(activeAdmin.id, 'mobile-session')).resolves.toMatchObject({ id: activeAdmin.id });
+    expect(revokeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects refresh immediately when the persistence access check retires the Web session', async () => {
+    const { service, findActiveMock, rotateRefreshTokenMock } = createService();
+    findActiveMock.mockResolvedValue(null);
+    await expect(service.refresh(formatRefreshToken(sessionId, refreshSecret))).rejects.toMatchObject({ response: { code: 'REFRESH_TOKEN_INVALID' } });
+    expect(rotateRefreshTokenMock).not.toHaveBeenCalled();
   });
 });

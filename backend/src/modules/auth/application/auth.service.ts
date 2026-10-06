@@ -1,4 +1,4 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { RoleCode } from '../domain/role-code.js';
 import {
@@ -9,6 +9,7 @@ import {
   parseRefreshToken,
 } from '../domain/refresh-token.js';
 import type { UserAccount } from '../domain/user-account.js';
+import type { PortalAccess } from '../domain/portal-access.js';
 import {
   ACCESS_TOKEN_SERVICE,
   AUTH_SESSION_REPOSITORY,
@@ -30,6 +31,7 @@ export interface AuthenticatedUserView {
   employeeId: string | null;
   displayName: string;
   roles: RoleCode[];
+  portal?: PortalAccess;
 }
 
 export interface LoginResult {
@@ -135,7 +137,7 @@ export class AuthService {
       clientType: context.clientType,
       refreshToken: formatRefreshToken(session.id, refreshSecret),
       sessionExpiresAt: expiresAt.toISOString(),
-      user: this.toView(user),
+      user: await this.toView(user),
     };
   }
 
@@ -186,7 +188,7 @@ export class AuthService {
       clientType: session.clientType,
       refreshToken: formatRefreshToken(session.id, nextSecret),
       sessionExpiresAt: session.expiresAt.toISOString(),
-      user: this.toView(user),
+      user: await this.toView(user),
     };
   }
 
@@ -213,6 +215,12 @@ export class AuthService {
     }
 
     return this.toView(user);
+  }
+
+  async adminSession(user: AuthenticatedUserView): Promise<AuthenticatedUserView> {
+    const portal = await this.sessions.getPortalAccess(user.id);
+    if (!portal.webAllowed) throw new ForbiddenException({ code: 'WEB_ACCESS_DENIED', message: 'Bạn không còn quyền truy cập Web quản lý.' });
+    return { ...user, portal };
   }
 
   async logout(sessionId: string): Promise<void> {
@@ -248,13 +256,14 @@ export class AuthService {
     }));
   }
 
-  private toView(user: UserAccount): AuthenticatedUserView {
+  private async toView(user: UserAccount): Promise<AuthenticatedUserView> {
     return {
       id: user.id,
       email: user.email,
       employeeId: user.employeeId,
       displayName: user.displayName,
       roles: [...user.roles],
+      portal: await this.sessions.getPortalAccess(user.id),
     };
   }
 

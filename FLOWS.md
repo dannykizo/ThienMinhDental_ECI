@@ -23,15 +23,27 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 5. `/organization/mine` trả quyền hiện hành/capability; `/organization/teams` chỉ trả team trong phạm vi quản lý; `/organization/teams/:id/members` trả nhân sự cơ bản còn đủ điều kiện. Trưởng phòng đọc `/organization/departments/:id/employees` trong phòng được cấp; Leader không được mở rộng sang toàn phòng. Không lộ liên hệ, tài khoản, phòng/chi nhánh ngoài phạm vi qua các API này.
 6. Phân công tổ chức/tài khoản/team/phòng ban không hợp lệ làm quyền hoặc thành viên mất hiệu lực khi đọc; giữ record để Admin xử lý, không âm thầm xóa. Audit tạo/sửa team, thêm/rút thành viên, cấp/thu hồi quyền nằm trong transaction của thao tác.
 
-**Boundary:** Admin Web có trang `/dashboard/organization`. PQ1 không thay guard/role/luồng duyệt của module cũ, không mở Web shell cho quản lý mới, không sửa app hoặc quy tắc một phiên. Phiên Web + Mobile đồng thời (PQ2), tuyến giải trình hai bước và Admin đổi tuyến trực tiếp (PQ3), thao tác quản lý trên app (PQ4) đều `NOT_IMPLEMENTED`. Lịch sử cũ không bị chuyển tuyến/đổi người duyệt.
+**Boundary:** Admin Web có trang `/dashboard/organization`. PQ1 không thay guard/role/luồng duyệt của module cũ. PQ2 bổ sung đăng nhập và khu vực quản lý chỉ đọc ở dưới. Tuyến giải trình hai bước/Admin đổi tuyến trực tiếp (PQ3) và thao tác quản lý trên app (PQ4) vẫn `NOT_IMPLEMENTED`. Lịch sử cũ không bị chuyển tuyến/đổi người duyệt.
+
+## PQ2 — đăng nhập và khu vực quản lý
+
+1. Backend đọc role hiện hành và cùng policy grant của PQ1. Trưởng phòng/Leader có grant `ACTIVE` được dùng một Web + một Mobile; membership hoặc chức vụ không tự cấp ngoại lệ. Role toàn cục chưa có grant giữ chính sách phiên cũ, chờ Tech Lead chốt phạm vi ngoại lệ.
+2. Login khóa row tài khoản, kiểm tra tài khoản/hồ sơ còn hoạt động và chọn policy trong transaction. Với quản lý có grant, login chỉ thay cùng kênh; với chính sách một phiên, login thay toàn bộ phiên. Nhân viên thường login Web nhận `WEB_ACCESS_DENIED` trước khi thay phiên Mobile.
+3. `/auth/login`, `/auth/refresh`, `/auth/me`, `/auth/admin-session` trả thêm `user.portal`: quyền vào Web, policy phiên, route mặc định, menu, nhãn phạm vi và grant hiện hành đã lọc metadata quản trị. Không thêm role toàn cục vào tài khoản hay JWT.
+4. Web đưa quản lý mới tới `/dashboard/managed`; chỉ menu/phạm vi Backend cho phép. Danh sách dùng API tổ chức cơ bản của PQ1, không dùng API nhân viên đầy đủ hay Dashboard số liệu. Leader chỉ team; Trưởng phòng được xem nhân sự phòng và team thuộc phòng.
+5. Mỗi request xác thực/refresh kiểm tra lại điều kiện grant. Mất grant cuối cùng làm Web bị thu hồi nếu không còn quyền Web độc lập; Mobile nhân viên được giữ. Người có role Web độc lập vẫn phải trở về một phiên nếu không còn grant: giữ Mobile nếu đang hoạt động, nếu chỉ có Web thì giữ Web. Có grant khác còn hiệu lực thì không hạ policy.
+6. Logout, Admin thu hồi hoặc reuse refresh token chỉ thu hồi SID liên quan, không ngắt kênh kia. Ngừng hồ sơ/tài khoản vẫn thu hồi tất cả. Refresh không kéo dài hạn phiên tuyệt đối; Web idle timeout không đổi.
+7. Web kiểm tra lại portal khi đổi trang hoặc trở lại cửa sổ. Không polling/heartbeat làm kéo dài idle. Lỗi DB được trả như lỗi server, không ngụy trang thành `401`; lỗi mạng/server khi refresh Web không được coi là bằng chứng phiên bị thu hồi.
+
+**Giới hạn:** Quyền Backend hiệu lực ngay ở request tiếp theo; menu/danh sách đang mở là snapshot cho tới khi kiểm tra/tải lại. Không có quản lý/duyệt mới trên Mobile, không sửa tuyến duyệt hoặc module nghiệp vụ cũ.
 
 ## Authentication session and device
 
 1. Web hoặc Mobile gửi định danh thiết bị ổn định cùng thông tin đăng nhập.
-2. Backend xác thực mật khẩu, thu hồi phiên đang hoạt động trước đó của tài khoản và tạo phiên Web tối đa 24 giờ hoặc phiên Mobile tối đa 30 ngày.
+2. Backend xác thực mật khẩu, chọn chính sách một phiên hoặc Web + Mobile theo PQ2 rồi tạo phiên Web tối đa 24 giờ hoặc Mobile tối đa 30 ngày; không ảnh hưởng kênh kia khi được cấp ngoại lệ.
 3. JWT truy cập chứa mã phiên và sống 15 phút. Web giữ refresh token trong cookie HttpOnly; Mobile giữ refresh token trong secure storage. Refresh token được xoay vòng sau mỗi lần cấp access token mới.
 4. Mọi request được bảo vệ phải kiểm tra đồng thời chữ ký token, tài khoản đang hoạt động và phiên chưa hết hạn/chưa bị thu hồi. Web hết phiên sau 30 phút không hoạt động.
-5. Đăng xuất, Admin thu hồi phiên, đăng nhập trên thiết bị mới, phát hiện refresh token cũ bị dùng lại hoặc khóa tài khoản đều làm thiết bị cũ mất quyền truy cập.
+5. Đăng xuất, Admin thu hồi phiên, đăng nhập mới cùng phạm vi thay thế hoặc phát hiện refresh token cũ bị dùng lại làm phiên liên quan mất truy cập. Khóa tài khoản thu hồi mọi phiên.
 6. Backend gửi email cảnh báo tới danh sách Admin cấu hình qua SMTP. Nếu SMTP chưa cấu hình hoặc gửi lỗi, đăng nhập vẫn thành công và trạng thái được lưu trong lịch sử để Admin nhìn thấy.
 7. Chỉ Admin được xem toàn bộ lịch sử đăng nhập/đăng xuất và chủ động đăng xuất thiết bị.
 
