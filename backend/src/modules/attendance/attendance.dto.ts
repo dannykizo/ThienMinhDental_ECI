@@ -40,7 +40,14 @@ export class UploadAttendanceEvidenceDto {
   @IsUUID() evidenceId!: string;
 }
 
+export class SubmitEmployeeExplanationDto extends RespondAttendanceExplanationDto {
+  @MaxLength(2000) declare responseText: string;
+  @IsUUID() submissionId!: string;
+  @IsDateString() workDate!: string;
+  @IsIn(['MISSING_CHECK_IN', 'MISSING_CHECK_OUT', 'DUPLICATE_ATTEMPT', 'WRONG_DATE_OR_DEVICE_TIME', 'GPS_RISK', 'OTHER']) issueType!: CreateAttendanceExplanationDto['issueType'];
+}
+
 export class ReviewAttendanceExplanationDto {
   @IsIn(['APPROVED', 'REJECTED']) status!: 'APPROVED' | 'REJECTED';
-  @IsOptional() @IsString() @MinLength(5) reviewNote?: string;
+  @IsOptional() @IsString() @MaxLength(2000) reviewNote?: string;
 }

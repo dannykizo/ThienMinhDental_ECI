@@ -37,6 +37,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Một ngày không chấm công tại văn phòng không tự động đồng nghĩa vắng mặt nếu nhân viên có công tác hoặc nghỉ đã duyệt.
 - Phát hiện mock location chỉ là tín hiệu rủi ro; hệ thống không tuyên bố chống giả GPS tuyệt đối.
 - Mọi sửa đổi thủ công với bảng công phải có người sửa, thời gian, lý do, giá trị cũ và mới.
+- Nhân viên chủ động tạo đơn giải trình với ngày công, loại vấn đề và nội dung; có thể chụp hoặc đính kèm một ảnh minh chứng, không bắt buộc. Admin tiếp nhận và duyệt/từ chối; lý do từ chối không bắt buộc. Duyệt giải trình không tự điều chỉnh bảng công. Không yêu cầu GPS khi tạo/chọn ảnh giải trình. Đơn cũ từ Admin được giữ tương thích nhưng không tạo yêu cầu Admin mới.
 - Một nhân viên có thể thuộc nhiều phòng ban nhưng phải có đúng một phân công tổ chức chính tại một thời điểm.
 - Nhân viên nghỉ việc được chuyển sang trạng thái ngừng làm việc với ngày hiệu lực và lý do bắt buộc; hồ sơ, tài khoản và phiên đăng nhập bị khóa nhưng mã nhân viên cùng lịch sử nghiệp vụ không bị xóa vật lý. Admin có thể khôi phục hồ sơ bằng một quyết định có audit.
 - Phiên đăng nhập có hiệu lực tối đa 30 ngày. Mỗi tài khoản chỉ có một thiết bị hoạt động; đăng nhập mới thu hồi phiên cũ và lịch sử đăng nhập/đăng xuất được giữ để Admin kiểm tra.

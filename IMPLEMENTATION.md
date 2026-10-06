@@ -67,12 +67,15 @@
 
 ### Customer alignment C4 — attendance reconciliation and period locking
 
-- Migration `1790294400000-attendance-reconciliation` adds mandatory explanation requests and monthly attendance period state.
-- Admin creates an explanation request with issue type, required response deadline and note. Employees respond through the authenticated API; GPS-risk responses require an image reference, capture time and coordinates as one complete evidence set.
+- Migration `1790294400000-attendance-reconciliation` originally added Admin explanation requests and monthly attendance period state. That creation flow is superseded by the employee-initiated correction below; historical rows are retained.
+- Migration `1791417600000-employee-explanations` makes Admin deadline/requester nullable and adds source, submitter, idempotent submission UUID and image upload ownership. Employee `POST /attendance/explanations/mine` derives identity from authentication, checks active ownership, locks the monthly period and creates `SUBMITTED` with immutable submit audit. A per-user/submission advisory lock plus a unique index prevents retry duplication; changing payload under that ID fails.
 - Admin alone can review explanations and read attendance adjustment history. Adjustment values remain limited to check-in time, check-out time and day status until the customer defines a broader policy.
 - Admin or Chief Accountant can lock a reconciled month. A month with incomplete check-outs or open explanations cannot be locked. A locked month rejects new explanations and attendance adjustments.
 - Only `CHIEF_ACCOUNTANT` can reopen a locked period, and the reason is mandatory. Lock and reopen actions are recorded in `configuration_audit_logs`.
-- Admin Web implements the C4 operational screens. Mobile Android now lists the employee's requests, captures evidence with one GPS sample, uploads authenticated image files and queues unsent responses in secure local storage for retry. Development uses `AttendanceEvidenceStorage` on local disk behind an adapter boundary; production object storage remains a deployment concern.
+- Admin Web replaces request creation with an all-date submitted queue; approval/rejection notes are optional and reviews are audited. Approval never mutates attendance. Legacy `REQUESTED` response compatibility remains; new Admin requests return `EMPLOYEE_EXPLANATION_REQUIRED`.
+- Mobile Android offers Create explanation with date/type/content and one optional camera/gallery image. It does not sample GPS; gallery selection does not invent capture time. The serialized offline queue uses stable UUIDs, keeps unsent private images and scopes new queue records to their owner. Unknown-owner legacy responses verify the server request before upload.
+- Evidence storage recognizes JPEG/PNG/WebP signatures, enforces 5 MB and ownership, denies overwriting attached evidence and limits reads to owner/Admin. It stays local disk behind an adapter boundary; object storage/backup remain deployment concerns. Migration backfills ownership for referenced legacy files and refuses rollback once employee submissions exist, to prevent data loss.
+- Reporting month-lock also acquires/creates the period row and rechecks open explanations inside the lock transaction; this minimal cross-module change prevents a concurrent self-submission from slipping into a closed month. Multi-image/PDF, editing/cancelling submitted explanations and dedicated review push are not implemented by this correction.
 
 ### Customer alignment C5 — business trip operation
 

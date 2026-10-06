@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -16,6 +17,9 @@ class PendingExplanationSubmission {
     required this.photoPath,
     required this.remoteReference,
     required this.responseText,
+    this.workDate,
+    this.issueType,
+    this.ownerUserId,
   });
 
   factory PendingExplanationSubmission.fromJson(Map<String, dynamic> json) =>
@@ -30,6 +34,9 @@ class PendingExplanationSubmission {
         photoPath: json['photoPath'] as String?,
         remoteReference: json['remoteReference'] as String?,
         responseText: json['responseText'] as String,
+        workDate: json['workDate'] as String?,
+        issueType: json['issueType'] as String?,
+        ownerUserId: json['ownerUserId'] as String?,
       );
 
   final DateTime? capturedAt;
@@ -40,6 +47,9 @@ class PendingExplanationSubmission {
   final String? photoPath;
   final String? remoteReference;
   final String responseText;
+  final String? workDate;
+  final String? issueType;
+  final String? ownerUserId;
 
   PendingExplanationSubmission copyWith({String? remoteReference}) =>
       PendingExplanationSubmission(
@@ -51,6 +61,9 @@ class PendingExplanationSubmission {
         photoPath: photoPath,
         remoteReference: remoteReference ?? this.remoteReference,
         responseText: responseText,
+        workDate: workDate,
+        issueType: issueType,
+        ownerUserId: ownerUserId,
       );
 
   Map<String, dynamic> toJson() => <String, dynamic>{
@@ -62,6 +75,9 @@ class PendingExplanationSubmission {
         'photoPath': photoPath,
         'remoteReference': remoteReference,
         'responseText': responseText,
+        'workDate': workDate,
+        'issueType': issueType,
+        'ownerUserId': ownerUserId,
       };
 }
 
@@ -87,13 +103,35 @@ class PendingExplanationQueue {
   PendingExplanationQueue({
     required this.api,
     required FlutterSecureStorage storage,
+    required this.currentUserId,
   }) : _storage = storage;
 
   static const String _storageKey = 'pending_explanation_submissions';
   final ApiClient api;
   final FlutterSecureStorage _storage;
+  final String? Function() currentUserId;
+  Future<void> _operations = Future<void>.value();
 
-  Future<List<PendingExplanationSubmission>> pending() async {
+  Future<T> _exclusive<T>(Future<T> Function() operation) {
+    final Completer<T> result = Completer<T>();
+    _operations = _operations.then((_) async {
+      try {
+        result.complete(await operation());
+      } on Object catch (error, stack) {
+        result.completeError(error, stack);
+      }
+    });
+    return result.future;
+  }
+
+  Future<List<PendingExplanationSubmission>> pending() async =>
+      (await _allPending())
+          .where((PendingExplanationSubmission item) =>
+              currentUserId() != null &&
+              (item.ownerUserId == null || item.ownerUserId == currentUserId()))
+          .toList();
+
+  Future<List<PendingExplanationSubmission>> _allPending() async {
     final String? raw = await _storage.read(key: _storageKey);
     if (raw == null || raw.isEmpty) return <PendingExplanationSubmission>[];
     try {
@@ -110,13 +148,19 @@ class PendingExplanationQueue {
 
   Future<ExplanationSubmissionOutcome> submitOrQueue(
     PendingExplanationSubmission submission,
-  ) async {
+  ) =>
+      _exclusive(() => _submitOrQueue(submission));
+
+  Future<ExplanationSubmissionOutcome> _submitOrQueue(
+      PendingExplanationSubmission submission) async {
     await _upsert(submission);
     try {
       await _send(submission);
       return const ExplanationSubmissionOutcome(queued: false);
     } on ApiException catch (error) {
-      if (_isRetryable(error)) {
+      if (_isRetryable(error) ||
+          error.endsSession ||
+          error.code == 'EXPLANATION_ACCOUNT_CHANGED') {
         return const ExplanationSubmissionOutcome(queued: true);
       }
       await _remove(submission.explanationId, deletePhoto: false);
@@ -124,7 +168,9 @@ class PendingExplanationQueue {
     }
   }
 
-  Future<ExplanationQueueSyncResult> syncAll() async {
+  Future<ExplanationQueueSyncResult> syncAll() => _exclusive(_syncAll);
+
+  Future<ExplanationQueueSyncResult> _syncAll() async {
     int sent = 0;
     int failed = 0;
     String? errorMessage;
@@ -147,6 +193,24 @@ class PendingExplanationQueue {
   }
 
   Future<void> _send(PendingExplanationSubmission submission) async {
+    final String? sendingUserId = currentUserId();
+    if (currentUserId() == null ||
+        (submission.ownerUserId != null &&
+            submission.ownerUserId != currentUserId())) {
+      throw const ApiException(
+          'Giải trình thuộc tài khoản khác. Vui lòng đăng nhập lại đúng tài khoản.',
+          code: 'EXPLANATION_ACCOUNT_CHANGED');
+    }
+    // Legacy queue records lack owner metadata: verify the request before any upload.
+    if (submission.ownerUserId == null) {
+      final List<AttendanceExplanation> mine =
+          await api.myAttendanceExplanations();
+      if (!mine.any((AttendanceExplanation item) =>
+          item.id == submission.explanationId)) {
+        throw const ApiException('Không tìm thấy yêu cầu cũ của tài khoản này.',
+            code: 'EXPLANATION_NOT_FOUND');
+      }
+    }
     String? reference = submission.remoteReference;
     if (submission.photoPath != null && reference == null) {
       reference = await api.uploadAttendanceEvidence(
@@ -157,14 +221,29 @@ class PendingExplanationQueue {
       await _upsert(submission);
     }
     try {
-      await api.respondToAttendanceExplanation(
-        explanationId: submission.explanationId,
-        responseText: submission.responseText,
-        evidenceCapturedAt: submission.capturedAt,
-        evidenceImageReference: reference,
-        evidenceLatitude: submission.latitude,
-        evidenceLongitude: submission.longitude,
-      );
+      if (sendingUserId != currentUserId()) {
+        throw const ApiException(
+            'Tài khoản đã thay đổi. Giải trình được giữ lại cho tài khoản gửi.',
+            code: 'EXPLANATION_ACCOUNT_CHANGED');
+      }
+      if (submission.workDate != null) {
+        await api.submitAttendanceExplanation(
+            submissionId: submission.explanationId,
+            workDate: submission.workDate!,
+            issueType: submission.issueType!,
+            responseText: submission.responseText,
+            evidenceImageReference: reference,
+            evidenceCapturedAt: submission.capturedAt);
+      } else {
+        await api.respondToAttendanceExplanation(
+          explanationId: submission.explanationId,
+          responseText: submission.responseText,
+          evidenceCapturedAt: submission.capturedAt,
+          evidenceImageReference: reference,
+          evidenceLatitude: submission.latitude,
+          evidenceLongitude: submission.longitude,
+        );
+      }
     } on ApiException catch (error) {
       if (error.code != 'EXPLANATION_NOT_AWAITING_RESPONSE') rethrow;
     }
@@ -172,7 +251,7 @@ class PendingExplanationQueue {
   }
 
   Future<void> _upsert(PendingExplanationSubmission submission) async {
-    final List<PendingExplanationSubmission> items = await pending();
+    final List<PendingExplanationSubmission> items = await _allPending();
     final int index = items.indexWhere(
       (PendingExplanationSubmission item) =>
           item.explanationId == submission.explanationId,
@@ -189,7 +268,7 @@ class PendingExplanationQueue {
     String explanationId, {
     required bool deletePhoto,
   }) async {
-    final List<PendingExplanationSubmission> items = await pending();
+    final List<PendingExplanationSubmission> items = await _allPending();
     final PendingExplanationSubmission? removed = items
         .where((PendingExplanationSubmission item) =>
             item.explanationId == explanationId)
@@ -199,7 +278,11 @@ class PendingExplanationQueue {
     await _write(items);
     if (deletePhoto && removed?.photoPath != null) {
       final File file = File(removed!.photoPath!);
-      if (await file.exists()) await file.delete();
+      try {
+        if (await file.exists()) await file.delete();
+      } on FileSystemException {
+        // Server accepted the submission; local cleanup must not turn it into a failure.
+      }
     }
   }
 

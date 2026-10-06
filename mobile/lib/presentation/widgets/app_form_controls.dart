@@ -90,7 +90,7 @@ class AppEvidencePreview extends StatelessWidget {
                 File(path),
                 height: 210,
                 fit: BoxFit.cover,
-                semanticLabel: 'Ảnh bằng chứng đã chụp',
+                semanticLabel: 'Ảnh minh chứng',
                 errorBuilder: (_, __, ___) => const Padding(
                   padding: EdgeInsets.all(20),
                   child: Text(

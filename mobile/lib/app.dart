@@ -47,7 +47,8 @@ class SessionController extends ChangeNotifier {
     api.onTokensUpdated = _storeTokens;
     api.onSessionExpired = _expireSession;
     api.onAvailabilityChanged = _handleAvailabilityChanged;
-    explanationQueue = PendingExplanationQueue(api: api, storage: storage);
+    explanationQueue = PendingExplanationQueue(
+        api: api, storage: storage, currentUserId: () => user?.id);
   }
 
   static const String _accessTokenKey = 'access_token';

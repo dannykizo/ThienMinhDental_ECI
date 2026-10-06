@@ -167,11 +167,19 @@ class AttendanceExplanation {
     required this.reviewNote,
     required this.status,
     required this.workDate,
+    this.source = 'ADMIN_REQUEST',
+    this.createdAt,
   });
 
   factory AttendanceExplanation.fromJson(Map<String, dynamic> json) =>
       AttendanceExplanation(
-        dueAt: DateTime.parse(json['dueAt'] as String).toLocal(),
+        dueAt: json['dueAt'] == null
+            ? null
+            : DateTime.parse(json['dueAt'] as String).toLocal(),
+        source: json['source'] as String? ?? 'ADMIN_REQUEST',
+        createdAt: json['createdAt'] == null
+            ? null
+            : DateTime.parse(json['createdAt'] as String).toLocal(),
         evidenceImageReference: json['evidenceImageReference'] as String?,
         id: json['id'] as String,
         issueType: json['issueType'] as String,
@@ -182,7 +190,9 @@ class AttendanceExplanation {
         workDate: json['workDate'] as String,
       );
 
-  final DateTime dueAt;
+  final DateTime? dueAt;
+  final String source;
+  final DateTime? createdAt;
   final String? evidenceImageReference;
   final String id;
   final String issueType;
@@ -601,6 +611,27 @@ class ApiClient {
         .map((dynamic item) =>
             AttendanceExplanation.fromJson(item as Map<String, dynamic>))
         .toList();
+  }
+
+  Future<void> submitAttendanceExplanation(
+      {required String submissionId,
+      required String workDate,
+      required String issueType,
+      required String responseText,
+      String? evidenceImageReference,
+      DateTime? evidenceCapturedAt}) async {
+    await _request('/attendance/explanations/mine',
+        method: 'POST',
+        body: <String, dynamic>{
+          'submissionId': submissionId,
+          'workDate': workDate,
+          'issueType': issueType,
+          'responseText': responseText,
+          if (evidenceImageReference != null)
+            'evidenceImageReference': evidenceImageReference,
+          if (evidenceCapturedAt != null)
+            'evidenceCapturedAt': evidenceCapturedAt.toUtc().toIso8601String(),
+        });
   }
 
   Future<String> uploadAttendanceEvidence({

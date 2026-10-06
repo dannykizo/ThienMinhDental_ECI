@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -110,7 +109,7 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
     }
   }
 
-  Future<void> _openResponse(AttendanceExplanation item) async {
+  Future<void> _openResponse([AttendanceExplanation? item]) async {
     final String? result = await Navigator.of(context).push<String>(
       MaterialPageRoute<String>(
         builder: (BuildContext context) => ExplanationResponseScreen(
@@ -156,10 +155,10 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 30),
           children: <Widget>[
             const AppPageIntro(
-              eyebrow: 'Yêu cầu của bạn',
-              title: 'Yêu cầu giải trình',
+              eyebrow: 'Đơn của bạn',
+              title: 'Giải trình của bạn',
               description:
-                  'Nếu mạng yếu, nội dung và ảnh được giữ cục bộ trên thiết bị rồi gửi lại khi có kết nối.',
+                  'Chủ động báo cáo vấn đề để Admin xem xét. Có thể chụp hoặc đính kèm ảnh minh chứng; không bắt buộc.',
             ),
             if (_pending.isNotEmpty) ...<Widget>[
               const SizedBox(height: 18),
@@ -171,6 +170,32 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
                   await _load();
                 },
               ),
+              ..._pending
+                  .where((item) => item.workDate != null)
+                  .map((item) => Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          color: const Color(0xFFFFF6E7),
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                const Text('CHỜ MẠNG · CHƯA GỬI TỚI ADMIN',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 11)),
+                                const SizedBox(height: 8),
+                                Text(
+                                    '${_issueLabel(item.issueType!)} · ${_date(item.workDate!)}'),
+                                const SizedBox(height: 8),
+                                Text(item.responseText),
+                                if (item.photoPath != null)
+                                  const Text('Có ảnh minh chứng lưu trên máy.',
+                                      style: TextStyle(
+                                          color: brandMuted, fontSize: 12)),
+                              ]),
+                        ),
+                      )),
             ],
             if (_error != null && _items.isNotEmpty) ...<Widget>[
               const SizedBox(height: 16),
@@ -184,12 +209,14 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
             const SizedBox(height: 20),
             if (_hasLoaded) ...<Widget>[
               AppListFilters(
-                scopeNote: 'Chỉ lọc tối đa 100 yêu cầu mới nhất từ Backend. '
+                scopeNote: 'Chỉ lọc tối đa 100 đơn mới nhất từ Backend. '
                     'Hàng đợi chờ mạng được hiển thị riêng phía trên.',
-                options: const <String, String>{
+                options: <String, String>{
                   'ALL': 'Tất cả',
-                  'REQUESTED': 'Chờ phản hồi',
-                  'SUBMITTED': 'Đã gửi',
+                  if (_items.any((AttendanceExplanation item) =>
+                      item.status == 'REQUESTED'))
+                    'REQUESTED': 'Yêu cầu cũ',
+                  'SUBMITTED': 'Chờ duyệt',
                   'APPROVED': 'Đã duyệt',
                   'REJECTED': 'Từ chối',
                 },
@@ -206,15 +233,16 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
             ],
             if (_loading && _items.isEmpty)
               const AppLoadingState(
-                label: 'Đang tải yêu cầu giải trình…',
+                label: 'Đang tải đơn giải trình…',
               )
             else if (_error != null && _items.isEmpty)
               AppErrorState(message: _error!, onRetry: _load)
             else if (_items.isEmpty)
               const AppEmptyState(
-                description: 'Các yêu cầu mới từ Admin sẽ xuất hiện tại đây.',
+                description:
+                    'Bấm Tạo giải trình để báo cáo vấn đề. Minh chứng không bắt buộc.',
                 icon: Icons.task_alt_rounded,
-                title: 'Chưa có yêu cầu giải trình',
+                title: 'Chưa có đơn giải trình',
               )
             else if (_visibleItems.isEmpty)
               AppFilteredEmptyState(
@@ -234,18 +262,27 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
           ],
         ),
       ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+        child: SafeArea(
+            top: false,
+            child: AppFormAction(
+                label: 'Tạo giải trình',
+                icon: Icons.add_rounded,
+                onPressed: () => _openResponse())),
+      ),
     );
   }
 }
 
 class ExplanationResponseScreen extends StatefulWidget {
   const ExplanationResponseScreen({
-    required this.explanation,
+    this.explanation,
     required this.session,
     super.key,
   });
 
-  final AttendanceExplanation explanation;
+  final AttendanceExplanation? explanation;
   final SessionController session;
 
   @override
@@ -256,18 +293,25 @@ class ExplanationResponseScreen extends StatefulWidget {
 class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
   final TextEditingController _response = TextEditingController();
   final String _evidenceId = PendingExplanationQueue.createEvidenceId();
+  final String _submissionId = PendingExplanationQueue.createEvidenceId();
+  DateTime _workDate = DateUtils.dateOnly(DateTime.now());
+  String _issueType = 'MISSING_CHECK_OUT';
   String? _photoPath;
   DateTime? _capturedAt;
-  double? _latitude;
-  double? _longitude;
   String? _error;
   bool _busy = false;
   String? _responseError;
-  String? _photoError;
   bool _capturing = false;
   bool _preservePhoto = false;
 
-  bool get _photoRequired => widget.explanation.issueType == 'GPS_RISK';
+  Future<void> _pickWorkDate() async {
+    final DateTime? selected = await showDatePicker(
+        context: context,
+        initialDate: _workDate,
+        firstDate: DateTime(2020),
+        lastDate: DateTime(2100));
+    if (mounted && selected != null) setState(() => _workDate = selected);
+  }
 
   @override
   void dispose() {
@@ -280,7 +324,7 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
     super.dispose();
   }
 
-  Future<void> _capturePhoto() async {
+  Future<void> _capturePhoto([ImageSource source = ImageSource.camera]) async {
     if (_busy) return;
     setState(() {
       _busy = true;
@@ -289,12 +333,11 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
     });
     try {
       final XFile? photo = await ImagePicker().pickImage(
-        source: ImageSource.camera,
+        source: source,
         imageQuality: 82,
         maxWidth: 1800,
       );
       if (photo == null) return;
-      final Position position = await _positionForEvidence();
       final Directory appDirectory = await getApplicationDocumentsDirectory();
       final Directory evidenceDirectory = Directory(
         '${appDirectory.path}${Platform.pathSeparator}pending-attendance-evidence',
@@ -303,13 +346,11 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
       final String targetPath =
           '${evidenceDirectory.path}${Platform.pathSeparator}$_evidenceId.jpg';
       await File(photo.path).copy(targetPath);
+      await FileImage(File(targetPath)).evict();
       if (mounted) {
         setState(() {
           _photoPath = targetPath;
-          _capturedAt = DateTime.now();
-          _latitude = position.latitude;
-          _longitude = position.longitude;
-          _photoError = null;
+          _capturedAt = source == ImageSource.camera ? DateTime.now() : null;
         });
       }
     } on ApiException catch (error) {
@@ -317,7 +358,7 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
     } on Object {
       if (mounted) {
         setState(() => _error =
-            'Không thể chụp ảnh hoặc lấy vị trí bằng chứng. Hãy kiểm tra quyền Camera/GPS.');
+            'Không thể chọn ảnh minh chứng. Hãy kiểm tra quyền Camera/Ảnh hoặc thử tệp khác.');
       }
     } finally {
       if (mounted) {
@@ -329,25 +370,21 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
     }
   }
 
-  Future<Position> _positionForEvidence() async {
-    if (!await Geolocator.isLocationServiceEnabled()) {
-      throw const ApiException('Hãy bật GPS để ghi nhận ảnh bằng chứng.');
+  Future<void> _removePhoto() async {
+    if (_busy || _photoPath == null) return;
+    final File photo = File(_photoPath!);
+    setState(() {
+      _busy = true;
+      _photoPath = null;
+      _capturedAt = null;
+    });
+    try {
+      if (await photo.exists()) await photo.delete();
+    } on FileSystemException {
+      // An unsubmitted temporary image can be removed on a later capture.
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      throw const ApiException(
-          'Cần cấp quyền vị trí để ảnh bằng chứng có đủ thời gian và tọa độ.');
-    }
-    return Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        timeLimit: Duration(seconds: 20),
-      ),
-    );
   }
 
   Future<void> _submit() async {
@@ -359,16 +396,10 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
           () => _responseError = 'Nội dung giải trình cần ít nhất 5 ký tự.');
       return;
     }
-    if (_photoRequired && _photoPath == null) {
-      setState(
-          () => _photoError = 'Yêu cầu GPS bắt buộc phải có ảnh bằng chứng.');
-      return;
-    }
     setState(() {
       _busy = true;
       _error = null;
       _responseError = null;
-      _photoError = null;
     });
     try {
       final ExplanationSubmissionOutcome outcome =
@@ -376,9 +407,14 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
         PendingExplanationSubmission(
           capturedAt: _capturedAt,
           evidenceId: _evidenceId,
-          explanationId: widget.explanation.id,
-          latitude: _latitude,
-          longitude: _longitude,
+          explanationId: widget.explanation?.id ?? _submissionId,
+          ownerUserId: widget.session.user!.id,
+          workDate: widget.explanation == null
+              ? DateFormat('yyyy-MM-dd').format(_workDate)
+              : null,
+          issueType: widget.explanation == null ? _issueType : null,
+          latitude: null,
+          longitude: null,
           photoPath: _photoPath,
           remoteReference: null,
           responseText: responseText,
@@ -399,17 +435,56 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
   Widget build(BuildContext context) => PopScope(
         canPop: !_busy,
         child: Scaffold(
-          appBar: AppBar(title: const Text('Phản hồi giải trình')),
+          appBar: AppBar(
+              title: Text(widget.explanation == null
+                  ? 'Tạo giải trình'
+                  : 'Phản hồi yêu cầu cũ')),
           body: SafeArea(
             top: false,
             child: ListView(
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: <Widget>[
-                _ExplanationSummary(item: widget.explanation),
-                const SizedBox(height: 20),
-                const AppFormSection(
-                    title: '1. Nội dung phản hồi',
+                if (widget.explanation != null) ...<Widget>[
+                  _ExplanationSummary(item: widget.explanation!),
+                  const SizedBox(height: 20),
+                ] else ...<Widget>[
+                  const AppFormSection(
+                      title: '1. Vấn đề cần giải trình',
+                      description:
+                          'Chọn ngày công và loại vấn đề để Admin đối soát.'),
+                  OutlinedButton.icon(
+                      onPressed: _busy ? null : _pickWorkDate,
+                      icon: const Icon(Icons.calendar_month_outlined),
+                      label: Text(
+                          'Ngày công *: ${DateFormat('dd/MM/yyyy').format(_workDate)}')),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    initialValue: _issueType,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Loại vấn đề *',
+                        border: OutlineInputBorder()),
+                    items: const <String>[
+                      'MISSING_CHECK_IN',
+                      'MISSING_CHECK_OUT',
+                      'DUPLICATE_ATTEMPT',
+                      'WRONG_DATE_OR_DEVICE_TIME',
+                      'GPS_RISK',
+                      'OTHER'
+                    ]
+                        .map((value) => DropdownMenuItem(
+                            value: value, child: Text(_issueLabel(value))))
+                        .toList(),
+                    onChanged: _busy
+                        ? null
+                        : (value) => setState(() => _issueType = value!),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+                AppFormSection(
+                    title:
+                        '${widget.explanation == null ? 2 : 1}. Nội dung giải trình',
                     description:
                         'Các mục có * là bắt buộc. Nội dung và ảnh được giữ khi gửi thất bại.'),
                 TextField(
@@ -417,6 +492,7 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
                   enabled: !_busy,
                   maxLines: 5,
                   minLines: 4,
+                  maxLength: 2000,
                   onChanged: (_) {
                     if (_responseError != null) {
                       setState(() => _responseError = null);
@@ -434,24 +510,11 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
                 ),
                 const SizedBox(height: 16),
                 AppFormSection(
-                    title: '2. Ảnh bằng chứng',
-                    description: _photoRequired
-                        ? 'Bắt buộc chụp ảnh cho yêu cầu GPS.'
-                        : 'Không bắt buộc. Có thể bổ sung ảnh để hỗ trợ đối soát.'),
-                if (_photoPath == null)
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 48),
-                        padding: const EdgeInsets.all(16)),
-                    onPressed: _busy ? null : _capturePhoto,
-                    icon: const Icon(Icons.photo_camera_outlined),
-                    label: Text(
-                        _capturing
-                            ? 'Đang chụp ảnh / lấy GPS…'
-                            : 'Chụp ảnh bằng chứng',
-                        textAlign: TextAlign.center),
-                  )
-                else
+                    title:
+                        '${widget.explanation == null ? 3 : 2}. Ảnh minh chứng',
+                    description:
+                        'Không bắt buộc. Chụp ảnh hoặc chọn một ảnh có sẵn, tối đa 5 MB. Không yêu cầu vị trí GPS.'),
+                if (_photoPath != null) ...<Widget>[
                   AppEvidencePreview(
                     path: _photoPath!,
                     status: _busy && !_capturing
@@ -459,13 +522,25 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
                         : _error != null
                             ? 'Ảnh vẫn được giữ trên thiết bị. Kiểm tra lỗi phía dưới trước khi thử lại.'
                             : 'Ảnh đã chọn trên thiết bị · chưa gửi cùng giải trình.',
-                    onRetake: _busy ? null : _capturePhoto,
+                    onRetake: _busy ? null : () => _capturePhoto(),
                   ),
-                if (_photoError != null)
-                  Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(_photoError!,
-                          style: const TextStyle(color: brandDanger))),
+                  TextButton.icon(
+                      onPressed: _busy ? null : _removePhoto,
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('Bỏ ảnh đã chọn')),
+                ],
+                Wrap(spacing: 12, runSpacing: 8, children: <Widget>[
+                  OutlinedButton.icon(
+                      onPressed: _busy ? null : () => _capturePhoto(),
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: const Text('Chụp ảnh')),
+                  OutlinedButton.icon(
+                      onPressed: _busy
+                          ? null
+                          : () => _capturePhoto(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Đính kèm ảnh')),
+                ]),
                 if (_error != null) ...<Widget>[
                   const SizedBox(height: 14),
                   AppErrorState(
@@ -480,9 +555,8 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
                     label: 'Gửi giải trình',
                     icon: Icons.send_rounded,
                     busy: _busy,
-                    busyLabel: _capturing
-                        ? 'Đang chụp ảnh / lấy GPS…'
-                        : 'Đang xử lý và gửi…',
+                    busyLabel:
+                        _capturing ? 'Đang chọn ảnh…' : 'Đang xử lý và gửi…',
                     onPressed: _submit),
                 const SizedBox(height: 10),
                 const Text(
@@ -538,24 +612,37 @@ class _ExplanationCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text(item.requestNote,
-                style: const TextStyle(color: Color(0xFF615764), height: 1.45)),
+            if (item.requestNote.isNotEmpty)
+              Text(item.requestNote,
+                  style:
+                      const TextStyle(color: Color(0xFF615764), height: 1.45)),
             const SizedBox(height: 10),
             Text(
-              'Ngày công: ${_date(item.workDate)}\nHạn phản hồi: ${DateFormat('dd/MM/yyyy HH:mm').format(item.dueAt)}',
+              'Ngày công: ${_date(item.workDate)}${item.dueAt == null ? '' : '\nHạn phản hồi: ${DateFormat('dd/MM/yyyy HH:mm').format(item.dueAt!)}'}',
               style:
                   const TextStyle(color: brandMuted, fontSize: 12, height: 1.5),
             ),
             if (item.responseText != null) ...<Widget>[
               const SizedBox(height: 10),
-              Text('Phản hồi: ${item.responseText}',
+              Text('Nội dung: ${item.responseText}',
                   style: const TextStyle(fontSize: 12, height: 1.4)),
             ],
+            if (item.evidenceImageReference != null)
+              const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('Đã gửi ảnh minh chứng.',
+                      style: TextStyle(color: brandMuted, fontSize: 12))),
             if (item.reviewNote != null) ...<Widget>[
               const SizedBox(height: 6),
               Text('Ghi chú duyệt: ${item.reviewNote}',
                   style: const TextStyle(fontSize: 12, height: 1.4)),
             ],
+            if (item.status == 'REJECTED' &&
+                (item.reviewNote == null || item.reviewNote!.isEmpty))
+              const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text('Admin không ghi thêm lý do từ chối.',
+                      style: TextStyle(color: brandMuted, fontSize: 12))),
             if (item.status == 'REQUESTED' && !pending) ...<Widget>[
               const SizedBox(height: 14),
               SizedBox(
@@ -591,9 +678,11 @@ class _ExplanationSummary extends StatelessWidget {
             Text(item.requestNote,
                 style: const TextStyle(color: brandInk, height: 1.45)),
             const SizedBox(height: 7),
-            Text(
-                'Hạn phản hồi ${DateFormat('dd/MM/yyyy HH:mm').format(item.dueAt)}',
-                style: const TextStyle(color: Color(0xFF786B7B), fontSize: 11)),
+            if (item.dueAt != null)
+              Text(
+                  'Hạn phản hồi ${DateFormat('dd/MM/yyyy HH:mm').format(item.dueAt!)}',
+                  style:
+                      const TextStyle(color: Color(0xFF786B7B), fontSize: 11)),
           ],
         ),
       );
@@ -666,7 +755,7 @@ String _issueLabel(String issueType) => switch (issueType) {
 
 String _statusLabel(String status) => switch (status) {
       'REQUESTED' => 'CHỜ PHẢN HỒI',
-      'SUBMITTED' => 'ĐÃ GỬI',
+      'SUBMITTED' => 'CHỜ DUYỆT',
       'APPROVED' => 'ĐÃ DUYỆT',
       'REJECTED' => 'TỪ CHỐI',
       'QUEUED' => 'CHỜ MẠNG',

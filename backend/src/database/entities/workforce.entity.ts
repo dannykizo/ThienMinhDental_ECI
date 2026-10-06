@@ -155,8 +155,11 @@ export class AttendanceExplanationEntity {
   @Column({ type: 'varchar', length: 40, name: 'issue_type' }) issueType!: string;
   @Column({ type: 'text', name: 'request_note' }) requestNote!: string;
   @Column({ type: 'varchar', length: 30, default: 'REQUESTED' }) status!: string;
-  @Column({ type: 'timestamptz', name: 'due_at' }) dueAt!: Date;
-  @Column({ type: 'uuid', name: 'requested_by' }) requestedBy!: string;
+  @Column({ type: 'timestamptz', name: 'due_at', nullable: true }) dueAt!: Date | null;
+  @Column({ type: 'uuid', name: 'requested_by', nullable: true }) requestedBy!: string | null;
+  @Column({ type: 'varchar', length: 30, default: 'ADMIN_REQUEST' }) source!: 'ADMIN_REQUEST' | 'EMPLOYEE';
+  @Column({ type: 'uuid', name: 'submitted_by', nullable: true }) submittedBy!: string | null;
+  @Column({ type: 'uuid', name: 'submission_id', nullable: true }) submissionId!: string | null;
   @Column({ type: 'text', name: 'response_text', nullable: true }) responseText?: string | null;
   @Column({ type: 'varchar', length: 500, name: 'evidence_image_reference', nullable: true }) evidenceImageReference?: string | null;
   @Column({ type: 'timestamptz', name: 'evidence_captured_at', nullable: true }) evidenceCapturedAt?: Date | null;

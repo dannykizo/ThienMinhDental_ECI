@@ -257,8 +257,11 @@ export class ReportingService {
       throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: `Còn ${incomplete} ngày thiếu check-out, ${blockers.openExplanationCount} giải trình và ${blockers.pendingLeaveCount} đơn nghỉ chưa hoàn tất.` });
     }
     await this.dataSource.transaction(async (manager) => {
+      await manager.query(`INSERT INTO attendance_periods(period_month,status) VALUES($1::date,'OPEN') ON CONFLICT(period_month) DO NOTHING`, [`${month}-01`]);
       const [current] = await manager.query<Array<{ id: string; status: string }>>('SELECT id,status FROM attendance_periods WHERE period_month=$1::date FOR UPDATE', [`${month}-01`]);
       if (current?.status === 'LOCKED') throw new ConflictException({ code: 'ATTENDANCE_PERIOD_ALREADY_LOCKED', message: 'Kỳ công đã được chốt.' });
+      const [pending] = await manager.query<Array<{ count: string }>>(`SELECT count(*)::text AS count FROM attendance_explanation_requests WHERE work_date >= $1::date AND work_date < $1::date + interval '1 month' AND status IN ('REQUESTED','SUBMITTED')`, [`${month}-01`]);
+      if (Number(pending.count) > 0) throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: 'Có giải trình đang mở. Hãy xử lý trước khi chốt kỳ.' });
       const [saved] = await manager.query<Array<{ id: string }>>(`INSERT INTO attendance_periods(period_month,status,locked_by,locked_at,reopened_by,reopened_at,reopen_reason) VALUES($1::date,'LOCKED',$2,now(),NULL,NULL,NULL) ON CONFLICT(period_month) DO UPDATE SET status='LOCKED',locked_by=$2,locked_at=now(),reopened_by=NULL,reopened_at=NULL,reopen_reason=NULL,updated_at=now() RETURNING id`, [`${month}-01`, user.id]);
       await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,old_value,new_value,created_by) VALUES('ATTENDANCE_PERIOD',$1,'LOCK',$2::jsonb,$3::jsonb,$4)`, [saved.id, JSON.stringify({ status: current?.status ?? 'OPEN' }), JSON.stringify({ status: 'LOCKED', month, reason: reason?.trim() || null }), user.id]);
     });

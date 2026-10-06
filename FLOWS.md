@@ -66,18 +66,19 @@ Không dùng `ABSENT` như một nút trong event flow. `ABSENT`, `LEAVE` và `B
 ## Admin Web + Mobile API — attendance explanation and period closing
 
 ```text
-REQUESTED -> SUBMITTED -> APPROVED
-                       -> REJECTED
+Employee creates -> SUBMITTED -> APPROVED
+                              -> REJECTED
+Legacy only: REQUESTED -> SUBMITTED
 ```
 
-1. Admin filters the daily attendance view and sends a mandatory explanation request with a deadline.
-2. The employee response is accepted only while the request is `REQUESTED` and before its deadline.
-3. A GPS-risk response must include an image reference, capture time, latitude and longitude together. Partial evidence is rejected by Backend.
-4. Admin reviews a submitted explanation. A rejection requires a reason.
+1. Employee proactively creates an explanation with a work date, issue type and content. Backend derives employee identity from the authenticated account; submissions go directly to `SUBMITTED`, without an Admin deadline.
+2. Evidence is optional for every issue type. Employee may take a photo or attach one JPEG/PNG/WebP image (maximum 5 MB). Gallery images do not claim a capture time; neither path requests GPS. Backend accepts only uploaded images belonging to the employee.
+3. App queues unsent content/images in private storage when the network is weak, scoped to the submitting account. A stable submission UUID makes retry idempotent; changed content under the same UUID is rejected. Existing open employee/date/issue duplicates and new submissions in locked periods remain blocked.
+4. Admin receives the queue across all work dates, opens authenticated evidence and approves/rejects with an optional note/rejection reason. A review records actor/time and immutable audit. Approval does not automatically adjust attendance.
 5. Admin adjustments preserve old/new values, reason, actor and timestamp. No adjustment is accepted after the month is locked.
 6. Admin or Chief Accountant can lock a month after incomplete check-outs and open explanations are resolved. Only Chief Accountant can reopen it with a mandatory reason.
 
-**Implementation status:** Admin Web, Backend API và Mobile Android đã triển khai. App chụp ảnh bằng camera, lấy thời gian/tọa độ cùng sự kiện, lưu ảnh trong vùng dữ liệu riêng và xếp hàng phản hồi khi mạng yếu; app tự thử lại khi mở/resume màn hình hoặc người dùng bấm gửi lại. Backend lưu file development/local qua adapter riêng và bảo vệ endpoint đọc ảnh bằng authentication. Chưa chèn chữ thời gian/tọa độ trực tiếp lên bitmap vì business rule chỉ yêu cầu metadata đầy đủ.
+**Implementation status:** Luồng chủ động từ nhân viên thay thế nghiệp vụ Admin tạo yêu cầu trước đây, trên Backend/Admin Web/Mobile Android. `POST /api/attendance/explanations/mine` tạo đơn của chính tài khoản; Admin chỉ duyệt. Migration `1791417600000-employee-explanations` giữ nguyên đơn cũ; phản hồi `REQUESTED` cũ vẫn kiểm tra chủ sở hữu và hạn cũ. App thử lại hàng đợi khi mở/resume hoặc bấm Gửi lại. Ảnh đã gắn đơn không được ghi đè; endpoint đọc ảnh chỉ cho chủ sở hữu/Admin. Storage hiện là local disk; object storage/backup vẫn là việc deployment. Đính kèm nhiều ảnh, PDF, chỉnh sửa/hủy đơn đã gửi và push riêng cho quyết định giải trình chưa được triển khai trong thay đổi này.
 
 ## Mobile + Admin Web — business trip
 

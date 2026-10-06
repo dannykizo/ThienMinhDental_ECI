@@ -6,8 +6,9 @@ import type { AuthenticatedUserView } from '../auth/application/auth.service.js'
 import { AttendanceRiskFlag } from './domain/attendance-risk-flag.js';
 import { OfficeGeofence } from './domain/office-geofence.js';
 import { calculateWorkSummary, evaluateScheduleRisk, localMinutes, type SchedulePolicyInput } from './domain/schedule-policy.js';
-import { canReviewExplanation, validateEvidence } from './domain/explanation-policy.js';
-import type { CreateAttendanceAdjustmentDto, CreateAttendanceExplanationDto, RecordAttendanceEventDto, RespondAttendanceExplanationDto, ReviewAttendanceExplanationDto } from './attendance.dto.js';
+import { canReviewExplanation, validExplanationDate, validateEvidence } from './domain/explanation-policy.js';
+import type { CreateAttendanceAdjustmentDto, CreateAttendanceExplanationDto, RecordAttendanceEventDto, RespondAttendanceExplanationDto, ReviewAttendanceExplanationDto, SubmitEmployeeExplanationDto } from './attendance.dto.js';
+import { AttendanceEvidenceStorage } from './infrastructure/attendance-evidence.storage.js';
 
 interface ScheduleRow extends SchedulePolicyInput { id: string; }
 interface AttendanceDailyRow {
@@ -65,6 +66,7 @@ export class AttendanceService {
     @InjectRepository(AttendanceEventEntity) private readonly events: Repository<AttendanceEventEntity>,
     @InjectRepository(AttendanceAdjustmentEntity) private readonly adjustments: Repository<AttendanceAdjustmentEntity>,
     @InjectRepository(AttendanceExplanationEntity) private readonly explanations: Repository<AttendanceExplanationEntity>,
+    private readonly evidenceStorage: AttendanceEvidenceStorage,
   ) {}
 
   async record(user: AuthenticatedUserView, input: RecordAttendanceEventDto): Promise<RecordedAttendanceEventView> {
@@ -151,29 +153,55 @@ export class AttendanceService {
     return this.dataSource.query(`SELECT a.id,a.employee_id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "fullName",a.work_date::text AS "workDate",a.field_name AS "fieldName",a.old_value AS "oldValue",a.new_value AS "newValue",a.reason,a.created_at AS "createdAt",COALESCE(actor.full_name,u.email) AS "adjustedByName" FROM attendance_adjustments a JOIN employees e ON e.id=a.employee_id JOIN users u ON u.id=a.adjusted_by LEFT JOIN employees actor ON actor.user_id=u.id ORDER BY a.created_at DESC LIMIT 100`);
   }
 
-  async createExplanation(user: AuthenticatedUserView, input: CreateAttendanceExplanationDto): Promise<AttendanceExplanationEntity> {
-    await this.assertPeriodOpen(input.workDate);
-    const [employee] = await this.dataSource.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND is_active=true', [input.employeeId]);
-    if (!employee) throw new NotFoundException({ code: 'EMPLOYEE_NOT_FOUND', message: 'Không tìm thấy nhân viên đang hoạt động.' });
-    const dueAt = new Date(input.dueAt);
-    if (dueAt.getTime() <= Date.now()) throw new BadRequestException({ code: 'INVALID_EXPLANATION_DEADLINE', message: 'Hạn giải trình phải ở tương lai.' });
-    if (input.attendanceEventId) {
-      const [event] = await this.dataSource.query<Array<{ id: string }>>(`SELECT id FROM attendance_events WHERE id=$1 AND employee_id=$2 AND (server_time AT TIME ZONE 'Asia/Bangkok')::date=$3::date`, [input.attendanceEventId, input.employeeId, input.workDate]);
-      if (!event) throw new BadRequestException({ code: 'ATTENDANCE_EVENT_MISMATCH', message: 'Sự kiện chấm công không thuộc nhân viên và ngày đã chọn.' });
-    }
-    const existing = await this.explanations.findOne({ where: { employeeId: input.employeeId, workDate: input.workDate, issueType: input.issueType, status: In(['REQUESTED', 'SUBMITTED']) } });
-    if (existing) throw new ConflictException({ code: 'EXPLANATION_ALREADY_REQUESTED', message: 'Đã có yêu cầu giải trình đang chờ cho vấn đề này.' });
-    return this.explanations.save(this.explanations.create({
-      ...input,
-      attendanceEventId: input.attendanceEventId ?? null,
-      dueAt,
-      requestedBy: user.id,
-      status: 'REQUESTED',
-    }));
+  createExplanation(_user: AuthenticatedUserView, _input: CreateAttendanceExplanationDto): Promise<never> {
+    void _user; void _input;
+    return Promise.reject(new ConflictException({ code: 'EMPLOYEE_EXPLANATION_REQUIRED', message: 'Nhân viên chủ động gửi đơn giải trình. Admin chỉ tiếp nhận và duyệt đơn.' }));
+  }
+
+  async submitEmployeeExplanation(user: AuthenticatedUserView, input: SubmitEmployeeExplanationDto): Promise<AttendanceExplanationEntity> {
+    if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
+    const employeeId = user.employeeId;
+    if (!validExplanationDate(input.workDate)) throw new BadRequestException({ code: 'INVALID_EXPLANATION_DATE', message: 'Ngày xảy ra vấn đề phải có định dạng YYYY-MM-DD hợp lệ.' });
+    if (input.responseText.trim().length < 5) throw new BadRequestException({ code: 'EXPLANATION_CONTENT_REQUIRED', message: 'Nội dung giải trình cần ít nhất 5 ký tự.' });
+    if (!validateEvidence(input.issueType, input)) throw new BadRequestException({ code: 'INCOMPLETE_EXPLANATION_EVIDENCE', message: 'Minh chứng phải có ảnh tham chiếu; tọa độ nếu gửi phải có đủ hai giá trị.' });
+    return this.dataSource.transaction(async (manager) => {
+      // Serialize retries without treating a different submission as success.
+      await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`explanation:${user.id}:${input.submissionId}`]);
+      const repository = manager.getRepository(AttendanceExplanationEntity);
+      const retried = await repository.findOne({ where: { submittedBy: user.id, submissionId: input.submissionId } });
+      if (retried) {
+        if (retried.workDate !== input.workDate || retried.issueType !== input.issueType || retried.responseText !== input.responseText.trim() || retried.evidenceImageReference !== (input.evidenceImageReference?.trim() || null)
+          || (retried.evidenceCapturedAt?.getTime() ?? null) !== (input.evidenceCapturedAt ? new Date(input.evidenceCapturedAt).getTime() : null)
+          || (retried.evidenceLatitude == null ? null : Number(retried.evidenceLatitude)) !== (input.evidenceLatitude ?? null)
+          || (retried.evidenceLongitude == null ? null : Number(retried.evidenceLongitude)) !== (input.evidenceLongitude ?? null)) throw new ConflictException({ code: 'EXPLANATION_SUBMISSION_MISMATCH', message: 'Mã gửi này đã được dùng cho nội dung khác. Hãy tạo đơn mới.' });
+        return retried;
+      }
+      const [employee] = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND user_id=$2 AND is_active=true', [employeeId, user.id]);
+      if (!employee) throw new NotFoundException({ code: 'EMPLOYEE_NOT_FOUND', message: 'Không tìm thấy hồ sơ nhân viên đang hoạt động.' });
+      await manager.query(`INSERT INTO attendance_periods(period_month,status) VALUES(date_trunc('month',$1::date)::date,'OPEN') ON CONFLICT(period_month) DO NOTHING`, [input.workDate]);
+      const [period] = await manager.query<Array<{ status: string }>>(`SELECT status FROM attendance_periods WHERE period_month=date_trunc('month',$1::date)::date FOR UPDATE`, [input.workDate]);
+      if (period.status === 'LOCKED') throw new ConflictException({ code: 'ATTENDANCE_PERIOD_LOCKED', message: 'Kỳ công đã chốt. Cần mở lại kỳ trước khi gửi giải trình.' });
+      const existing = await repository.findOne({ where: { employeeId, workDate: input.workDate, issueType: input.issueType, status: In(['REQUESTED', 'SUBMITTED']) } });
+      if (existing) throw new ConflictException({ code: 'EXPLANATION_ALREADY_REQUESTED', message: 'Đã có giải trình đang mở cho ngày và vấn đề này. Hãy xem đơn hiện có.' });
+      if (input.evidenceImageReference?.trim()) {
+        await manager.query('SELECT evidence_id FROM attendance_evidence_uploads WHERE filename=$1 FOR UPDATE', [input.evidenceImageReference.trim().split('/').at(-1)]);
+        await this.evidenceStorage.assertOwnedReference(user, input.evidenceImageReference.trim());
+      }
+      const item = await repository.save(repository.create({
+        employeeId, workDate: input.workDate, issueType: input.issueType,
+        source: 'EMPLOYEE', submittedBy: user.id, submissionId: input.submissionId,
+        requestedBy: null, dueAt: null, requestNote: '', status: 'SUBMITTED',
+        responseText: input.responseText.trim(), evidenceImageReference: input.evidenceImageReference?.trim() || null,
+        evidenceCapturedAt: input.evidenceCapturedAt ? new Date(input.evidenceCapturedAt) : null,
+        evidenceLatitude: input.evidenceLatitude ?? null, evidenceLongitude: input.evidenceLongitude ?? null,
+      }));
+      await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,new_value,created_by) VALUES('ATTENDANCE_EXPLANATION',$1,'SUBMIT',$2::jsonb,$3)`, [item.id, JSON.stringify({ employeeId: item.employeeId, workDate: item.workDate, issueType: item.issueType, status: item.status, hasEvidence: Boolean(item.evidenceImageReference) }), user.id]);
+      return item;
+    });
   }
 
   listExplanations(date?: string): Promise<unknown[]> {
-    return this.dataSource.query(`SELECT x.id,x.employee_id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "fullName",x.work_date::text AS "workDate",x.attendance_event_id AS "attendanceEventId",x.issue_type AS "issueType",x.request_note AS "requestNote",x.status,x.due_at AS "dueAt",x.response_text AS "responseText",x.evidence_image_reference AS "evidenceImageReference",x.evidence_captured_at AS "evidenceCapturedAt",x.evidence_latitude AS "evidenceLatitude",x.evidence_longitude AS "evidenceLongitude",x.review_note AS "reviewNote",x.reviewed_at AS "reviewedAt",x.created_at AS "createdAt",COALESCE(requester.full_name,ru.email) AS "requestedByName",COALESCE(reviewer.full_name,vu.email) AS "reviewedByName" FROM attendance_explanation_requests x JOIN employees e ON e.id=x.employee_id JOIN users ru ON ru.id=x.requested_by LEFT JOIN employees requester ON requester.user_id=ru.id LEFT JOIN users vu ON vu.id=x.reviewed_by LEFT JOIN employees reviewer ON reviewer.user_id=vu.id WHERE ($1::date IS NULL OR x.work_date=$1::date) ORDER BY CASE x.status WHEN 'SUBMITTED' THEN 1 WHEN 'REQUESTED' THEN 2 ELSE 3 END,x.created_at DESC`, [date ?? null]);
+    return this.dataSource.query(`SELECT x.id,x.employee_id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "fullName",x.work_date::text AS "workDate",x.attendance_event_id AS "attendanceEventId",x.issue_type AS "issueType",x.source,x.request_note AS "requestNote",x.status,x.due_at AS "dueAt",x.response_text AS "responseText",x.evidence_image_reference AS "evidenceImageReference",x.evidence_captured_at AS "evidenceCapturedAt",x.evidence_latitude AS "evidenceLatitude",x.evidence_longitude AS "evidenceLongitude",x.review_note AS "reviewNote",x.reviewed_at AS "reviewedAt",x.created_at AS "createdAt",COALESCE(requester.full_name,ru.email) AS "requestedByName",COALESCE(reviewer.full_name,vu.email) AS "reviewedByName" FROM attendance_explanation_requests x JOIN employees e ON e.id=x.employee_id LEFT JOIN users ru ON ru.id=x.requested_by LEFT JOIN employees requester ON requester.user_id=ru.id LEFT JOIN users vu ON vu.id=x.reviewed_by LEFT JOIN employees reviewer ON reviewer.user_id=vu.id WHERE ($1::date IS NULL OR x.work_date=$1::date) ORDER BY CASE x.status WHEN 'SUBMITTED' THEN 1 WHEN 'REQUESTED' THEN 2 ELSE 3 END,x.created_at DESC`, [date ?? null]);
   }
 
   async listMyExplanations(user: AuthenticatedUserView): Promise<AttendanceExplanationEntity[]> {
@@ -186,8 +214,10 @@ export class AttendanceService {
     const item = await this.explanations.findOne({ where: { id } });
     if (!item || item.employeeId !== user.employeeId) throw new NotFoundException({ code: 'EXPLANATION_NOT_FOUND', message: 'Không tìm thấy yêu cầu giải trình.' });
     if (item.status !== 'REQUESTED') throw new ConflictException({ code: 'EXPLANATION_NOT_AWAITING_RESPONSE', message: 'Yêu cầu này không còn chờ phản hồi.' });
-    if (item.dueAt.getTime() < Date.now()) throw new ConflictException({ code: 'EXPLANATION_DEADLINE_PASSED', message: 'Yêu cầu giải trình đã quá hạn.' });
-    if (!validateEvidence(item.issueType as CreateAttendanceExplanationDto['issueType'], input)) throw new BadRequestException({ code: 'INCOMPLETE_EXPLANATION_EVIDENCE', message: 'Bằng chứng ảnh phải có đủ ảnh tham chiếu, thời điểm chụp và tọa độ.' });
+    if (item.dueAt && item.dueAt.getTime() < Date.now()) throw new ConflictException({ code: 'EXPLANATION_DEADLINE_PASSED', message: 'Yêu cầu giải trình đã quá hạn.' });
+    await this.assertPeriodOpen(item.workDate);
+    if (!validateEvidence(item.issueType as CreateAttendanceExplanationDto['issueType'], input)) throw new BadRequestException({ code: 'INCOMPLETE_EXPLANATION_EVIDENCE', message: 'Minh chứng phải có ảnh tham chiếu và tọa độ đầy đủ nếu cung cấp.' });
+    if (input.evidenceImageReference?.trim()) await this.evidenceStorage.assertOwnedReference(user, input.evidenceImageReference.trim());
     Object.assign(item, {
       responseText: input.responseText.trim(),
       evidenceImageReference: input.evidenceImageReference?.trim() || null,
@@ -195,20 +225,26 @@ export class AttendanceService {
       evidenceLatitude: input.evidenceLatitude ?? null,
       evidenceLongitude: input.evidenceLongitude ?? null,
       status: 'SUBMITTED',
+      submittedBy: user.id,
     });
     return this.explanations.save(item);
   }
 
   async reviewExplanation(user: AuthenticatedUserView, id: string, input: ReviewAttendanceExplanationDto): Promise<AttendanceExplanationEntity> {
-    const item = await this.explanations.findOne({ where: { id } });
-    if (!item) throw new NotFoundException({ code: 'EXPLANATION_NOT_FOUND', message: 'Không tìm thấy yêu cầu giải trình.' });
-    if (!canReviewExplanation(item.status)) throw new ConflictException({ code: 'EXPLANATION_NOT_REVIEWABLE', message: 'Chỉ giải trình đã gửi mới được duyệt.' });
-    if (input.status === 'REJECTED' && !input.reviewNote?.trim()) throw new BadRequestException({ code: 'REJECTION_NOTE_REQUIRED', message: 'Lý do từ chối là bắt buộc.' });
-    item.status = input.status;
-    item.reviewNote = input.reviewNote?.trim() || null;
-    item.reviewedBy = user.id;
-    item.reviewedAt = new Date();
-    return this.explanations.save(item);
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(AttendanceExplanationEntity);
+      const item = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
+      if (!item) throw new NotFoundException({ code: 'EXPLANATION_NOT_FOUND', message: 'Không tìm thấy yêu cầu giải trình.' });
+      if (!canReviewExplanation(item.status)) throw new ConflictException({ code: 'EXPLANATION_NOT_REVIEWABLE', message: 'Chỉ giải trình đã gửi mới được duyệt.' });
+      await this.assertPeriodOpen(item.workDate);
+      item.status = input.status;
+      item.reviewNote = input.reviewNote?.trim() || null;
+      item.reviewedBy = user.id;
+      item.reviewedAt = new Date();
+      const saved = await repository.save(item);
+      await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,old_value,new_value,created_by) VALUES('ATTENDANCE_EXPLANATION',$1,'REVIEW',$2::jsonb,$3::jsonb,$4)`, [item.id, JSON.stringify({ status: 'SUBMITTED' }), JSON.stringify({ status: item.status, reviewNote: item.reviewNote }), user.id]);
+      return saved;
+    });
   }
 
   private async evaluateRisk(employeeId: string, input: RecordAttendanceEventDto, now: Date): Promise<AttendanceRiskResult> {

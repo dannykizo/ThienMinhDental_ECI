@@ -19,6 +19,7 @@ import { BusinessTripCustomerManagement1791072000000 } from './migrations/179107
 import { AnnouncementCompanyPushDelivery1791158400000 } from './migrations/1791158400000-announcement-company-push-delivery.js';
 import { EmployeeDisciplinaryActions1791244800000 } from './migrations/1791244800000-employee-disciplinary-actions.js';
 import { LeavePoliciesBalances1791331200000 } from './migrations/1791331200000-leave-policies-balances.js';
+import { EmployeeExplanations1791417600000 } from './migrations/1791417600000-employee-explanations.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -49,6 +50,7 @@ export const applicationDataSource = new DataSource({
     AnnouncementCompanyPushDelivery1791158400000,
     EmployeeDisciplinaryActions1791244800000,
     LeavePoliciesBalances1791331200000,
+    EmployeeExplanations1791417600000,
   ],
   migrationsTableName: 'schema_migrations',
 });

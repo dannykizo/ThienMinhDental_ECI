@@ -6,7 +6,7 @@ import { CurrentUser } from '../auth/presentation/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/presentation/jwt-auth.guard.js';
 import { Roles } from '../auth/presentation/roles.decorator.js';
 import { RolesGuard } from '../auth/presentation/roles.guard.js';
-import { CreateAttendanceAdjustmentDto, CreateAttendanceExplanationDto, RecordAttendanceEventDto, RespondAttendanceExplanationDto, ReviewAttendanceExplanationDto, UploadAttendanceEvidenceDto } from './attendance.dto.js';
+import { CreateAttendanceAdjustmentDto, CreateAttendanceExplanationDto, RecordAttendanceEventDto, RespondAttendanceExplanationDto, ReviewAttendanceExplanationDto, SubmitEmployeeExplanationDto, UploadAttendanceEvidenceDto } from './attendance.dto.js';
 import { AttendanceService } from './attendance.service.js';
 import { AttendanceEvidenceStorage, type AttendanceEvidenceUpload } from './infrastructure/attendance-evidence.storage.js';
 
@@ -23,6 +23,7 @@ export class AttendanceController {
   @Post('adjustments') @Roles(RoleCode.Admin) adjust(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateAttendanceAdjustmentDto): Promise<unknown> { return this.service.createAdjustment(user, input); }
   @Get('adjustments') @Roles(RoleCode.Admin) adjustments(): Promise<unknown> { return this.service.listAdjustments(); }
   @Get('explanations/mine') explanationsMine(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.listMyExplanations(user); }
+  @Post('explanations/mine') submitExplanation(@CurrentUser() user: AuthenticatedUserView, @Body() input: SubmitEmployeeExplanationDto): Promise<unknown> { return this.service.submitEmployeeExplanation(user, input); }
   @Post('evidence')
   @UseInterceptors(FileInterceptor('file', { limits: { files: 1, fileSize: 5 * 1024 * 1024 } }))
   uploadEvidence(
@@ -33,8 +34,8 @@ export class AttendanceController {
     return this.evidenceStorage.store(user, input.evidenceId, file);
   }
   @Get('evidence/:filename')
-  async evidence(@Param('filename') filename: string): Promise<StreamableFile> {
-    const file = await this.evidenceStorage.read(filename);
+  async evidence(@CurrentUser() user: AuthenticatedUserView, @Param('filename') filename: string): Promise<StreamableFile> {
+    const file = await this.evidenceStorage.read(filename, user);
     return new StreamableFile(file.buffer, { type: file.contentType, disposition: 'inline' });
   }
   @Patch('explanations/:id/respond') respondToExplanation(@CurrentUser() user: AuthenticatedUserView, @Param('id') id: string, @Body() input: RespondAttendanceExplanationDto): Promise<unknown> { return this.service.respondToExplanation(user, id, input); }

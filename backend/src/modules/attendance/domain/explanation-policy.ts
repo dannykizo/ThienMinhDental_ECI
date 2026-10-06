@@ -22,15 +22,24 @@ export function hasCompleteEvidence(evidence: ExplanationEvidence): boolean {
   );
 }
 
-export function validateEvidence(issueType: ExplanationIssueType, evidence: ExplanationEvidence): boolean {
+export function validateEvidence(_issueType: ExplanationIssueType, evidence: ExplanationEvidence): boolean {
   const evidenceValues = [
     evidence.evidenceImageReference,
     evidence.evidenceCapturedAt,
     evidence.evidenceLatitude,
     evidence.evidenceLongitude,
   ];
-  const hasAny = evidenceValues.some((value) => value !== undefined && value !== '');
-  return issueType === 'GPS_RISK' || hasAny ? hasCompleteEvidence(evidence) : true;
+  const hasAny = evidenceValues.some((value) => value != null && value !== '');
+  if (!hasAny) return true;
+  if (!evidence.evidenceImageReference?.trim()) return false;
+  // Imported images need neither a made-up capture time nor GPS metadata.
+  return (evidence.evidenceLatitude == null) === (evidence.evidenceLongitude == null);
+}
+
+export function validExplanationDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 export function canReviewExplanation(status: string): boolean {
