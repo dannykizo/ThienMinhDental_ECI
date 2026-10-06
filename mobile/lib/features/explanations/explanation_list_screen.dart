@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_form_controls.dart';
 import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 import '../../services/pending_explanation_queue.dart';
@@ -261,6 +262,9 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
   double? _longitude;
   String? _error;
   bool _busy = false;
+  String? _responseError;
+  String? _photoError;
+  bool _capturing = false;
   bool _preservePhoto = false;
 
   bool get _photoRequired => widget.explanation.issueType == 'GPS_RISK';
@@ -277,8 +281,10 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
   }
 
   Future<void> _capturePhoto() async {
+    if (_busy) return;
     setState(() {
       _busy = true;
+      _capturing = true;
       _error = null;
     });
     try {
@@ -303,6 +309,7 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
           _capturedAt = DateTime.now();
           _latitude = position.latitude;
           _longitude = position.longitude;
+          _photoError = null;
         });
       }
     } on ApiException catch (error) {
@@ -313,7 +320,12 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
             'Không thể chụp ảnh hoặc lấy vị trí bằng chứng. Hãy kiểm tra quyền Camera/GPS.');
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _capturing = false;
+        });
+      }
     }
   }
 
@@ -339,19 +351,24 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
   }
 
   Future<void> _submit() async {
+    if (_busy) return;
     FocusManager.instance.primaryFocus?.unfocus();
     final String responseText = _response.text.trim();
     if (responseText.length < 5) {
-      setState(() => _error = 'Nội dung giải trình cần ít nhất 5 ký tự.');
+      setState(
+          () => _responseError = 'Nội dung giải trình cần ít nhất 5 ký tự.');
       return;
     }
     if (_photoRequired && _photoPath == null) {
-      setState(() => _error = 'Yêu cầu GPS bắt buộc phải có ảnh bằng chứng.');
+      setState(
+          () => _photoError = 'Yêu cầu GPS bắt buộc phải có ảnh bằng chứng.');
       return;
     }
     setState(() {
       _busy = true;
       _error = null;
+      _responseError = null;
+      _photoError = null;
     });
     try {
       final ExplanationSubmissionOutcome outcome =
@@ -379,72 +396,104 @@ class _ExplanationResponseScreenState extends State<ExplanationResponseScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Phản hồi giải trình')),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          children: <Widget>[
-            _ExplanationSummary(item: widget.explanation),
-            const SizedBox(height: 20),
-            TextField(
-              controller: _response,
-              enabled: !_busy,
-              maxLines: 5,
-              minLines: 4,
-              decoration: const InputDecoration(
-                alignLabelWithHint: true,
-                border: OutlineInputBorder(),
-                labelText: 'Nội dung giải trình',
-                hintText: 'Mô tả ngắn gọn sự việc và thông tin cần đối soát…',
-              ),
+  Widget build(BuildContext context) => PopScope(
+        canPop: !_busy,
+        child: Scaffold(
+          appBar: AppBar(title: const Text('Phản hồi giải trình')),
+          body: SafeArea(
+            top: false,
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+              children: <Widget>[
+                _ExplanationSummary(item: widget.explanation),
+                const SizedBox(height: 20),
+                const AppFormSection(
+                    title: '1. Nội dung phản hồi',
+                    description:
+                        'Các mục có * là bắt buộc. Nội dung và ảnh được giữ khi gửi thất bại.'),
+                TextField(
+                  controller: _response,
+                  enabled: !_busy,
+                  maxLines: 5,
+                  minLines: 4,
+                  onChanged: (_) {
+                    if (_responseError != null) {
+                      setState(() => _responseError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    errorText: _responseError,
+                    errorMaxLines: 3,
+                    alignLabelWithHint: true,
+                    border: const OutlineInputBorder(),
+                    labelText: 'Nội dung giải trình *',
+                    hintText:
+                        'Mô tả ngắn gọn sự việc và thông tin cần đối soát…',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                AppFormSection(
+                    title: '2. Ảnh bằng chứng',
+                    description: _photoRequired
+                        ? 'Bắt buộc chụp ảnh cho yêu cầu GPS.'
+                        : 'Không bắt buộc. Có thể bổ sung ảnh để hỗ trợ đối soát.'),
+                if (_photoPath == null)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.all(16)),
+                    onPressed: _busy ? null : _capturePhoto,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: Text(
+                        _capturing
+                            ? 'Đang chụp ảnh / lấy GPS…'
+                            : 'Chụp ảnh bằng chứng',
+                        textAlign: TextAlign.center),
+                  )
+                else
+                  AppEvidencePreview(
+                    path: _photoPath!,
+                    status: _busy && !_capturing
+                        ? 'Đang xử lý ảnh và gửi giải trình…'
+                        : _error != null
+                            ? 'Ảnh vẫn được giữ trên thiết bị. Kiểm tra lỗi phía dưới trước khi thử lại.'
+                            : 'Ảnh đã chọn trên thiết bị · chưa gửi cùng giải trình.',
+                    onRetake: _busy ? null : _capturePhoto,
+                  ),
+                if (_photoError != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(_photoError!,
+                          style: const TextStyle(color: brandDanger))),
+                if (_error != null) ...<Widget>[
+                  const SizedBox(height: 14),
+                  AppErrorState(
+                    compact: true,
+                    message: _error!,
+                    onRetry: _busy ? null : _submit,
+                    title: null,
+                  ),
+                ],
+                const SizedBox(height: 22),
+                AppFormAction(
+                    label: 'Gửi giải trình',
+                    icon: Icons.send_rounded,
+                    busy: _busy,
+                    busyLabel: _capturing
+                        ? 'Đang chụp ảnh / lấy GPS…'
+                        : 'Đang xử lý và gửi…',
+                    onPressed: _submit),
+                const SizedBox(height: 10),
+                const Text(
+                  'Nếu mất mạng trong lúc gửi, app giữ nội dung và ảnh trong bộ nhớ riêng của ứng dụng.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Color(0xFF817683), fontSize: 11, height: 1.4),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            if (_photoPath == null)
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _capturePhoto,
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: Text(_photoRequired
-                    ? 'Chụp ảnh bằng chứng · bắt buộc'
-                    : 'Chụp ảnh bằng chứng · không bắt buộc'),
-              )
-            else
-              _EvidencePreview(
-                path: _photoPath!,
-                onRetake: _busy ? null : _capturePhoto,
-              ),
-            if (_error != null) ...<Widget>[
-              const SizedBox(height: 14),
-              AppErrorState(
-                compact: true,
-                message: _error!,
-                onRetry: _submit,
-                title: null,
-              ),
-            ],
-            const SizedBox(height: 22),
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: _busy ? null : _submit,
-                style: FilledButton.styleFrom(backgroundColor: brandPurple),
-                icon: _busy
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                            color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Icon(Icons.send_rounded),
-                label: Text(_busy ? 'Đang xử lý…' : 'Gửi giải trình'),
-              ),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'Nếu mất mạng trong lúc gửi, app giữ nội dung và ảnh trong bộ nhớ riêng của ứng dụng.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: Color(0xFF817683), fontSize: 11, height: 1.4),
-            ),
-          ],
+          ),
         ),
       );
 }
@@ -545,36 +594,6 @@ class _ExplanationSummary extends StatelessWidget {
             Text(
                 'Hạn phản hồi ${DateFormat('dd/MM/yyyy HH:mm').format(item.dueAt)}',
                 style: const TextStyle(color: Color(0xFF786B7B), fontSize: 11)),
-          ],
-        ),
-      );
-}
-
-class _EvidencePreview extends StatelessWidget {
-  const _EvidencePreview({required this.onRetake, required this.path});
-
-  final VoidCallback? onRetake;
-  final String path;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFE5DDE7)),
-        ),
-        child: Column(
-          children: <Widget>[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Image.file(File(path),
-                  height: 210, width: double.infinity, fit: BoxFit.cover),
-            ),
-            TextButton.icon(
-              onPressed: onRetake,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Chụp lại'),
-            ),
           ],
         ),
       );

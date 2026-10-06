@@ -2,7 +2,7 @@
 
 Ngày lập: 2026-10-06. Scope owner: Nguyễn Thành Nam.
 
-Trạng thái: **UX1–UX3 đã hoàn thành ngày 2026-10-06; UX4 vẫn PROPOSED**. Tài liệu này là kế hoạch bàn giao, không thay thế PROJECT.md, FLOWS.md hoặc IMPLEMENTATION.md. Chỉ bắt đầu task khi Tech Lead giao rõ mã task; không tự chuyển sang task tiếp theo.
+Trạng thái: **UX1–UX4 đã triển khai ngày 2026-10-06; giới hạn nghiệm thu ghi tại log bên dưới**. Tài liệu này là kế hoạch bàn giao, không thay thế PROJECT.md, FLOWS.md hoặc IMPLEMENTATION.md. Chỉ bắt đầu task khi Tech Lead giao rõ mã task; không tự chuyển sang task tiếp theo.
 
 ## 1. Mục tiêu và baseline
 
@@ -105,7 +105,9 @@ Nghiệm thu:
 
 ### UX4 — Form gọn, dễ đọc và nghiệm thu UX tổng thể
 
-Trạng thái: `NOT_IMPLEMENTED` (đề xuất). Phụ thuộc UX3 đã nghiệm thu.
+Trạng thái: `DONE` (Codex, Tech Lead giao ngày 2026-10-06). Commit có tiêu đề `feat(mobile): polish employee forms and detail UX`; xác minh hash/push qua Git khi tiếp quản.
+
+Kết quả: form có nhóm thông tin, dấu bắt buộc và lỗi cạnh nội dung/ảnh; giữ nguyên ngưỡng validation sẵn có. Nút dùng chiều cao tối thiểu thay vì chiều cao cố định, giờ nghỉ xếp dọc, lựa chọn buổi xuống dòng và khóa khi gửi. Bảo toàn hai hunk CR6 của Tech Lead, không commit chung. Preview ảnh dùng state thật từ màn gọi: ảnh cục bộ, đang xử lý/gửi, đang upload công tác, đã upload nhưng phiếu chưa hoàn tất; lỗi hiển thị ảnh có hướng dẫn chụp lại. Giải trình không có callback tiến độ upload nên chỉ ghi đang xử lý/gửi, không dựng phần trăm hoặc giai đoạn giả; trạng thái chờ mạng vẫn lấy từ queue thật tại danh sách. SafeArea/cuộn/bàn phím và busy/Back guard chỉ ở presentation. Chi tiết thông báo cũng dùng nút thích ứng và badge xuống dòng. Không đổi service/GPS/queue/API/schema hoặc Admin Web.
 
 Vùng dự kiến: form/detail trong module Nghỉ phép, Giải trình, Công tác và các widget presentation trực tiếp liên quan. Không thêm màn Tài khoản hoặc chuyển chức năng quản trị sang app.
 
@@ -146,9 +148,20 @@ Trước khi đổi agent hoặc kết thúc lượt, điền log bên dưới. 
 | UX1 | DONE | `b03c771`; đối chiếu `origin/main` để xác minh push | Format/debug/manual đạt; analyze có 1 info CR6 sẵn có | Không còn code bắt buộc |
 | UX2 | DONE | `e769109`; đối chiếu `origin/main` | Format/analyze file đạt; Hot Reload và manual USB đạt | Không còn code bắt buộc |
 | UX3 | DONE | `feat(mobile): improve employee lists and status filters`; xác minh hash/push khi tiếp quản | Format/diff đạt; analyze chỉ 1 info CR6 có sẵn; manual/Hot Reload đạt | Tech Lead xem UI; chưa làm UX4 |
-| UX4 | PROPOSED | — | Chưa chạy | Chờ UX3 và Tech Lead giao |
+| UX4 | DONE | `feat(mobile): polish employee forms and detail UX`; xác minh hash/push | Format/analyze 5 file sạch; manual USB/Hot Reload đạt trong phạm vi bên dưới | Tech Lead xem UI; các biến thể ảnh/giao dịch thật chưa nghiệm thu lại |
 
-Checkpoint gần nhất — UX3:
+Checkpoint gần nhất — UX4:
+
+- Phạm vi: form Nghỉ phép/Giải trình/Công tác và polish chi tiết thông báo; widget presentation dùng chung `app_form_controls.dart`. Chỉ Mobile presentation và IMPLEMENTATION.md/README.md/tài liệu này; không Backend/Admin/API/schema/service.
+- Git: baseline `9a3cea9`, branch main. Hai hunk CR6 sẵn có (dialog lý do hủy + ngày xếp dọc) giữ nguyên trong working tree, tách khỏi commit UX4 bằng nội dung index riêng; không reset/ghi đè file đang chạy. Các sửa form UX4 nằm trong commit có tiêu đề nêu trên.
+- Kiểm tra: `dart format` 5 file; `flutter analyze --no-pub` chỉ định 5 file — No issues found. Đã chuyển dropdown hình thức nghỉ sang initialValue/key theo lựa chọn hiện tại trong phạm vi form, loại bỏ info deprecated có sẵn. Review diff và `git diff --check`. Không chạy automated test suite, không build APK bàn giao.
+- Manual USB `32a65649`: Hot Reload; đi qua cả 5 tab, mở form nghỉ/phản hồi và chi tiết công tác/thông báo, Back về danh sách. Nhập draft, mở bàn phím/cuộn/đóng bàn phím; không gửi draft. Lý do nghỉ trống và giải trình trống có lỗi cạnh field; công tác thiếu ảnh bắt buộc có lỗi cạnh nút camera, không lấy GPS/gửi hoàn tất. Font scale 1.8 cho form nghỉ, giải trình, công tác và nút xác nhận thông báo; đã khôi phục 1.15. Kiểm tra log app không có Flutter exception/overflow trong lượt kiểm tra.
+- Mất kết nối: tạm tháo ADB reverse rồi refresh Nghỉ phép (read-only): hiện lỗi/banner Backend, giữ phiên/dữ liệu/filter. Khôi phục reverse tcp:3001 và refresh thành công; không dừng Backend thật.
+- Giới hạn: policy dev đã xem chỉ cho cả ngày, chưa trực tiếp thao tác nửa ngày/giờ; không đổi cấu hình Backend để tạo bài thử. Chưa chụp/upload ảnh mới, tạo queue offline mới, gửi/hủy đơn, bắt đầu/hoàn tất công tác hoặc xác nhận thông báo mới; các trạng thái upload/success/queue được rà theo flow hiện có, không tuyên bố đã nghiệm thu lại bằng giao dịch thật. Không thay Firebase; push thật vẫn cần cấu hình môi trường. Chưa kiểm tra iOS.
+- Skill impact-analysis: GitNexus MCP chưa có repo này, runner local không tồn tại; dùng caller/import trực tiếp và diff thay graph. Ba form/detail được mở từ list tương ứng; widget mới chỉ được dùng bởi bốn module Mobile, không đổi caller contract.
+- Runtime: Backend health localhost:3001/api/health ok; USB/reverse hoạt động, app debug và Hot Reload session `52766` được giữ. Agent sau phải xác minh lại session/thiết bị. Không tự thực hiện milestone mới; Tech Lead xem UI và chọn việc tiếp theo.
+
+Checkpoint trước — UX3 (giữ lịch sử):
 
 - Task và agent: UX3 — Codex, đã hoàn thành; không triển khai UX4.
 - Tinh chỉnh sau bàn giao theo Tech Lead: chỉ đổi AppListFilters trong app_list_controls.dart sang SingleChildScrollView ngang + Row, áp dụng cho bốn màn; không đổi callbacks/filter/API hoặc diff CR6. Format/analyze file đạt (không issue), diff check đạt; Hot Reload và vuốt đến/chọn chip cuối ở Nghỉ phép hoạt động; kiểm tra chữ lớn 1.8, đã phục hồi 1.15, log không có Flutter overflow/exception. Không chạy test tự động hoặc xuất APK.

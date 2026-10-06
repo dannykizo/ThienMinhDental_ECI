@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_form_controls.dart';
 import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 
@@ -233,6 +234,7 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
   bool _submitting = false;
 
   Future<void> _acknowledge() async {
+    if (_submitting) return;
     setState(() {
       _error = null;
       _submitting = true;
@@ -263,100 +265,90 @@ class _AnnouncementDetailScreenState extends State<AnnouncementDetailScreen> {
     final bool needsAcknowledgement = item.requiresAcknowledgement &&
         item.acknowledgedAt == null &&
         !_acknowledged;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Chi tiết thông báo')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        children: <Widget>[
-          if (disciplinary)
-            _DisciplinaryWarningBanner(
-              item: item,
-              required: needsAcknowledgement,
-            )
-          else
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _AudienceBadge(item: item),
-                  ),
+    return PopScope(
+      canPop: !_submitting,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Chi tiết thông báo')),
+        body: SafeArea(
+          top: false,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            children: <Widget>[
+              if (disciplinary)
+                _DisciplinaryWarningBanner(
+                  item: item,
+                  required: needsAcknowledgement,
+                )
+              else
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    _AudienceBadge(item: item),
+                    if (item.requiresAcknowledgement) ...<Widget>[
+                      const _ImportantBadge(),
+                    ],
+                  ],
                 ),
-                if (item.requiresAcknowledgement) ...<Widget>[
-                  const SizedBox(width: 8),
-                  const _ImportantBadge(),
-                ],
-              ],
-            ),
-          const SizedBox(height: 12),
-          Text(
-            DateFormat('dd/MM/yyyy · HH:mm').format(item.publishedAt),
-            style: const TextStyle(
-              color: brandPurple,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              letterSpacing: .8,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            disciplinary ? _disciplinaryTitle(item) : item.title,
-            style: const TextStyle(
-              fontSize: 29,
-              fontWeight: FontWeight.w800,
-              height: 1.15,
-              letterSpacing: -0.6,
-            ),
-          ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(left: BorderSide(color: brandPurple, width: 3)),
-            ),
-            child: Text(
-              item.body,
-              style: const TextStyle(fontSize: 15, height: 1.65),
-            ),
-          ),
-          const SizedBox(height: 14),
-          if (!disciplinary) _AudienceNotice(item: item),
-          if (item.requiresAcknowledgement) ...<Widget>[
-            const SizedBox(height: 18),
-            _AcknowledgementNotice(done: !needsAcknowledgement),
-          ],
-          if (_error != null) ...<Widget>[
-            const SizedBox(height: 14),
-            AppErrorState(
-              compact: true,
-              message: _error!,
-              title: null,
-            ),
-          ],
-          if (needsAcknowledgement) ...<Widget>[
-            const SizedBox(height: 18),
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: _submitting ? null : _acknowledge,
-                style: FilledButton.styleFrom(backgroundColor: brandPurple),
-                icon: _submitting
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.verified_outlined),
-                label: Text(
-                  _submitting ? 'Đang xác nhận…' : 'Tôi đã đọc và xác nhận',
+              const SizedBox(height: 12),
+              Text(
+                DateFormat('dd/MM/yyyy · HH:mm').format(item.publishedAt),
+                style: const TextStyle(
+                  color: brandPurple,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .8,
                 ),
               ),
-            ),
-          ],
-        ],
+              const SizedBox(height: 12),
+              Text(
+                disciplinary ? _disciplinaryTitle(item) : item.title,
+                style: const TextStyle(
+                  fontSize: 29,
+                  fontWeight: FontWeight.w800,
+                  height: 1.15,
+                  letterSpacing: -0.6,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border:
+                      Border(left: BorderSide(color: brandPurple, width: 3)),
+                ),
+                child: Text(
+                  item.body,
+                  style: const TextStyle(fontSize: 15, height: 1.65),
+                ),
+              ),
+              const SizedBox(height: 14),
+              if (!disciplinary) _AudienceNotice(item: item),
+              if (item.requiresAcknowledgement) ...<Widget>[
+                const SizedBox(height: 18),
+                _AcknowledgementNotice(done: !needsAcknowledgement),
+              ],
+              if (_error != null) ...<Widget>[
+                const SizedBox(height: 14),
+                AppErrorState(
+                  compact: true,
+                  message: _error!,
+                  title: null,
+                ),
+              ],
+              if (needsAcknowledgement) ...<Widget>[
+                const SizedBox(height: 18),
+                AppFormAction(
+                    label: 'Tôi đã đọc và xác nhận',
+                    icon: Icons.verified_outlined,
+                    busy: _submitting,
+                    busyLabel: 'Đang xác nhận…',
+                    onPressed: _acknowledge),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

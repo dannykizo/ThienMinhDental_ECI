@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_form_controls.dart';
 import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 import '../../services/uuid_v4.dart';
@@ -188,6 +189,7 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   String? _photoPath;
   String? _remoteReference;
   String? _workingLabel;
+  String? _photoError;
   bool _completed = false;
 
   bool get _busy => _workingLabel != null;
@@ -232,6 +234,7 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   }
 
   Future<void> _capturePhoto() async {
+    if (_busy) return;
     setState(() {
       _error = null;
       _workingLabel = 'Đang mở camera…';
@@ -256,6 +259,7 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
           _capturedAt = DateTime.now();
           _photoPath = targetPath;
           _remoteReference = null;
+          _photoError = null;
         });
       }
     } on Object {
@@ -269,6 +273,7 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   }
 
   Future<void> _start() async {
+    if (_busy) return;
     setState(() {
       _error = null;
       _workingLabel = 'Đang lấy GPS…';
@@ -302,14 +307,16 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   }
 
   Future<void> _complete() async {
+    if (_busy) return;
     FocusManager.instance.primaryFocus?.unfocus();
     if (widget.trip.requiresPhoto && _photoPath == null) {
-      setState(() => _error = 'Phiếu này bắt buộc có ảnh hiện trường.');
+      setState(() => _photoError = 'Phiếu này bắt buộc có ảnh hiện trường.');
       return;
     }
     setState(() {
       _error = null;
       _workingLabel = 'Đang chuẩn bị…';
+      _photoError = null;
     });
     try {
       String? reference = _remoteReference;
@@ -362,107 +369,121 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final BusinessTripAssignment trip = widget.trip;
-    return Scaffold(
-      appBar: AppBar(title: Text(trip.code)),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-        children: <Widget>[
-          _TripSummary(trip: trip),
-          if (_error != null) ...<Widget>[
-            const SizedBox(height: 16),
-            AppErrorState(
-              compact: true,
-              message: _error!,
-              title: null,
-            ),
-          ],
-          if (trip.participationStatus == 'ASSIGNED' &&
-              !<String>['CANCELLED', 'COMPLETED']
-                  .contains(trip.status)) ...<Widget>[
-            const SizedBox(height: 22),
-            _PrivacyNotice(
-              text:
-                  'Khi bắt đầu, ứng dụng lấy đúng một mẫu GPS và gửi thời gian thiết bị lên Backend.',
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: _busy ? null : _start,
-                style: FilledButton.styleFrom(backgroundColor: brandPurple),
-                icon: _busy
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.play_arrow_rounded),
-                label: Text(_workingLabel ?? 'Bắt đầu công tác'),
-              ),
-            ),
-          ],
-          if (trip.participationStatus == 'IN_PROGRESS') ...<Widget>[
-            const SizedBox(height: 22),
-            TextField(
-              controller: _note,
-              enabled: !_busy,
-              maxLength: 2000,
-              maxLines: 5,
-              minLines: 3,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Ghi chú kết quả',
-                hintText: 'Nội dung đã thực hiện tại hiện trường',
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (_photoPath == null)
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _capturePhoto,
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: Text(
-                  trip.requiresPhoto
-                      ? 'Chụp ảnh hiện trường (bắt buộc)'
-                      : 'Chụp ảnh hiện trường (không bắt buộc)',
+    return PopScope(
+      canPop: !_busy,
+      child: Scaffold(
+        appBar: AppBar(title: Text(trip.code)),
+        body: SafeArea(
+          top: false,
+          child: ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            children: <Widget>[
+              _TripSummary(trip: trip),
+              if (_error != null) ...<Widget>[
+                const SizedBox(height: 16),
+                AppErrorState(
+                  compact: true,
+                  message: _error!,
+                  title: null,
                 ),
-              )
-            else
-              _PhotoPreview(path: _photoPath!, onRetake: _capturePhoto),
-            const SizedBox(height: 14),
-            _PrivacyNotice(
-              text:
-                  'Khi hoàn tất, ứng dụng lấy một mẫu GPS mới. Không theo dõi vị trí trong thời gian làm việc.',
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: _busy ? null : _complete,
-                style: FilledButton.styleFrom(backgroundColor: brandPurple),
-                icon: _busy
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.task_alt_rounded),
-                label: Text(_workingLabel ?? 'Hoàn tất công tác'),
-              ),
-            ),
-          ],
-          if (trip.participationStatus == 'COMPLETED') ...<Widget>[
-            const SizedBox(height: 20),
-            const _CompletedNotice(),
-          ],
-          if (trip.status == 'CANCELLED') ...<Widget>[
-            const SizedBox(height: 20),
-            _CancelledNotice(reason: trip.cancelReason),
-          ],
-        ],
+              ],
+              if (trip.participationStatus == 'ASSIGNED' &&
+                  !<String>['CANCELLED', 'COMPLETED']
+                      .contains(trip.status)) ...<Widget>[
+                const SizedBox(height: 22),
+                _PrivacyNotice(
+                  text:
+                      'Khi bắt đầu, ứng dụng lấy đúng một mẫu GPS và gửi thời gian thiết bị lên Backend.',
+                ),
+                const SizedBox(height: 16),
+                AppFormAction(
+                    label: 'Bắt đầu công tác',
+                    icon: Icons.play_arrow_rounded,
+                    busy: _busy,
+                    busyLabel: _workingLabel ?? 'Đang xử lý…',
+                    onPressed: _start),
+              ],
+              if (trip.participationStatus == 'IN_PROGRESS') ...<Widget>[
+                const SizedBox(height: 22),
+                const AppFormSection(
+                    title: '1. Kết quả công tác',
+                    description:
+                        'Ghi chú không bắt buộc. Kiểm tra thông tin trước khi hoàn tất.'),
+                TextField(
+                  controller: _note,
+                  enabled: !_busy,
+                  maxLength: 2000,
+                  maxLines: 5,
+                  minLines: 3,
+                  decoration: const InputDecoration(
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(),
+                    labelText: 'Ghi chú kết quả',
+                    hintText: 'Nội dung đã thực hiện tại hiện trường',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                AppFormSection(
+                    title: '2. Ảnh hiện trường',
+                    description: trip.requiresPhoto
+                        ? 'Bắt buộc chụp ảnh trước khi hoàn tất phiếu này.'
+                        : 'Không bắt buộc. Có thể bổ sung ảnh hiện trường.'),
+                if (_photoPath == null)
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        padding: const EdgeInsets.all(16)),
+                    onPressed: _busy ? null : _capturePhoto,
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: Text(
+                      _workingLabel == 'Đang mở camera…'
+                          ? _workingLabel!
+                          : 'Chụp ảnh hiện trường',
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  AppEvidencePreview(
+                    path: _photoPath!,
+                    onRetake: _busy ? null : _capturePhoto,
+                    status: _workingLabel == 'Đang tải ảnh…'
+                        ? 'Đang tải ảnh lên Backend…'
+                        : _remoteReference != null
+                            ? 'Ảnh đã tải lên · phiếu chưa hoàn tất.'
+                            : _error != null
+                                ? 'Ảnh chưa tải xong. Giữ ảnh để thử lại.'
+                                : 'Ảnh đã chọn trên thiết bị · chưa tải lên.',
+                  ),
+                if (_photoError != null)
+                  Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(_photoError!,
+                          style: const TextStyle(color: brandDanger))),
+                const SizedBox(height: 14),
+                _PrivacyNotice(
+                  text:
+                      'Khi hoàn tất, ứng dụng lấy một mẫu GPS mới. Không theo dõi vị trí trong thời gian làm việc.',
+                ),
+                const SizedBox(height: 16),
+                AppFormAction(
+                    label: 'Hoàn tất công tác',
+                    icon: Icons.task_alt_rounded,
+                    busy: _busy,
+                    busyLabel: _workingLabel ?? 'Đang xử lý…',
+                    onPressed: _complete),
+              ],
+              if (trip.participationStatus == 'COMPLETED') ...<Widget>[
+                const SizedBox(height: 20),
+                const _CompletedNotice(),
+              ],
+              if (trip.status == 'CANCELLED') ...<Widget>[
+                const SizedBox(height: 20),
+                _CancelledNotice(reason: trip.cancelReason),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -602,21 +623,13 @@ class _TripSummary extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 9),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    trip.siteName,
-                    style: const TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.45,
-                    ),
-                  ),
-                ),
-                _TripStatus(status: trip.participationStatus),
-              ],
-            ),
+            Text(trip.siteName,
+                style: const TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.45)),
+            const SizedBox(height: 9),
+            _TripStatus(status: trip.participationStatus),
             const SizedBox(height: 9),
             _InfoLine(icon: Icons.place_outlined, text: trip.siteAddress),
             _InfoLine(
@@ -698,7 +711,8 @@ class _CustomerDetails extends StatelessWidget {
               children: <Widget>[
                 Icon(Icons.apartment_outlined, color: brandPurple, size: 18),
                 SizedBox(width: 8),
-                Text(
+                Expanded(
+                    child: Text(
                   'KHÁCH HÀNG / PHÒNG KHÁM',
                   style: TextStyle(
                     color: brandPurple,
@@ -706,7 +720,7 @@ class _CustomerDetails extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                     letterSpacing: .6,
                   ),
-                ),
+                )),
               ],
             ),
             if (trip.customerName case final String customerName) ...<Widget>[
@@ -768,37 +782,6 @@ class _InfoLine extends StatelessWidget {
             ),
           ],
         ),
-      );
-}
-
-class _PhotoPreview extends StatelessWidget {
-  const _PhotoPreview({required this.onRetake, required this.path});
-
-  final VoidCallback onRetake;
-  final String path;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.file(
-              File(path),
-              height: 210,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox(
-                height: 120,
-                child: Center(child: Text('Không thể hiển thị ảnh.')),
-              ),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: onRetake,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Chụp lại'),
-          ),
-        ],
       );
 }
 

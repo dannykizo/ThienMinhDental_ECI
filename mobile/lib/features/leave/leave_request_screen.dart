@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
+import '../../presentation/widgets/app_form_controls.dart';
 import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 
@@ -285,6 +286,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   late DateTime _endDate;
   TimeOfDay _endTime = const TimeOfDay(hour: 17, minute: 0);
   String? _error;
+  String? _reasonError;
   String _halfDayPeriod = 'AM';
   late LeavePolicy _policy;
   late DateTime _startDate;
@@ -352,14 +354,16 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
     FocusManager.instance.primaryFocus?.unfocus();
     final String reason = _reason.text.trim();
     if (reason.length < 3) {
-      setState(() => _error = 'Lý do nghỉ cần ít nhất 3 ký tự.');
+      setState(() => _reasonError = 'Lý do nghỉ cần ít nhất 3 ký tự.');
       return;
     }
     setState(() {
       _error = null;
+      _reasonError = null;
       _submitting = true;
     });
     try {
@@ -389,195 +393,228 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text(
-            'Tạo đơn nghỉ',
+  Widget build(BuildContext context) => PopScope(
+        canPop: !_submitting,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              'Tạo đơn nghỉ',
+            ),
           ),
-        ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          children: <Widget>[
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF2EAF5),
-                border: Border(left: BorderSide(color: brandPurple, width: 3)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const Icon(Icons.policy_outlined, color: brandPurple),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _policy.minimumNoticeDays > 0
-                          ? 'Chính sách này yêu cầu gửi trước ít nhất ${_policy.minimumNoticeDays} ngày. Backend sẽ kiểm tra số dư và lịch làm việc.'
-                          : 'Backend sẽ kiểm tra số dư, lịch làm việc, ngày trùng và kỳ công trước khi tiếp nhận.',
-                      style: const TextStyle(fontSize: 12, height: 1.45),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
-            DropdownButtonFormField<String>(
-              initialValue: _policy.id,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Chính sách nghỉ',
-              ),
-              items: widget.policies
-                  .map((LeavePolicy item) => DropdownMenuItem<String>(
-                        value: item.id,
-                        child: Text(item.name),
-                      ))
-                  .toList(),
-              onChanged: _submitting
-                  ? null
-                  : (String? value) {
-                      final LeavePolicy? selected = widget.policies
-                          .where((LeavePolicy item) => item.id == value)
-                          .firstOrNull;
-                      if (selected != null) {
-                        setState(() {
-                          _policy = selected;
-                          _durationType = 'FULL_DAY';
-                        });
-                      }
-                    },
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _durationType,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: 'Hình thức nghỉ',
-              ),
-              items: <DropdownMenuItem<String>>[
-                const DropdownMenuItem(
-                  value: 'FULL_DAY',
-                  child: Text('Cả ngày / nhiều ngày'),
-                ),
-                if (_policy.allowHalfDay)
-                  const DropdownMenuItem(
-                    value: 'HALF_DAY',
-                    child: Text('Nửa ngày'),
-                  ),
-                if (_policy.allowHourly)
-                  const DropdownMenuItem(
-                    value: 'HOURS',
-                    child: Text('Theo giờ'),
-                  ),
-              ],
-              onChanged: _submitting
-                  ? null
-                  : (String? value) {
-                      if (value != null) {
-                        setState(() {
-                          _durationType = value;
-                          if (value != 'FULL_DAY') _endDate = _startDate;
-                        });
-                      }
-                    },
-            ),
-            const SizedBox(height: 16),
-            Row(
+          body: SafeArea(
+            top: false,
+            child: ListView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
               children: <Widget>[
-                Expanded(
-                  child: _DateField(
-                    label: _durationType == 'FULL_DAY' ? 'Từ ngày' : 'Ngày nghỉ',
-                    onTap: _submitting ? null : _pickStartDate,
-                    value: _displayDate(_startDate),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF2EAF5),
+                    border:
+                        Border(left: BorderSide(color: brandPurple, width: 3)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Icon(Icons.policy_outlined, color: brandPurple),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _policy.minimumNoticeDays > 0
+                              ? 'Chính sách này yêu cầu gửi trước ít nhất ${_policy.minimumNoticeDays} ngày. Backend sẽ kiểm tra số dư và lịch làm việc.'
+                              : 'Backend sẽ kiểm tra số dư, lịch làm việc, ngày trùng và kỳ công trước khi tiếp nhận.',
+                          style: const TextStyle(fontSize: 12, height: 1.45),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (_durationType == 'FULL_DAY') ...<Widget>[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _DateField(
-                      label: 'Đến ngày',
-                      onTap: _submitting ? null : _pickEndDate,
-                      value: _displayDate(_endDate),
+                const SizedBox(height: 22),
+                const AppFormSection(
+                    title: '1. Thời gian nghỉ',
+                    description:
+                        'Chọn chính sách và thời gian. Các mục có * là bắt buộc.'),
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  itemHeight: null,
+                  initialValue: _policy.id,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Chính sách nghỉ *',
+                  ),
+                  items: widget.policies
+                      .map((LeavePolicy item) => DropdownMenuItem<String>(
+                            value: item.id,
+                            child: Text(item.name),
+                          ))
+                      .toList(),
+                  onChanged: _submitting
+                      ? null
+                      : (String? value) {
+                          final LeavePolicy? selected = widget.policies
+                              .where((LeavePolicy item) => item.id == value)
+                              .firstOrNull;
+                          if (selected != null) {
+                            setState(() {
+                              _policy = selected;
+                              _durationType = 'FULL_DAY';
+                            });
+                          }
+                        },
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  key: ValueKey<String>('${_policy.id}:$_durationType'),
+                  initialValue: _durationType,
+                  isExpanded: true,
+                  itemHeight: null,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Hình thức nghỉ *',
+                  ),
+                  items: <DropdownMenuItem<String>>[
+                    const DropdownMenuItem(
+                      value: 'FULL_DAY',
+                      child: Text('Cả ngày / nhiều ngày'),
                     ),
+                    if (_policy.allowHalfDay)
+                      const DropdownMenuItem(
+                        value: 'HALF_DAY',
+                        child: Text('Nửa ngày'),
+                      ),
+                    if (_policy.allowHourly)
+                      const DropdownMenuItem(
+                        value: 'HOURS',
+                        child: Text('Theo giờ'),
+                      ),
+                  ],
+                  onChanged: _submitting
+                      ? null
+                      : (String? value) {
+                          if (value != null) {
+                            setState(() {
+                              _durationType = value;
+                              if (value != 'FULL_DAY') _endDate = _startDate;
+                            });
+                          }
+                        },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: _DateField(
+                        label: _durationType == 'FULL_DAY'
+                            ? 'Từ ngày'
+                            : 'Ngày nghỉ',
+                        onTap: _submitting ? null : _pickStartDate,
+                        value: _displayDate(_startDate),
+                      ),
+                    ),
+                    if (_durationType == 'FULL_DAY') ...<Widget>[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _DateField(
+                          label: 'Đến ngày',
+                          onTap: _submitting ? null : _pickEndDate,
+                          value: _displayDate(_endDate),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_durationType == 'HALF_DAY') ...<Widget>[
+                  const SizedBox(height: 16),
+                  const Text('Buổi nghỉ *',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      for (final String period in <String>['AM', 'PM'])
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: ChoiceChip(
+                            label: Text(
+                                period == 'AM' ? 'Buổi sáng' : 'Buổi chiều'),
+                            selected: _halfDayPeriod == period,
+                            onSelected: _submitting
+                                ? null
+                                : (_) =>
+                                    setState(() => _halfDayPeriod = period),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
+                if (_durationType == 'HOURS') ...<Widget>[
+                  const SizedBox(height: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      _TimeField(
+                        label: 'Từ giờ',
+                        onTap:
+                            _submitting ? null : () => _pickTime(start: true),
+                        value: _startTime.format(context),
+                      ),
+                      const SizedBox(height: 16),
+                      _TimeField(
+                        label: 'Đến giờ',
+                        onTap:
+                            _submitting ? null : () => _pickTime(start: false),
+                        value: _endTime.format(context),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
+                const AppFormSection(
+                    title: '2. Lý do nghỉ',
+                    description: 'Mô tả rõ để người duyệt có đủ thông tin.'),
+                TextField(
+                  controller: _reason,
+                  enabled: !_submitting,
+                  maxLength: 2000,
+                  maxLines: 5,
+                  minLines: 4,
+                  onChanged: (_) {
+                    if (_reasonError != null) {
+                      setState(() => _reasonError = null);
+                    }
+                  },
+                  decoration: InputDecoration(
+                    errorText: _reasonError,
+                    errorMaxLines: 3,
+                    alignLabelWithHint: true,
+                    border: const OutlineInputBorder(),
+                    hintText: 'Mô tả ngắn gọn lý do cần nghỉ…',
+                    labelText: 'Lý do nghỉ *',
+                  ),
+                ),
+                if (_error != null) ...<Widget>[
+                  const SizedBox(height: 4),
+                  AppErrorState(
+                    compact: true,
+                    message: _error!,
+                    title: null,
+                  ),
+                ],
+                const SizedBox(height: 22),
+                AppFormAction(
+                    label: 'Gửi đơn nghỉ',
+                    icon: Icons.send_rounded,
+                    busy: _submitting,
+                    onPressed: _submit),
+                const SizedBox(height: 12),
+                const Text(
+                    'Đơn chỉ được ghi nhận sau khi Backend tiếp nhận thành công.',
+                    style: TextStyle(
+                        color: brandMuted, fontSize: 12, height: 1.45)),
               ],
             ),
-            if (_durationType == 'HALF_DAY') ...<Widget>[
-              const SizedBox(height: 16),
-              SegmentedButton<String>(
-                segments: const <ButtonSegment<String>>[
-                  ButtonSegment<String>(value: 'AM', label: Text('Buổi sáng')),
-                  ButtonSegment<String>(value: 'PM', label: Text('Buổi chiều')),
-                ],
-                selected: <String>{_halfDayPeriod},
-                onSelectionChanged: (Set<String> value) =>
-                    setState(() => _halfDayPeriod = value.first),
-              ),
-            ],
-            if (_durationType == 'HOURS') ...<Widget>[
-              const SizedBox(height: 16),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: _TimeField(
-                      label: 'Từ giờ',
-                      onTap: _submitting ? null : () => _pickTime(start: true),
-                      value: _startTime.format(context),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _TimeField(
-                      label: 'Đến giờ',
-                      onTap: _submitting ? null : () => _pickTime(start: false),
-                      value: _endTime.format(context),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 16),
-            TextField(
-              controller: _reason,
-              enabled: !_submitting,
-              maxLength: 2000,
-              maxLines: 5,
-              minLines: 4,
-              decoration: const InputDecoration(
-                alignLabelWithHint: true,
-                border: OutlineInputBorder(),
-                hintText: 'Mô tả ngắn gọn lý do cần nghỉ…',
-                labelText: 'Lý do nghỉ',
-              ),
-            ),
-            if (_error != null) ...<Widget>[
-              const SizedBox(height: 4),
-              AppErrorState(
-                compact: true,
-                message: _error!,
-                title: null,
-              ),
-            ],
-            const SizedBox(height: 22),
-            SizedBox(
-              height: 52,
-              child: FilledButton.icon(
-                onPressed: _submitting ? null : _submit,
-                style: FilledButton.styleFrom(backgroundColor: brandPurple),
-                icon: _submitting
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
-                    : const Icon(Icons.send_rounded),
-                label: Text(_submitting ? 'Đang gửi…' : 'Gửi đơn nghỉ'),
-              ),
-            ),
-          ],
+          ),
         ),
       );
 }
@@ -633,7 +670,8 @@ class _DateField extends StatelessWidget {
         child: InputDecorator(
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
-            labelText: label,
+            labelText: '$label *',
+            constraints: const BoxConstraints(minHeight: 48),
             suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
           ),
           child: Text(value),
@@ -653,7 +691,8 @@ class _TimeField extends StatelessWidget {
         child: InputDecorator(
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
-            labelText: label,
+            labelText: '$label *',
+            constraints: const BoxConstraints(minHeight: 48),
             suffixIcon: const Icon(Icons.schedule_outlined, size: 18),
           ),
           child: Text(value),
