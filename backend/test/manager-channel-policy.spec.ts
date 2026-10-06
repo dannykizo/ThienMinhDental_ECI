@@ -13,13 +13,13 @@ const grant: ManagementGrant = {
 };
 
 describe('PQ2 manager portal/session policy', () => {
-  it('opens only the scoped directory for an appointed Leader or department head', () => {
+  it('opens the scoped directory and PQ3 explanation workspace without broad module rights', () => {
     for (const roleCode of ['TEAM_LEADER', 'DEPARTMENT_HEAD'] as const) {
       const access = portalAccess([RoleCode.Employee], [{ ...grant, roleCode }], now);
       expect(access.webAllowed).toBe(true);
       expect(access.sessionMode).toBe('WEB_AND_MOBILE');
       expect(access.homePath).toBe('/dashboard/managed');
-      expect(access.navigation).toEqual(['/dashboard/managed']);
+      expect(access.navigation).toEqual(['/dashboard/managed', '/dashboard/explanations']);
       expect(access.managementGrants[0]).not.toHaveProperty('reason');
     }
   });

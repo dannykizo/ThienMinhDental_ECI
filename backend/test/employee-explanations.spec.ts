@@ -11,6 +11,7 @@ import { AttendanceController } from '../src/modules/attendance/attendance.contr
 import type { CreateAttendanceExplanationDto, SubmitEmployeeExplanationDto } from '../src/modules/attendance/attendance.dto.js';
 import { AttendanceService } from '../src/modules/attendance/attendance.service.js';
 import type { AttendanceEvidenceStorage } from '../src/modules/attendance/infrastructure/attendance-evidence.storage.js';
+import type { ExplanationWorkflowService } from '../src/modules/attendance/application/explanation-workflow.service.js';
 
 const employee: AuthenticatedUserView = { id: 'user-1', employeeId: 'employee-1', email: 'employee@example.test', displayName: 'Development-only', roles: [RoleCode.Employee] };
 const input: SubmitEmployeeExplanationDto = { submissionId: '019b8453-5ce6-45bc-9c6c-459c33fd2130', workDate: '2026-10-06', issueType: 'OTHER', responseText: 'Development-only explanation' };
@@ -25,6 +26,7 @@ interface TestFixture {
 function fixture(options: { prior?: AttendanceExplanationEntity; pending?: boolean; locked?: boolean; inactive?: boolean } = {}): TestFixture {
   const saved = new AttendanceExplanationEntity();
   const repository = {
+    findOneBy: vi.fn().mockResolvedValue(options.prior ?? null),
     findOne: vi.fn().mockResolvedValueOnce(options.prior ?? null).mockResolvedValue(options.pending ? { id: 'existing' } : null),
     create: vi.fn((value: object) => Object.assign(saved, { id: 'new-explanation' }, value)),
     save: vi.fn((value: AttendanceExplanationEntity) => Promise.resolve(value)),
@@ -43,6 +45,7 @@ function fixture(options: { prior?: AttendanceExplanationEntity; pending?: boole
     {} as Repository<AttendanceAdjustmentEntity>,
     repository as unknown as Repository<AttendanceExplanationEntity>,
     storage as unknown as AttendanceEvidenceStorage,
+    { initialize: vi.fn((_manager: unknown, item: AttendanceExplanationEntity) => Promise.resolve(item)), deliver: vi.fn().mockResolvedValue(undefined), process: vi.fn().mockRejectedValue(new ForbiddenException({ code: 'EXPLANATION_STEP_FORBIDDEN' })) } as unknown as ExplanationWorkflowService,
   );
   return { service, repository, query, storage };
 }
@@ -107,29 +110,13 @@ describe('employee-initiated explanations', () => {
     await expect(fixture().service.createExplanation(employee, {} as CreateAttendanceExplanationDto)).rejects.toMatchObject({ response: { code: 'EMPLOYEE_EXPLANATION_REQUIRED' } });
   });
 
-  it('permits rejection without a reason and writes immutable review audit', async () => {
-    const prior = Object.assign(new AttendanceExplanationEntity(), { id: 'new-explanation', workDate: input.workDate, status: 'SUBMITTED' });
-    const { service, repository, query } = fixture({ prior });
-    expect(await service.reviewExplanation(employee, prior.id, { status: 'REJECTED' })).toMatchObject({ status: 'REJECTED', reviewNote: null, reviewedBy: employee.id });
-    expect(repository.findOne).toHaveBeenCalledWith({ where: { id: prior.id }, lock: { mode: 'pessimistic_write' } });
-    expect(query.mock.calls.some(([sql]) => sql.includes("'REVIEW'"))).toBe(true);
-  });
-
-  it('does not permit re-reviewing a final decision', async () => {
-    const prior = Object.assign(new AttendanceExplanationEntity(), { id: 'reviewed', status: 'APPROVED' });
-    await expect(fixture({ prior }).service.reviewExplanation(employee, prior.id, { status: 'REJECTED' })).rejects.toMatchObject({ response: { code: 'EXPLANATION_NOT_REVIEWABLE' } });
+  it('delegates reviews to scoped workflow authorization instead of employee or Admin override', async () => {
+    await expect(fixture().service.reviewExplanation(employee, 'item', { status: 'REJECTED', expectedVersion: 1 })).rejects.toMatchObject({ response: { code: 'EXPLANATION_STEP_FORBIDDEN' } });
   });
 
   it('rejects legacy responses submitted by another employee', async () => {
     const prior = Object.assign(new AttendanceExplanationEntity(), { id: 'legacy', employeeId: 'another-employee', status: 'REQUESTED' });
     await expect(fixture({ prior }).service.respondToExplanation(employee, prior.id, { responseText: input.responseText })).rejects.toMatchObject({ response: { code: 'EXPLANATION_NOT_FOUND' } });
-  });
-
-  it('does not review an explanation in a locked period', async () => {
-    const prior = Object.assign(new AttendanceExplanationEntity(), { id: 'locked', workDate: input.workDate, status: 'SUBMITTED' });
-    const { service, repository } = fixture({ prior, locked: true });
-    await expect(service.reviewExplanation(employee, prior.id, { status: 'APPROVED' })).rejects.toMatchObject({ response: { code: 'ATTENDANCE_PERIOD_LOCKED' } });
-    expect(repository.save).not.toHaveBeenCalled();
   });
 });
 
@@ -139,11 +126,13 @@ describe('explanation endpoint authorization metadata', () => {
     // eslint-disable-next-line @typescript-eslint/unbound-method
     return { getHandler: () => AttendanceController.prototype[handler], getClass: () => AttendanceController, switchToHttp: () => ({ getRequest: () => ({ user }) }) } as unknown as ExecutionContext;
   }
-  it('allows employee self-submission but only Admin may review or list all employees', () => {
+  it('keeps route administration Admin-only while processing delegates to current scoped workflow policy', () => {
     const guard = new RolesGuard(new Reflector());
     expect(guard.canActivate(context('submitExplanation', employee))).toBe(true);
-    expect(() => guard.canActivate(context('reviewExplanation', employee))).toThrow(ForbiddenException);
-    expect(() => guard.canActivate(context('explanations', employee))).toThrow(ForbiddenException);
-    expect(guard.canActivate(context('reviewExplanation', { ...employee, roles: [RoleCode.Admin] }))).toBe(true);
+    expect(guard.canActivate(context('reviewExplanation', employee))).toBe(true);
+    expect(guard.canActivate(context('explanations', employee))).toBe(true);
+    expect(() => guard.canActivate(context('setRoute', employee))).toThrow(ForbiddenException);
+    expect(() => guard.canActivate(context('reroute', employee))).toThrow(ForbiddenException);
+    expect(guard.canActivate(context('setRoute', { ...employee, roles: [RoleCode.Admin] }))).toBe(true);
   });
 });

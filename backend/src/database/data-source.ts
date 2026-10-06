@@ -22,6 +22,7 @@ import { LeavePoliciesBalances1791331200000 } from './migrations/1791331200000-l
 import { EmployeeExplanations1791417600000 } from './migrations/1791417600000-employee-explanations.js';
 import { OrganizationManagementAccess1791504000000 } from './migrations/1791504000000-organization-management-access.js';
 import { ManagerChannelSessions1791590400000 } from './migrations/1791590400000-manager-channel-sessions.js';
+import { ExplanationTwoStepWorkflow1791676800000 } from './migrations/1791676800000-explanation-two-step-workflow.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -55,6 +56,7 @@ export const applicationDataSource = new DataSource({
     EmployeeExplanations1791417600000,
     OrganizationManagementAccess1791504000000,
     ManagerChannelSessions1791590400000,
+    ExplanationTwoStepWorkflow1791676800000,
   ],
   migrationsTableName: 'schema_migrations',
 });

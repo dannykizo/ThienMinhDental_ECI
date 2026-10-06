@@ -15,7 +15,7 @@
 |---|---|---|
 | PQ1 | Team, thành viên, quyền theo phạm vi/thời hạn, Admin Web, danh sách tổ chức cơ bản có scope | Implemented; API và Web đã kiểm tra |
 | PQ2 | Quản lý đăng nhập Web + một Mobile đồng thời; refresh/revocation và quyền hiện hành | Implemented; API đã kiểm tra, UI authenticated chưa xác nhận do Chrome chặn API |
-| PQ3 | Giải trình: Leader xác nhận → Trưởng phòng duyệt, bằng chứng có scope, Admin đổi tuyến trực tiếp, audit/thông báo | NOT_IMPLEMENTED |
+| PQ3 | Giải trình hai bước, tuyến mặc định theo nhân viên, Admin đổi bước chưa xử lý, evidence/audit/inbox/push | Implemented; API/build đã kiểm tra, UI authenticated bị Chrome chặn API |
 | PQ4 | Khu vực quản lý trong app hiện tại, dùng cùng API | NOT_IMPLEMENTED |
 | PQ5 | Nghỉ phép trước; quyền công tác/chấm công/báo cáo/thông báo theo từng module đã xác định | NOT_IMPLEMENTED |
 
@@ -57,13 +57,13 @@ Các danh sách scoped không trả email/số điện thoại/tài khoản/phâ
 - Đã xem desktop và viewport 390×844: sidebar chuyển drawer, form một cột, tab/table cuộn ngang cục bộ. Topbar `DEVELOPMENT` hiện có tràn ngang khoảng 11 px ở màn hình hẹp; nằm ở layout có sẵn, không sửa ngoài PQ1. Chưa kiểm tra mọi trình duyệt/độ lớn chữ hoặc toàn bộ trạng thái lỗi UI.
 - Không sửa `mobile/`; giữ thay đổi có sẵn ở `mobile/lib/features/leave/leave_request_screen.dart`, không đưa vào commit PQ1.
 
-## Những quyết định cần chốt trước PQ3/PQ5
+## Quyết định bổ sung đã chốt cho PQ3
 
-1. Đơn do chính Leader/Trưởng phòng gửi: đề xuất không tự xác nhận/duyệt, cần người thay thế do Admin chỉ định.
-2. Leader chỉ xác nhận hay được trả về yêu cầu bổ sung; không tự thêm quyền từ chối cuối cùng.
-3. Thiếu/hết hạn người xử lý: đề xuất chờ Admin phân tuyến, không tự bỏ bước.
-4. Chuyển đơn cũ đang chờ sang tuyến mới; giữ lịch sử hoàn tất, không tạo xác nhận giả.
-5. Phạm vi áp dụng hai bước theo từng module; không sao chép sang công tác có vòng đời giao việc khác.
+1. Admin đặt tuyến mặc định cho từng nhân viên, gắn một team/phòng cụ thể; không tự chọn theo phòng chính hoặc nhiều membership. Lưu áp dụng ngay cho bước chưa xử lý của đơn đang mở; đổi riêng một đơn không sửa mặc định.
+2. Leader chỉ xác nhận. Hai bước do hai người khác nhau, không xử lý đơn của chính mình; cần người độc lập có grant đúng phạm vi do Admin chỉ định.
+3. Thiếu/hết hạn/thu hồi người xử lý: tiếp nhận đơn, chờ Admin phân tuyến; không bỏ bước. Xác nhận đã hoàn tất giữ nguyên ngay cả khi quyền Leader sau đó hết hiệu lực.
+4. Đơn đang chờ cũ chuyển sang hai bước/chờ tuyến; đơn đã kết thúc giữ nguyên lịch sử, không tạo xác nhận giả. Legacy `REQUESTED` vẫn cần phản hồi đúng owner/hạn trước bước xác nhận.
+5. Chỉ giải trình trong PQ3. Chính sách hai bước của nghỉ phép và rollout module khác cần PQ5; không sao chép sang vòng đời giao việc công tác. Trả về bổ sung chưa triển khai.
 
 ## PQ2 — phạm vi bàn giao
 
@@ -92,4 +92,36 @@ Các danh sách scoped không trả email/số điện thoại/tài khoản/phâ
 - GitNexus MCP không có index repo này và local runner không tồn tại; dùng search/diff/call-site inspection, không query graph repo khác hoặc giả định đã chạy impact/detect_changes.
 - Deploy cần migration + Backend trước Web; schema mới bảo vệ duy nhất theo kênh, invariant nhân viên một phiên được thực thi bởi transaction account-lock. Chưa kiểm chứng mọi concurrency/DB outage/rollback variant trên môi trường production.
 
-Điểm dừng: PQ2. PQ3–PQ5 vẫn `NOT_IMPLEMENTED`; chưa mở quyền duyệt mới.
+Điểm dừng tại thời điểm bàn giao PQ2: chưa triển khai PQ3–PQ5. Trạng thái hiện hành nằm ở bàn giao PQ3 bên dưới.
+
+## PQ3 — phạm vi bàn giao
+
+- Migration `1791676800000-explanation-two-step-workflow`: bảng tuyến mặc định theo employee, snapshot team/Leader/Head, stage/version và confirmed actor/time/note. Đơn `SUBMITTED` cũ → `WAITING_ROUTING`, `REQUESTED` → `EMPLOYEE_RESPONSE`; đơn terminal giữ nguyên. Down chặn khi có tuyến/decision/workflow dữ liệu mới, không tự xóa lịch sử.
+- Domain policy độc lập ORM: hai actor khác nhau, không owner; grant live đúng team/phòng và đúng người được chỉ định. Leader xác nhận không được từ chối cuối cùng; Head quyết định sau xác nhận thật; Admin không override. Mất grant không hồi sinh quyết định/phiên cũ.
+- Admin `PUT /attendance/explanations/routes/:employeeId` cấu hình mặc định, có lý do và `expectedVersion`, áp dụng ngay cho đơn đang mở trong transaction. `PATCH /:id/reroute` đổi riêng đơn. Completed Leader/team/confirmation không bị viết lại; chỉ Head trong phạm vi đã xác nhận thay được. Nếu tuyến mặc định mới không có Head đủ quyền ở phạm vi cũ của đơn đã xác nhận, toàn bộ save bị chặn thay vì chuyển phạm vi âm thầm.
+- `GET /attendance/explanations` scoped queue; `GET /routing-options`, `/routes` chỉ Admin. `PATCH /:id/confirm`, `/:id/review` kiểm tra current grant và version; `GET /:id/history` kiểm tra owner/Admin/assigned reviewer live. Evidence có cùng scope policy, kể cả đoán trực tiếp filename. Giữ `SUBMITTED` tới quyết định cuối, đảm bảo duplicate/open/period blocker không bỏ qua bước.
+- Hộp thư và audit tạo cùng transaction, push thử sau commit bằng sender hiện hữu. Missing route báo Admin có hồ sơ inbox; chuyển bước báo người xử lý và nhân viên, quyết định báo nhân viên. Inbox không lộ nội dung gửi/ảnh/GPS trong thông báo giao việc; notification không cấp quyền mở đơn. Push thật vẫn phụ thuộc Firebase, không tuyên bố đã giao push khi chưa cấu hình.
+- Web `/dashboard/explanations`: lọc/tìm/phân trang, nhãn bước, actor/thời gian/ghi chú, ảnh có xác thực, lịch sử, cấu hình mặc định/đổi riêng đơn, confirmation dialog và loading/error/empty/success. Hàng đợi Chấm công dùng chung component, không còn nút Admin duyệt một cấp. Portal menu chỉ thêm route cho Admin/grant quản lý hiện hành; module khác giữ guards cũ.
+
+### File/module và ranh giới
+
+- `backend/src/modules/attendance`: Domain workflow mới, application workflow service, controller/DTO/module, tích hợp submit/legacy response và evidence scope.
+- `backend/src/database`: migration, data-source và additive entity columns; không synchronize/scaffold lại.
+- `auth/domain/portal-access.ts` chỉ thêm route Web mới; `organization-access/application` cập nhật capability cho giải trình PQ3. Không đổi lifetimes/session policy/role toàn cục.
+- `frontend/components/explanations-workspace.tsx`, `app/dashboard/explanations/page.tsx`, attendance page, menu và notice managed: Web mới trong scope PQ3, dùng component/theme hiện có.
+- Tests: `explanation-workflow.spec.ts` mới; cập nhật fixture/metadata delegation/evidence/menu tại `employee-explanations.spec.ts`, `attendance-evidence-access.spec.ts`, `manager-channel-policy.spec.ts`. Không chạy suite theo chỉ thị Tech Lead.
+- Canonical docs: PROJECT/FLOWS/IMPLEMENTATION/README và kế hoạch này. Không chỉnh `mobile/`; thay đổi có sẵn `mobile/lib/features/leave/leave_request_screen.dart` vẫn thuộc Tech Lead, không đưa vào commit.
+
+### Kiểm tra và giới hạn PQ3
+
+- Migration local áp dụng thành công. Typecheck/lint/build thường và build static Cloudflare đạt; không chạy automated test suite. Backend health `ok`, development Web/API tiếp tục chạy.
+- API development-only: thiếu route vẫn submit và `WAITING_ROUTING`; cùng UUID retry giữ ID, đổi payload409. Admin review403, Head trước Leader403, ordinary employee scoped queue403. Default save cập nhật pending ngay, assigned Leader evidence200, outside reviewer404.
+- Leader confirm giữ `SUBMITTED`/`HEAD_APPROVAL`; stale version409. Head approve có đúng actor/confirmed actor. Đơn terminal reroute409; route self reviewer400. Reroute chưa confirm bỏ người cũ khỏi queue/action và ảnh đơn riêng trả404; không dựa vào menu để chặn.
+- Thu hồi Head grant chặn review403 ngay trên Mobile SID còn hợp lệ. Admin đổi Head giữ nguyên confirmation/Leader/team; Head mới reject không cần note và owner nhận inbox tiếng Việt đúng. Audit có WORKFLOW_START/ADMIN_REROUTE/LEADER_CONFIRM/HEAD_REVIEW. Legacy response giữ tuyến riêng Admin đã chỉ định, rồi đi hai bước, không dùng mặc định để ghi đè.
+- Default update khi đang chờ Head giữ team/Leader/actor đã xác nhận. Report summary vẫn đếm đơn này là open blocker; với lịch development-only đã cấu hình, lock trả409 `ATTENDANCE_PERIOD_HAS_BLOCKERS`, không chốt tháng. Các lần đầu probe báo `REPORT_HAS_NO_DATA` vì lịch chưa có ngày <= hôm nay; đã bổ sung lịch riêng fixture để kiểm tra đúng blocker, không sửa reporting ngoài scope.
+- Fixture `PQ3-DEV-9F61F6E5` chỉ development: năm tài khoản đã ngừng hoạt động và phiên thu hồi, bốn grant thu hồi, hai memberships kết thúc, hai team và lịch kiểm tra ngừng hoạt động. Năm đơn đã hoàn tất bằng actor thật; giữ audit/inbox/ảnh/default record, không hard-delete. Admin verification SID đã logout, không thay phiên Mobile nhân viên demo trên điện thoại. Không commit credential fixture.
+- Chrome truy cập health3001 vẫn `ERR_BLOCKED_BY_CLIENT`; không thay extension/privacy/security. Chưa xác nhận authenticated workspace/selectors/responsive UI qua Chrome. HTTP200/build/API không được coi là nghiệm thu UI.
+- GitNexus không có index repo này/local runner; rà search/call-site/diff, không query repo khác hoặc giả định đã chạy impact/detect_changes.
+- Deploy: migration + Backend trước Web. Mobile hiện tại vẫn gửi/hiển thị `SUBMITTED`/nhận thông báo, chưa hiển thị chi tiết stage hoặc có màn quản lý mới; thuộc PQ4. Chưa kiểm chứng push thật, concurrency/DB outage và rollback trên production.
+
+Điểm dừng hiện hành: **PQ3**. PQ4/PQ5 `NOT_IMPLEMENTED`, không tự chuyển sang app quản lý hoặc module khác.

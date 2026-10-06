@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsDefined, IsIn, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsDefined, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class RecordAttendanceEventDto {
   @IsIn(['CHECK_IN', 'CHECK_OUT']) eventType!: 'CHECK_IN' | 'CHECK_OUT';
@@ -50,4 +50,18 @@ export class SubmitEmployeeExplanationDto extends RespondAttendanceExplanationDt
 export class ReviewAttendanceExplanationDto {
   @IsIn(['APPROVED', 'REJECTED']) status!: 'APPROVED' | 'REJECTED';
   @IsOptional() @IsString() @MaxLength(2000) reviewNote?: string;
+  @IsInt() @Min(0) expectedVersion!: number;
+}
+
+export class ConfirmAttendanceExplanationDto {
+  @IsOptional() @IsString() @MaxLength(2000) confirmationNote?: string;
+  @IsInt() @Min(0) expectedVersion!: number;
+}
+
+export class SetExplanationRouteDto {
+  @IsUUID() teamId!: string;
+  @IsUUID() leaderUserId!: string;
+  @IsUUID() headUserId!: string;
+  @IsString() @MinLength(5) @MaxLength(2000) reason!: string;
+  @IsInt() @Min(0) expectedVersion!: number;
 }

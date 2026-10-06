@@ -41,6 +41,7 @@ interface NavItem {
 }
 
 const navigation: NavItem[] = [
+  { group: 'VẬN HÀNH', label: 'Giải trình hai bước', href: '/dashboard/explanations', ready: true, icon: Clock3 },
   {
     group: 'TỔNG QUAN',
     label: 'Tổng quan',

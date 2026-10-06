@@ -10,6 +10,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { AuthenticatedUserView } from '../../auth/application/auth.service.js';
 import { RoleCode } from '../../auth/domain/role-code.js';
+import { ExplanationWorkflowService } from '../application/explanation-workflow.service.js';
 
 export interface AttendanceEvidenceUpload {
   buffer: Buffer;
@@ -36,7 +37,7 @@ const allowedTypes = new Map<string, string>([
 export class AttendanceEvidenceStorage {
   private readonly root: string;
 
-  constructor(config: ConfigService, @InjectDataSource() private readonly dataSource: DataSource) {
+  constructor(config: ConfigService, @InjectDataSource() private readonly dataSource: DataSource, private readonly workflow: ExplanationWorkflowService) {
     this.root = resolve(
       config.get<string>('EVIDENCE_STORAGE_DIR') ??
         join(process.cwd(), 'storage', 'attendance-evidence'),
@@ -117,7 +118,7 @@ export class AttendanceEvidenceStorage {
       });
     }
     const [owner] = await this.dataSource.query<Array<{ uploaded_by: string }>>('SELECT uploaded_by FROM attendance_evidence_uploads WHERE filename=$1', [filename]);
-    if (!user.roles.includes(RoleCode.Admin) && owner?.uploaded_by !== user.id) throw new NotFoundException({ code: 'EVIDENCE_FILE_NOT_FOUND', message: 'Không tìm thấy ảnh bằng chứng.' });
+    if (!user.roles.includes(RoleCode.Admin) && owner?.uploaded_by !== user.id && !await this.workflow.canReadEvidence(user, filename)) throw new NotFoundException({ code: 'EVIDENCE_FILE_NOT_FOUND', message: 'Không tìm thấy ảnh bằng chứng.' });
     try {
       return {
         buffer: await readFile(join(this.root, filename)),

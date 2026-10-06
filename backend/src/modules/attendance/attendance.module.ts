@@ -5,10 +5,12 @@ import { AuthModule } from '../auth/auth.module.js';
 import { AttendanceController } from './attendance.controller.js';
 import { AttendanceService } from './attendance.service.js';
 import { AttendanceEvidenceStorage } from './infrastructure/attendance-evidence.storage.js';
+import { AnnouncementsModule } from '../announcements/announcements.module.js';
+import { ExplanationWorkflowService } from './application/explanation-workflow.service.js';
 
 @Module({
-  imports: [AuthModule, TypeOrmModule.forFeature([AttendanceEventEntity, AttendanceAdjustmentEntity, AttendanceExplanationEntity, OfficeLocationEntity])],
+  imports: [AuthModule, AnnouncementsModule, TypeOrmModule.forFeature([AttendanceEventEntity, AttendanceAdjustmentEntity, AttendanceExplanationEntity, OfficeLocationEntity])],
   controllers: [AttendanceController],
-  providers: [AttendanceService, AttendanceEvidenceStorage],
+  providers: [AttendanceService, AttendanceEvidenceStorage, ExplanationWorkflowService],
 })
 export class AttendanceModule {}

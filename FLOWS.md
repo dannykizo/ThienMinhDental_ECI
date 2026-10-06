@@ -23,7 +23,7 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 5. `/organization/mine` trả quyền hiện hành/capability; `/organization/teams` chỉ trả team trong phạm vi quản lý; `/organization/teams/:id/members` trả nhân sự cơ bản còn đủ điều kiện. Trưởng phòng đọc `/organization/departments/:id/employees` trong phòng được cấp; Leader không được mở rộng sang toàn phòng. Không lộ liên hệ, tài khoản, phòng/chi nhánh ngoài phạm vi qua các API này.
 6. Phân công tổ chức/tài khoản/team/phòng ban không hợp lệ làm quyền hoặc thành viên mất hiệu lực khi đọc; giữ record để Admin xử lý, không âm thầm xóa. Audit tạo/sửa team, thêm/rút thành viên, cấp/thu hồi quyền nằm trong transaction của thao tác.
 
-**Boundary:** Admin Web có trang `/dashboard/organization`. PQ1 không thay guard/role/luồng duyệt của module cũ. PQ2 bổ sung đăng nhập và khu vực quản lý chỉ đọc ở dưới. Tuyến giải trình hai bước/Admin đổi tuyến trực tiếp (PQ3) và thao tác quản lý trên app (PQ4) vẫn `NOT_IMPLEMENTED`. Lịch sử cũ không bị chuyển tuyến/đổi người duyệt.
+**Boundary:** Admin Web có trang `/dashboard/organization`. PQ1 không thay guard/role/luồng duyệt của module cũ. PQ2 bổ sung đăng nhập và khu vực quản lý chỉ đọc; PQ3 bổ sung giải trình hai bước ở dưới. PQ4 quản lý trên app vẫn `NOT_IMPLEMENTED`. Quyết định đã kết thúc giữ nguyên lịch sử/người duyệt.
 
 ## PQ2 — đăng nhập và khu vực quản lý
 
@@ -89,19 +89,22 @@ Không dùng `ABSENT` như một nút trong event flow. `ABSENT`, `LEAVE` và `B
 ## Admin Web + Mobile API — attendance explanation and period closing
 
 ```text
-Employee creates -> SUBMITTED -> APPROVED
-                              -> REJECTED
+Employee creates -> SUBMITTED (WAITING_ROUTING if no valid route)
+                 -> Leader confirmation -> Head approval -> APPROVED / REJECTED
 Legacy only: REQUESTED -> SUBMITTED
 ```
 
 1. Employee proactively creates an explanation with a work date, issue type and content. Backend derives employee identity from the authenticated account; submissions go directly to `SUBMITTED`, without an Admin deadline.
 2. Evidence is optional for every issue type. Employee may take a photo or attach one JPEG/PNG/WebP image (maximum 5 MB). Gallery images do not claim a capture time; neither path requests GPS. Backend accepts only uploaded images belonging to the employee.
 3. App queues unsent content/images in private storage when the network is weak, scoped to the submitting account. A stable submission UUID makes retry idempotent; changed content under the same UUID is rejected. Existing open employee/date/issue duplicates and new submissions in locked periods remain blocked.
-4. Admin receives the queue across all work dates, opens authenticated evidence and approves/rejects with an optional note/rejection reason. A review records actor/time and immutable audit. Approval does not automatically adjust attendance.
-5. Admin adjustments preserve old/new values, reason, actor and timestamp. No adjustment is accepted after the month is locked.
-6. Admin or Chief Accountant can lock a month after incomplete check-outs and open explanations are resolved. Only Chief Accountant can reopen it with a mandatory reason.
+4. Admin configures each employee's default team/Leader/Head route; saving applies directly to unfinished steps of pending requests and future submissions. Membership must be eligible and both scoped grants active when configured. No implicit selection from the primary department. Per-request reroute leaves the default unchanged.
+5. The assigned Leader confirms only, with an optional note. The assigned Head then approves/rejects with an optional note/reason. Actors are different and neither is the owner; a Head cannot bypass confirmation. Admin sees actors/history and reroutes, not approval override. Live grants and scope are checked on each list/evidence/action; unrelated managers have no access.
+6. Missing/ineligible routing waits for Admin, never skips a step. Reroute requires a reason and expected version. Completed confirmation keeps its actor/time/team; only the unfinished Head may change within that department. Defaults may change for future requests but cannot rewrite completed steps on existing ones; invalid cross-scope replacement aborts the transaction.
+7. Audit and inbox notifications are written in the operation transaction. Push is attempted after commit through the existing tracked sender; failures do not undo the decision. Notifications do not grant access to the referenced request. Approval does not automatically adjust attendance.
+8. Admin adjustments preserve old/new values, reason, actor and timestamp. No adjustment is accepted after the month is locked.
+9. Admin or Chief Accountant can lock a month after incomplete check-outs and open explanations are resolved. Waiting routing/confirmation/Head all remain `SUBMITTED`, blocking period closing and duplicate submissions. Only Chief Accountant can reopen with a mandatory reason.
 
-**Implementation status:** Luồng chủ động từ nhân viên thay thế nghiệp vụ Admin tạo yêu cầu trước đây, trên Backend/Admin Web/Mobile Android. `POST /api/attendance/explanations/mine` tạo đơn của chính tài khoản; Admin chỉ duyệt. Migration `1791417600000-employee-explanations` giữ nguyên đơn cũ; phản hồi `REQUESTED` cũ vẫn kiểm tra chủ sở hữu và hạn cũ. App thử lại hàng đợi khi mở/resume hoặc bấm Gửi lại. Ảnh đã gắn đơn không được ghi đè; endpoint đọc ảnh chỉ cho chủ sở hữu/Admin. Storage hiện là local disk; object storage/backup vẫn là việc deployment. Đính kèm nhiều ảnh, PDF, chỉnh sửa/hủy đơn đã gửi và push riêng cho quyết định giải trình chưa được triển khai trong thay đổi này.
+**Implementation status:** PQ3 migration `1791676800000-explanation-two-step-workflow` bổ sung tuyến mặc định, snapshot tuyến/phiên bản/bước và người xác nhận. Đơn đang chờ cũ chuyển sang chờ tuyến hoặc chờ nhân viên phản hồi, không tạo người xử lý giả; đơn hoàn tất giữ nguyên. Web `/dashboard/explanations` cho Admin/Leader/Trưởng phòng, hàng đợi tại Chấm công dùng cùng component. API thêm `routes`, `routing-options`, `:id/reroute`, `:id/confirm`, `:id/history`; `:id/review` chỉ Trưởng phòng được chỉ định sau xác nhận, có `expectedVersion`. Mobile cũ vẫn gửi/hàng đợi được nhờ status tương thích và metadata bổ sung; UI quản lý/bước chi tiết trên app thuộc PQ4, chưa triển khai. Yêu cầu `REQUESTED` cũ giữ chủ sở hữu/hạn và tuyến chỉ định khi phản hồi. Ảnh vẫn JPEG/PNG/WebP 5 MB, không ghi đè, chỉ owner/Admin/người được chỉ định có grant live đọc. Nhiều ảnh/PDF, sửa/hủy đơn và trả về bổ sung chưa triển khai.
 
 ## Mobile + Admin Web — business trip
 

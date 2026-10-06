@@ -19,7 +19,7 @@ const adminRoutes = ['/dashboard', '/dashboard/employees', '/dashboard/access', 
 const accountingRoutes = ['/dashboard', '/dashboard/employees', '/dashboard/attendance', '/dashboard/reports', '/dashboard/kpi'];
 const legacyManagerRoutes = ['/dashboard', '/dashboard/employees', '/dashboard/announcements'];
 
-// Grants grant only the scoped directory, never a global role or approval action.
+// Routes expose scoped workspaces, never global module rights or approval overrides.
 export function portalAccess(roles: RoleCode[], grants: ManagementGrant[], now: Date): PortalAccess {
   const managementGrants = grants.filter((grant) => grantStatus(grant, now) === 'ACTIVE').map((grant) => ({
     id: grant.id, roleCode: grant.roleCode, departmentId: grant.departmentId, departmentName: grant.departmentName,
@@ -34,6 +34,7 @@ export function portalAccess(roles: RoleCode[], grants: ManagementGrant[], now: 
   const scoped = managementGrants.length > 0;
   const navigation = [...(admin ? adminRoutes : accountant ? accountingRoutes : area || legacy ? legacyManagerRoutes : [])];
   if (scoped) navigation.push('/dashboard/managed');
+  if (admin || scoped) navigation.push('/dashboard/explanations');
   return {
     webAllowed: globalWeb || scoped,
     // PQ2 applies to explicitly appointed, currently eligible managers.
