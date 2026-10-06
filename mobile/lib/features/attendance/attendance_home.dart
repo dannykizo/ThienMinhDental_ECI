@@ -8,6 +8,8 @@ import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
 import '../explanations/managed_explanations_screen.dart';
+import '../leave/managed_leave_screen.dart';
+import '../management/managed_modules_screen.dart';
 
 class AttendanceHome extends StatefulWidget {
   const AttendanceHome({
@@ -311,6 +313,51 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                 onOpenLeave: widget.onOpenLeave,
                 onOpenInbox: widget.onOpenInbox,
               ),
+              ListenableBuilder(
+                  listenable: widget.session,
+                  builder: (BuildContext context, Widget? child) =>
+                      Column(children: <Widget>[
+                        if (widget.session.managementAccess?.canReviewLeave ==
+                            true)
+                          Card(
+                              child: ListTile(
+                                  leading: const Icon(
+                                      Icons.event_available_outlined,
+                                      color: brandPurple),
+                                  title: const Text('Xử lý nghỉ phép'),
+                                  subtitle: const Text(
+                                      'Leader xác nhận → Trưởng phòng duyệt'),
+                                  trailing:
+                                      const Icon(Icons.chevron_right_rounded),
+                                  onTap: () => Navigator.of(context).push<void>(
+                                      MaterialPageRoute<void>(
+                                          builder: (_) => ManagedLeaveScreen(
+                                              session: widget.session))))),
+                        if (widget.session.managementAccess
+                                ?.canReadManagedModules ==
+                            true)
+                          Card(
+                              child: ListTile(
+                                  leading: const Icon(Icons.groups_outlined,
+                                      color: brandPurple),
+                                  title: const Text('Theo dõi phạm vi quản lý'),
+                                  subtitle: const Text(
+                                      'Chấm công · Công tác · Báo cáo · Thông báo'),
+                                  trailing:
+                                      const Icon(Icons.chevron_right_rounded),
+                                  onTap: () => Navigator.of(context).push<void>(
+                                      MaterialPageRoute<void>(
+                                          builder: (_) => ManagedModulesScreen(
+                                              session: widget.session))))),
+                        TextButton.icon(
+                            onPressed: () => Navigator.of(context).push<void>(
+                                MaterialPageRoute<void>(
+                                    builder: (_) => ManagedLeaveScreen(
+                                        session: widget.session, mine: true))),
+                            icon: const Icon(Icons.route_outlined),
+                            label:
+                                const Text('Theo dõi tuyến đơn nghỉ của tôi')),
+                      ])),
               ListenableBuilder(
                   listenable: widget.session,
                   builder: (BuildContext context, Widget? child) => widget

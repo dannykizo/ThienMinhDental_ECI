@@ -76,3 +76,7 @@ flutter build apk --debug --dart-define=API_BASE_URL=http://127.0.0.1:3001/api
 APK được tạo tại `build/app/outputs/flutter-apk/app-debug.apk`. Bản debug này dùng HTTP local và ADB reverse; không phải cấu hình production.
 
 Trước khi bàn giao APK nội bộ, kiểm tra trên thiết bị thật: cold start/khôi phục phiên, logout/login và validation rỗng, năm tab chính, mở/đóng các màn chi tiết và form, pull-to-refresh, trạng thái đọc/xác nhận thông báo, log Flutter không có exception/overflow và Backend health trả `200`.
+
+## PQ5 — đồng bộ quản lý
+
+Từ Hôm nay: Xử lý nghỉ phép / Theo dõi phạm vi quản lý theo capability live; Theo dõi tuyến đơn nghỉ của tôi là read-only cho employee. Leader chỉ xác nhận, Head chỉ định quyết định cuối; từ chối cần lý do ≥5 ký tự, payload expectedVersion. Mạng/403/409 bỏ cache actionable và cần tải lại, không queue/retry quyết định. Scoped reads không mở chỉnh công/quản trị/chốt kỳ/export hoặc lộ GPS/ảnh công tác/body thông báo riêng tư. Admin cấu hình grant/tuyến phép riêng trên Web, không tự cấp cho demo. Cần migration/Backend PQ5; giữ năm tab và form nghỉ phép Tech Lead chỉnh. Hot Reload với model mới có thể cần Hot Restart để khởi tạo lại dữ liệu capability; không xuất APK bàn giao.

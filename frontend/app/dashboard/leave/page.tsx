@@ -113,15 +113,6 @@ export default function LeavePage() {
     finally { setSaving(false); }
   }
 
-  async function review(id: string, status: 'APPROVED' | 'REJECTED'): Promise<void> {
-    const reviewNote = await requestAction({ title: status === 'APPROVED' ? 'Duyệt đơn nghỉ' : 'Từ chối đơn nghỉ', description: status === 'APPROVED' ? 'Số dư phép sẽ được cập nhật theo chính sách hiện hành.' : 'Lý do từ chối sẽ được lưu vào lịch sử đơn.', confirmLabel: status === 'APPROVED' ? 'Xác nhận duyệt' : 'Từ chối', fieldLabel: status === 'APPROVED' ? 'Ghi chú (không bắt buộc)' : 'Lý do từ chối', required: status === 'REJECTED', minLength: status === 'REJECTED' ? 5 : undefined, danger: status === 'REJECTED' });
-    if (reviewNote === null) return;
-    await runAction(async () => {
-      await apiRequest(`/leave-requests/${id}/review`, { method: 'PATCH', body: JSON.stringify({ status, reviewNote: reviewNote?.trim() || undefined }) });
-      setMessage(status === 'APPROVED' ? 'Đã duyệt đơn nghỉ và cập nhật số dư.' : 'Đã từ chối đơn nghỉ và giải phóng số dư đang giữ.');
-    });
-  }
-
   async function cancel(item: Leave): Promise<void> {
     const reason = await requestAction({ title: 'Hủy đơn nghỉ', description: 'Đơn sẽ chuyển sang trạng thái đã hủy và phần số dư đang giữ/đã dùng sẽ được hoàn lại theo chính sách.', confirmLabel: 'Xác nhận hủy', fieldLabel: 'Lý do hủy', required: true, minLength: 5, danger: true });
     if (reason === null) return;
@@ -201,7 +192,7 @@ export default function LeavePage() {
 
   return <div className="module-page">
     {actionDialog}
-    <PageHeader eyebrow="CR6 / CHÍNH SÁCH NGHỈ PHÉP" title="Nghỉ phép và số dư" description="Cấu hình chính sách, quản lý quỹ phép và xử lý đơn nghỉ trên cùng một luồng có audit." />
+    <PageHeader eyebrow="CR6 / CHÍNH SÁCH NGHỈ PHÉP" title="Nghỉ phép và số dư" description="Admin cấu hình chính sách/quỹ phép. Đơn nghỉ chuyển Leader xác nhận → Trưởng phòng duyệt tại Xử lý nghỉ phép." />
     {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}{error && <Notice kind="error">{error}</Notice>}
     <Notice kind="info"><strong>Quy tắc an toàn:</strong> Đơn chờ duyệt giữ trước số dư; từ chối hoặc hủy sẽ tự giải phóng. Chính sách cũ mặc định chưa trừ quỹ phép cho đến khi Admin chủ động bật.</Notice>
 
@@ -267,7 +258,7 @@ export default function LeavePage() {
           {item.reviewedAt && <p><strong>{item.reviewedByName ?? 'Người duyệt'}:</strong> {item.reviewNote || 'Không có ghi chú'} · {formatDate(item.reviewedAt)}</p>}
           {item.cancelledAt && <p><strong>Lý do hủy:</strong> {item.cancellationReason} · {formatDate(item.cancelledAt)}</p>}
           {history?.requestId === item.id && <div className="trip-history"><strong>Lịch sử thao tác</strong>{history.items.map((entry) => <small key={entry.id}>{formatDate(entry.createdAt)} · {entry.actorName} · {entry.action}</small>)}</div>}
-        </div><div><StatusBadge value={item.status} /><button className="table-action" onClick={() => void showHistory(item.id)} type="button">Lịch sử</button>{item.status === 'SUBMITTED' && <span className="action-group"><button className="table-action success-action" disabled={saving} onClick={() => void review(item.id, 'APPROVED')} type="button">Duyệt</button><button className="table-action danger-action" disabled={saving} onClick={() => void review(item.id, 'REJECTED')} type="button">Từ chối</button></span>}{canCancel && <button className="table-action danger-action" disabled={saving} onClick={() => void cancel(item)} type="button">Hủy đơn</button>}</div></article>;
+        </div><div><StatusBadge value={item.status} /><button className="table-action" onClick={() => void showHistory(item.id)} type="button">Lịch sử</button>{item.status === 'SUBMITTED' && <a className="table-action" href="/dashboard/leave-workflow">Theo dõi / phân tuyến hai bước</a>}{canCancel && <button className="table-action danger-action" disabled={saving} onClick={() => void cancel(item)} type="button">Hủy đơn</button>}</div></article>;
       })}
     </div><Pagination page={itemPaging.page} pageSize={itemPaging.pageSize} total={visibleItems.length} onPageChange={itemPaging.setPage} /></>}
     <p className="block-note"><CalendarClock aria-hidden="true" size={15} /> Thời lượng cả ngày ưu tiên lịch làm việc đã gán; nếu chưa có lịch, hệ thống dùng số phút/ngày của chính sách.</p>

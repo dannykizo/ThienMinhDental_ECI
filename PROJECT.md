@@ -23,7 +23,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 3. Chấm công văn phòng bằng thời gian + GPS/geofence cấu hình được.
 4. Chấm công công tác gắn với phiếu công tác.
 5. Quản lý phiếu công tác, khách hàng, địa điểm và thành viên.
-6. Đơn nghỉ phép với một cấp duyệt.
+6. Đơn nghỉ phép: Leader xác nhận → Trưởng phòng quyết định (PQ5); Admin quản trị chính sách/số dư/tuyến.
 7. Giải trình/điều chỉnh chấm công có lý do và audit log.
 8. Thông báo nội bộ + push notification + trạng thái đã đọc.
 9. Dashboard và báo cáo chấm công ngày/tuần/tháng, xuất Excel.
@@ -46,7 +46,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - PQ1 chỉ mở danh sách tổ chức cơ bản trong đúng phạm vi, không gán role toàn cục `MANAGER`, không mở dữ liệu liên hệ/tài khoản hay quyền duyệt đơn. Tài khoản/hồ sơ/phạm vi ngừng hoạt động khiến quyền tạm không hiệu lực; khôi phục không phục hồi quyền đã thu hồi/hết hạn. Quyền toàn cục có sẵn được giữ nguyên, không tự bị giới hạn bởi grant mới.
 - Nhân viên nghỉ việc được chuyển sang trạng thái ngừng làm việc với ngày hiệu lực và lý do bắt buộc; hồ sơ, tài khoản và phiên đăng nhập bị khóa nhưng mã nhân viên cùng lịch sử nghiệp vụ không bị xóa vật lý. Admin có thể khôi phục hồ sơ bằng một quyết định có audit.
 - Phiên Mobile tối đa 30 ngày; Web tối đa 24 giờ, hết phiên sau 30 phút không hoạt động; JWT 15 phút. PQ2 cho người có grant Trưởng phòng/Leader còn hiệu lực dùng một Web + một thiết bị Mobile đồng thời; đăng nhập lại cùng kênh chỉ thay phiên kênh đó. Nhân viên thường và các role toàn cục chưa có grant giữ chính sách một phiên/tài khoản. Không tự mở ngoại lệ cho role toàn cục trước khi Tech Lead chốt.
-- Khi mất grant cuối cùng, Web chỉ còn được dùng nếu có quyền toàn cục độc lập. Nếu phải trở về chính sách một phiên và có Mobile đang hoạt động, giữ Mobile, thu hồi Web ở request xác thực/refresh tiếp theo; không phục hồi phiên đã thu hồi khi được cấp lại grant. Quyền tổ chức được đánh giá mỗi request, không tin snapshot JWT. Web Trưởng phòng/Leader có danh sách tổ chức và giải trình hai bước theo scope/chỉ định; không mở quyền báo cáo, quản trị hoặc duyệt module khác.
+- Khi mất grant cuối cùng, Web chỉ còn được dùng nếu có quyền toàn cục độc lập. Nếu phải trở về chính sách một phiên và có Mobile đang hoạt động, giữ Mobile, thu hồi Web ở request xác thực/refresh tiếp theo; không phục hồi phiên đã thu hồi khi được cấp lại grant. Quyền tổ chức được đánh giá mỗi request, không tin snapshot JWT. Web Trưởng phòng/Leader có danh sách tổ chức và giải trình hai bước theo scope/chỉ định; PQ5 bổ sung nghỉ phép hai bước và các màn vận hành chỉ đọc theo scope, không mở quyền quản trị.
 - PQ4 dùng app nhân viên hiện có: lối vào xử lý giải trình theo capability hiện hành, Leader xác nhận/Trưởng phòng quyết định theo nút Backend cho phép; xem ảnh có xác thực và audit. Nhân viên xem bước/người xử lý của đơn mình. Không cấu hình tuyến trên app, không đưa quyết định quản lý vào hàng đợi offline, không tự mở quyền nghỉ phép/công tác hoặc module khác.
 - Mỗi lần nhân sự đăng nhập phải tạo cảnh báo email tới địa chỉ Admin đã cấu hình. Lỗi gửi email không được chặn đăng nhập nhưng phải hiển thị trạng thái giao nhận trong Admin Web.
 - Lịch làm việc do Admin cấu hình theo chi nhánh và phòng ban; ngoại lệ theo nhân viên được ưu tiên và mọi lần thay đổi cấu hình phải có lịch sử chỉ Admin xem.
@@ -63,7 +63,7 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Tuyển dụng, onboarding, đào tạo, hợp đồng lao động, BHXH.
 - Quản lý tài sản và kho thiết bị.
 - GPS tracking nền/liên tục hoặc bản đồ theo dõi nhân viên cả ngày.
-- Microservices, Kubernetes, message broker hoặc workflow nhiều cấp ngoài tuyến Leader xác nhận → Trưởng phòng duyệt đã triển khai riêng cho giải trình tại PQ3.
+- Microservices, Kubernetes, message broker hoặc workflow nhiều cấp ngoài tuyến Leader xác nhận → Trưởng phòng duyệt của giải trình (PQ3) và nghỉ phép (PQ5).
 - Bộ máy phân quyền tùy biến tổng quát ngoài role hiện có và quyền quản lý theo phạm vi/thời hạn đã chốt trong PQ.
 
 ## Success criteria
@@ -73,3 +73,11 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Admin nhìn được trạng thái trong ngày và lý do bất thường.
 - Cuối tháng xuất được bảng công đối soát được đến từng ngày và từng sự kiện.
 - Thông báo có đối tượng nhận và thống kê đã đọc/chưa đọc.
+
+## PQ5 — ma trận quyền được Tech Lead duyệt
+
+- Nghỉ phép dùng tuyến riêng theo nhân viên/team. Admin có nút sao chép tuyến giải trình để điền form rồi lưu rõ ràng; hai tuyến không tự liên kết. Lưu cập nhật ngay bước chưa xử lý, giữ team/Leader/thời điểm xác nhận đã hoàn tất. Thiếu/mất quyền chờ Admin; hai actor độc lập, không tự xử lý đơn mình; Admin không duyệt thay/thêm. Lý do từ chối phép vẫn bắt buộc ≥5 ký tự.
+- Leader xác nhận giữ SUBMITTED và số dư dự trữ. Head quyết định cuối kiểm tra lại quỹ phép trong transaction. Hủy đơn vẫn theo chính sách/kỳ công; đơn đang chờ cũ cần phân tuyến/xác nhận thật, terminal cũ không backfill actor.
+- Leader/Trưởng phòng đọc chấm công, tổng hợp báo cáo, phần tham gia công tác và trạng thái nhận/đọc/xác nhận thông báo của nhân viên đủ điều kiện trong grant live. Leader chỉ team, Head cả phòng kể cả xuyên chi nhánh. Tổng hợp lọc trước khi tính; không lộ tổng toàn công ty/thành viên ngoài scope/GPS/ảnh công tác/body thông báo riêng tư.
+- Admin quản trị công tác/thông báo, policy/quỹ phép/tuyến, chỉnh công có lý do/audit. Quyền chốt/mở lại kỳ/xuất Excel hiện hữu không đổi; scoped grant không cấp các quyền đó. Không cấp role MANAGER hoặc mở thêm kỷ luật/payroll/ERP.
+- Web/app hiện tại dùng capabilities Backend; nhân viên xem tuyến đơn phép mình. Không cấu hình tuyến trên app, duyệt offline hoặc tự retry quyết định. Lifetimes và một Web + một Mobile giữ nguyên PQ2. Các giới hạn PQ1–PQ4 ở trên là lịch sử từng lát cắt, được PQ5 mở rộng đúng ma trận này.

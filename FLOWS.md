@@ -23,7 +23,7 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 5. `/organization/mine` trả quyền hiện hành/capability; `/organization/teams` chỉ trả team trong phạm vi quản lý; `/organization/teams/:id/members` trả nhân sự cơ bản còn đủ điều kiện. Trưởng phòng đọc `/organization/departments/:id/employees` trong phòng được cấp; Leader không được mở rộng sang toàn phòng. Không lộ liên hệ, tài khoản, phòng/chi nhánh ngoài phạm vi qua các API này.
 6. Phân công tổ chức/tài khoản/team/phòng ban không hợp lệ làm quyền hoặc thành viên mất hiệu lực khi đọc; giữ record để Admin xử lý, không âm thầm xóa. Audit tạo/sửa team, thêm/rút thành viên, cấp/thu hồi quyền nằm trong transaction của thao tác.
 
-**Boundary:** Admin Web có trang `/dashboard/organization`. PQ1 không thay guard/role/luồng duyệt của module cũ. PQ2 bổ sung đăng nhập và khu vực quản lý chỉ đọc; PQ3 bổ sung giải trình hai bước ở dưới; PQ4 dùng cùng API trong app hiện tại. Quyết định đã kết thúc giữ nguyên lịch sử/người duyệt. PQ5/module khác chưa triển khai.
+**Boundary:** Admin Web có trang `/dashboard/organization`. PQ1 không thay guard/role/luồng duyệt của module cũ. PQ2 bổ sung đăng nhập và khu vực quản lý chỉ đọc; PQ3 bổ sung giải trình hai bước ở dưới; PQ4 dùng cùng API trong app hiện tại. Quyết định đã kết thúc giữ nguyên lịch sử/người duyệt. PQ5 bổ sung nghỉ phép hai bước và theo dõi vận hành chỉ đọc theo scope.
 
 ## PQ2 — đăng nhập và khu vực quản lý
 
@@ -131,9 +131,9 @@ DRAFT -> ASSIGNED -> IN_PROGRESS -> COMPLETED
 ## Mobile + Admin Web — leave request
 
 ```text
-SUBMITTED -> APPROVED
-          -> REJECTED
-          -> CANCELLED
+SUBMITTED (WAITING_ROUTING nếu thiếu tuyến)
+  -> LEADER_CONFIRMATION -> HEAD_APPROVAL -> APPROVED / REJECTED
+  -> CANCELLED (khi chưa quyết định cuối)
 APPROVED  -> CANCELLED (chỉ khi chính sách cho phép)
 ```
 
@@ -141,12 +141,12 @@ APPROVED  -> CANCELLED (chỉ khi chính sách cho phép)
 2. Admin khởi tạo số dư theo năm. Số dư năm mới lấy định mức tại thời điểm khởi tạo và phần còn lại năm trước trong giới hạn cộng dồn; điều chỉnh tăng/giảm phải có lý do và được lưu bất biến.
 3. Nhân viên chọn một chính sách đang hoạt động, thời lượng được chính sách cho phép và lý do. Backend tính số phút từ lịch làm việc; khi không có lịch mới dùng số phút/ngày của chính sách.
 4. Backend kiểm tra báo trước, nhân viên đang hoạt động, kỳ công chưa khóa, không trùng đơn và đủ số dư. Đơn `SUBMITTED` giữ trước số dư để tránh gửi vượt quỹ.
-5. Admin/Manager duyệt một cấp hoặc từ chối; lý do từ chối là bắt buộc. Backend kiểm tra lại số dư trong transaction khi duyệt.
+5. PQ5: Admin đặt tuyến phép riêng, có lý do/expectedVersion; sao chép tuyến giải trình chỉ điền form, cần lưu rõ ràng, không liên kết tự động. Leader chỉ định xác nhận, giữ SUBMITTED/quỹ dự trữ; Head chỉ định quyết định sau xác nhận thật, hai actor độc lập và không owner/người gửi. Admin không duyệt thay/thêm. Từ chối cần lý do ≥5 ký tự; duyệt kiểm tra số dư cùng transaction. Thiếu/mất grant chờ Admin; đổi bước chưa xử lý giữ team/Leader/actor/time đã xác nhận. Pending cũ cần tuyến/xác nhận thật; terminal cũ giữ nguyên.
 6. Nhân viên có thể hủy đơn chờ duyệt. Đơn đã duyệt chỉ hủy được khi chính sách cho phép và kỳ công chưa khóa; số dư được giải phóng theo trạng thái mới.
 7. Mọi lần gửi, duyệt/từ chối, hủy, đổi chính sách và điều chỉnh số dư đều có audit. Đơn đang chờ là blocker khi chốt kỳ công.
 8. Mobile hiển thị số dư và kết quả do Backend trả về; báo cáo ngày phân biệt nghỉ cả ngày với nghỉ một phần.
 
-**Implementation status:** Customer review CR6 và migration `1791331200000-leave-policies-balances` đã triển khai chính sách nghỉ cấu hình được, số dư theo năm/cộng dồn, điều chỉnh có audit, nghỉ nửa ngày/theo giờ và hủy đơn theo policy trên Backend, Admin Web và Mobile Android. Bốn loại nghỉ cũ được tạo thành chính sách tương thích với theo dõi số dư mặc định tắt, nên dữ liệu cũ không bị tự động trừ quỹ. File minh chứng, cấp phép tự động theo thâm niên và quy trình duyệt nhiều cấp vẫn ngoài phạm vi.
+**Implementation status:** Customer review CR6 và migration `1791331200000-leave-policies-balances` đã triển khai chính sách nghỉ cấu hình được, số dư theo năm/cộng dồn, điều chỉnh có audit, nghỉ nửa ngày/theo giờ và hủy đơn theo policy trên Backend, Admin Web và Mobile Android. Bốn loại nghỉ cũ được tạo thành chính sách tương thích với theo dõi số dư mặc định tắt, nên dữ liệu cũ không bị tự động trừ quỹ. PQ5 migration 1791763200000-leave-two-step-workflow thêm tuyến riêng/snapshot/actor/version. Audit/inbox cùng transaction, push sau commit. Web /dashboard/leave-workflow xử lý/phân tuyến; /dashboard/leave quản trị policy/quỹ, không duyệt một cấp. App mở Xử lý nghỉ phép theo capability; employee xem tuyến mình từ Home, giữ form hiện tại. Stale/mất quyền/mạng cần tải lại, không tự retry quyết định. Minh chứng/thâm niên/workflow ngoài hai bước vẫn ngoài scope.
 
 ## Admin Web — attendance adjustment
 
@@ -224,3 +224,7 @@ DRAFT -> ISSUED -> REVOKED
 4. Admin có thể mở drawer chi tiết audit để xem metadata cùng giá trị trước/sau; các trường có tên nhạy cảm được che ở lớp hiển thị, audit bất biến trong Backend không bị sửa.
 
 **Trạng thái CR9:** Đã triển khai hoàn toàn ở Admin Web, không thêm migration và không thay đổi business rule/API contract.
+
+## PQ5 — scoped module reads
+
+GET /organization/managed/attendance?month=YYYY-MM, reports?month=YYYY-MM, business-trips, announcements chỉ cho grant quản lý live. Backend lấy nhân viên active có tài khoản/phân công tổ chức hiện hành: Head đúng phòng hoặc Leader có membership team đúng phòng. Công tác chỉ phần tham gia trong scope; thông báo chỉ trạng thái nhận/đọc/xác nhận, không body/push credentials. Báo cáo dùng projection chuẩn, lọc employee IDs trước tổng hợp, không trả blocker toàn công ty. Web /dashboard/managed-modules và app Theo dõi phạm vi quản lý chỉ đọc; không mở mutation/export/lock. Thu hồi/hết hạn/ngừng phạm vi kiểm tra ở request tiếp theo; màn đang hiển thị là snapshot, reload/resume bỏ cache và đọc lại quyền.

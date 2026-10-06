@@ -17,7 +17,7 @@
 | PQ2 | Quản lý đăng nhập Web + một Mobile đồng thời; refresh/revocation và quyền hiện hành | Implemented; API đã kiểm tra, UI authenticated chưa xác nhận do Chrome chặn API |
 | PQ3 | Giải trình hai bước, tuyến mặc định theo nhân viên, Admin đổi bước chưa xử lý, evidence/audit/inbox/push | Implemented; API/build đã kiểm tra, UI authenticated bị Chrome chặn API |
 | PQ4 | Khu vực quản lý trong app hiện tại, dùng cùng API | Implemented; analyze/debug build/Hot Reload đạt, nghiệm thu thao tác quản lý trên điện thoại còn thiếu |
-| PQ5 | Nghỉ phép trước; quyền công tác/chấm công/báo cáo/thông báo theo từng module đã xác định | NOT_IMPLEMENTED |
+| PQ5 | Nghỉ phép hai bước/tuyến riêng; công tác/chấm công/báo cáo/trạng thái thông báo chỉ đọc theo grant | Implemented; API/static checks và Hot Restart đạt, nghiệm thu UI quản lý còn thiếu |
 
 Mỗi lát cắt đi Database → Backend API → Web/App liên quan → kiểm tra phù hợp → bàn giao. Không triển khai đồng thời các lát cắt. Theo chỉ thị Tech Lead, không tự chạy test suite; vẫn bổ sung test cho thay đổi API/permission và báo rõ chưa chạy.
 
@@ -150,4 +150,48 @@ Các danh sách scoped không trả email/số điện thoại/tài khoản/phâ
 - Chưa thao tác trực tiếp màn manager queue/dialog/ảnh/duyệt/từ chối trên điện thoại với tài khoản Leader/Head; chưa nghiệm thu font lớn/bàn phím, network ambiguity/reroute/revocation UI. Cần Admin cấu hình tài khoản/quyền/tuyến development-only phù hợp rồi kiểm tra thủ công; không giả định startup/analyze thay cho flow đó. Push thật vẫn phụ thuộc Firebase, PQ4 giữ route push về Inbox hiện hữu.
 - GitNexus MCP chưa có index repo này và runner local không tồn tại. Skill impact dùng làm checklist; kiểm tra search/call-site/diff trực tiếp, không tuyên bố đã query impact/detect_changes hoặc dùng graph repo khác.
 
-Điểm dừng hiện hành: **PQ4**. PQ5 `NOT_IMPLEMENTED`; không tự triển khai nghỉ phép hai bước hoặc module tiếp theo.
+Điểm dừng tại bàn giao PQ4; PQ5 được Tech Lead duyệt và triển khai ở phần tiếp theo.
+
+## PQ5 — quyết định đã duyệt và bàn giao
+
+| Module | Leader / Trưởng phòng | Quyền riêng giữ lại |
+|---|---|---|
+| Nghỉ phép | Leader chỉ định xác nhận → Head chỉ định duyệt/từ chối | Admin cấu hình policy/quỹ/tuyến, không duyệt thêm/thay |
+| Công tác | Chỉ phần tham gia nhân viên trong scope | Admin tạo/sửa/giao/hủy |
+| Chấm công | Chỉ đọc nhân viên đủ điều kiện trong grant | Admin chỉnh công có lý do/audit |
+| Báo cáo | Tổng hợp đúng scope, lọc trước tính | Chốt/mở lại kỳ và Excel giữ quyền role hiện hữu |
+| Thông báo | Theo dõi nhận/đọc/xác nhận của recipient trong scope | Admin tạo/ban hành/thu hồi, điều khiển push |
+
+Tech Lead duyệt ma trận và **tuyến phép riêng**. Sao chép tuyến giải trình chỉ điền biểu mẫu rồi Admin lưu rõ ràng, không liên kết tự động. Không mở quyền kỷ luật/payroll/ERP, không cấp role MANAGER, không đổi session/GPS.
+
+### Backend / database
+
+- Migration `1791763200000-leave-two-step-workflow` đã áp dụng local: leave_approval_routes, stage/actor/team snapshot/version. Pending legacy chờ tuyến; terminal lịch sử không tạo confirmation giả. Down chặn khi đã có workflow data; export/migrate trước khi rollback.
+- Leave Domain độc lập ORM. Missing/revoked/expired grant chờ Admin; distinct Leader/Head không self review. Confirm giữ SUBMITTED/quỹ dự trữ; final approval gọi balance validator trong transaction. Rejection reason ≥5 ký tự giữ nguyên. Default save cập nhật ngay unfinished pending; completed team/Leader/actor/time bất biến. Per-item reroute không sửa default; expectedVersion chống stale.
+- Audit/inbox cùng transaction, tracked push sau commit. Advisory lock per employee serialize submit/default/reroute/confirm/review/cancel; period locks theo tháng. Reporting lock rechecks pending leave bên trong transaction để chặn concurrent submission, không đổi quyền lock/reopen.
+- Dedicated read-only `/organization/managed/{attendance,reports,business-trips,announcements}` lấy live grants, current assignments/memberships; SQL hạn chế employee IDs trước reads/aggregation. Leader team không mở rộng phòng, Head đọc phòng xuyên chi nhánh. Không body thông báo/GPS/ảnh/member ngoài scope/global totals. Giữ global module guards/export/mutation.
+- Partial policy PATCH khi dọn dev fixture phát hiện DTO undefined ghi đè fields: lọc undefined để preserve existing rules. Đây là sửa hẹp trong LeaveService, không thay chính sách phép. Các list/history service cũ không còn được dùng để bypass scope.
+
+### API contract PQ5
+
+- `/leave-requests`: GET Admin/all hoặc assigned manager/live; GET mine owner. GET routes/routing-options và PUT routes/:employeeId chỉ Admin; PATCH :id/reroute chỉ Admin; PATCH :id/confirm assigned Leader; PATCH :id/review assigned Head sau confirm thật; GET :id/history owner/Admin/assigned live. Mutation route/decision có expectedVersion. `LEAVE_ROUTE_CHANGED` 409, `LEAVE_STEP_FORBIDDEN` 403; rejection thiếu lý do 400. Policy/balance Admin-only; create on-behalf Admin-only, owner create/cancel theo contract cũ.
+- `/organization/mine` bổ sung capabilities `leaveWorkflow: LEAVE_TWO_STEP | NOT_GRANTED`, `readManagedModules: boolean`, giữ reviewWorkflow PQ4. Portal thêm routes tương ứng, không thêm role.
+- `/organization/managed/attendance?month=YYYY-MM` trả daily projection scope; reports trả `{month,employees,summary,readOnly:true}` với totals/blockers scope, không dữ liệu chốt kỳ toàn công ty; trips và announcements trả phần tham gia/recipient scope. Không endpoint ghi/Excel tại khu vực này.
+
+### Web / app và vùng chạm
+
+- Backend: database migration/entity/data-source, leave Domain/application/service/controller/DTO/module, organization-access read adapter/controller/capability, auth portal navigation; reporting thêm allow-list và pending-leave lock check để giữ invariants. Không đổi module discipline/customer/config/session.
+- Web: leave-workflow workspace/page (queue, route/default/reroute/copy/history, loading/error/empty/success), managed-modules chỉ đọc (month/search/paging, totals scope), menu và notice managed. Trang leave policy/quỹ không còn one-step approve/reject.
+- App: api_client additive capabilities/models/versioned decisions/readonly reads; Home entry, managed_leave_screen queue/detail/owner read-only, managed_modules_screen. Resume/session-end/reload clears management cache; no automatic decision retry/queue. Giữ năm tab và **không chỉnh/stage** form `mobile/lib/features/leave/leave_request_screen.dart` của Tech Lead (dirty trước task vẫn 50 additions/45 deletions).
+- Tests nguồn: leave-workflow, managed-modules, partial policy regression, report period-lock regression, portal nav và mobile leave_management_test. Không chạy suite theo chỉ thị Tech Lead. Canonical PROJECT/FLOWS/IMPLEMENTATION/README/mobile README cập nhật.
+
+### Kiểm tra và giới hạn
+
+- Typecheck/lint/build thường Backend/Web và static Cloudflare build đạt; scoped Flutter analyze (4 file lib + test mới) no issues. Migration local áp dụng 1 migration, health OK. Diff review/whitespace gate trước commit.
+- Kiểm tra API development-only `PQ5-DEV-0171E41E`: 38 checks đạt — missing route accepted; Admin/Head bypass403; outside history404; bad rejection400; confirm giữ SUBMITTED/pending480; stale409; explanation default không sửa leave default; revoked Head403; reroute giữ confirmation; Head mới approve; rejection giải phóng quỹ; terminal reroute409; audit/inbox thật; shared trip không lộ outside members; read/ack scope không body/push fields; attendance/report chỉ allowed employees; Head đọc cả HCM/HN; mutation/export/lock/reopen forbidden; revoked Leader403 nhưng employee me200.
+- Fixture 6 employees đã deactivated/sessions revoked; 4 grants thu hồi, 2 memberships kết thúc, 2 teams và schedule ngừng hoạt động, trip hủy, 2 notices thu hồi. Policy đã ngừng sau sửa partial PATCH, vẫn giữ day480/annual960. Một đơn đã duyệt được Admin hủy theo policy, đơn còn lại rejected; giữ audit/inbox/defaults/history, không hard-delete. Verification Admin SID đã logout204; không thay phiên demo employee trên điện thoại, không credential fixture vào Git.
+- USB32a65649/reverse3001 có kết nối. Hot Reload compile nạp code mới nhưng có exception khi reassemble; sau khi điện thoại thức, phiên Flutter báo `Restarted application in 604.376ms.`, app PID32670 còn chạy. Chưa xác định nguyên nhân exception Hot Reload; log mới sau restart chưa có output lỗi trong lần poll. **Không coi Hot Restart/analyze là nghiệm thu UI**; chưa thao tác thực tế manager queue/dialog/reroute/copy/font lớn/mạng yếu trên phone hoặc authenticated Web. Không build APK release/bàn giao.
+- API/Web giữ development/watch. Root build trước đó làm process watch mất module dist; đã restart đúng service, không đổi kiến trúc. Không tuyên bố deploy VPS/Cloudflare Backend/push Firebase thật; production cần migration + Backend trước Web/app.
+- GitNexus registry không có repo và runner local không tồn tại; skill impact dùng checklist, rà source/call-site/diff. Không query repo khác hoặc giả định đã chạy graph impact/detect_changes.
+
+Điểm dừng: **PQ5**, không tự mở ERP hoặc lát cắt mới. Việc tiếp theo chỉ là nghiệm thu UI đã triển khai trên Web/điện thoại, không phải thêm scope.

@@ -42,13 +42,22 @@ enum ApiAvailability { available, offline, backendUnavailable }
 
 class ManagementAccess {
   const ManagementAccess(
-      {required this.canReviewExplanations, required this.grants});
+      {required this.canReviewExplanations,
+      required this.grants,
+      this.canReviewLeave = false,
+      this.canReadManagedModules = false});
 
   factory ManagementAccess.fromJson(Map<String, dynamic> json) =>
       ManagementAccess(
         canReviewExplanations: (json['capabilities']
                 as Map<String, dynamic>?)?['reviewWorkflow'] ==
             'EXPLANATION_TWO_STEP',
+        canReviewLeave:
+            (json['capabilities'] as Map<String, dynamic>?)?['leaveWorkflow'] ==
+                'LEAVE_TWO_STEP',
+        canReadManagedModules: (json['capabilities']
+                as Map<String, dynamic>?)?['readManagedModules'] ==
+            true,
         grants: (json['grants'] as List<dynamic>? ?? <dynamic>[])
             .map((dynamic item) =>
                 ManagementGrantView.fromJson(item as Map<String, dynamic>))
@@ -56,6 +65,8 @@ class ManagementAccess {
       );
 
   final bool canReviewExplanations;
+  final bool canReviewLeave;
+  final bool canReadManagedModules;
   final List<ManagementGrantView> grants;
 }
 
@@ -388,6 +399,35 @@ class BusinessTripAssignment {
   final String status;
 }
 
+class ManagedLeaveRequest {
+  ManagedLeaveRequest.fromJson(Map<String, dynamic> json)
+      : request = EmployeeLeaveRequest.fromJson(json),
+        employeeCode = json['employeeCode'] as String?,
+        fullName = json['fullName'] as String?,
+        approvalStage = json['approvalStage'] as String?,
+        routeVersion = (json['routeVersion'] as num?)?.toInt(),
+        canConfirm = json['canConfirm'] == true,
+        canReview = json['canReview'] == true,
+        teamName = json['teamName'] as String?,
+        leaderName = json['leaderName'] as String?,
+        headName = json['headName'] as String?,
+        confirmedByName = json['confirmedByName'] as String?,
+        confirmedAt = json['confirmedAt'] as String?,
+        confirmationNote = json['confirmationNote'] as String?;
+  final EmployeeLeaveRequest request;
+  final String? employeeCode,
+      fullName,
+      approvalStage,
+      teamName,
+      leaderName,
+      headName,
+      confirmedByName,
+      confirmedAt,
+      confirmationNote;
+  final int? routeVersion;
+  final bool canConfirm, canReview;
+}
+
 class EmployeeLeaveRequest {
   const EmployeeLeaveRequest({
     required this.allowApprovedCancellation,
@@ -667,6 +707,67 @@ class ApiClient {
 
   Future<ManagementAccess> managementAccess() async =>
       ManagementAccess.fromJson(await _request('/organization/mine'));
+
+  Future<List<ManagedLeaveRequest>> managedLeaveRequests(
+          {bool mine = false}) async =>
+      (await _requestList(mine ? '/leave-requests/mine' : '/leave-requests'))
+          .map((dynamic row) =>
+              ManagedLeaveRequest.fromJson(row as Map<String, dynamic>))
+          .toList();
+
+  Future<List<ExplanationHistoryEntry>> leaveHistory(String id) async =>
+      (await _requestList('/leave-requests/${Uri.encodeComponent(id)}/history'))
+          .map((dynamic row) =>
+              ExplanationHistoryEntry.fromJson(row as Map<String, dynamic>))
+          .toList();
+
+  Future<void> processLeave(ManagedLeaveRequest item,
+      {required String action, required String note}) async {
+    final int? version = item.routeVersion;
+    if (version == null || version < 0) {
+      throw const ApiException('Chưa có phiên bản tuyến; cần tải lại đơn.',
+          code: 'LEAVE_VERSION_REQUIRED');
+    }
+    if (!<String>['CONFIRM', 'APPROVED', 'REJECTED'].contains(action)) {
+      throw const ApiException('Thao tác không hợp lệ.',
+          code: 'LEAVE_ACTION_INVALID');
+    }
+    if (action == 'REJECTED' && note.trim().length < 5) {
+      throw const ApiException('Lý do từ chối cần ít nhất 5 ký tự.',
+          code: 'LEAVE_REJECTION_REASON_REQUIRED');
+    }
+    await _request(
+        '/leave-requests/${Uri.encodeComponent(item.request.id)}/${action == 'CONFIRM' ? 'confirm' : 'review'}',
+        method: 'PATCH',
+        body: <String, dynamic>{
+          'expectedVersion': version,
+          if (action == 'CONFIRM')
+            'confirmationNote': note.trim()
+          else ...<String, dynamic>{
+            'status': action,
+            'reviewNote': note.trim()
+          },
+        });
+  }
+
+  Future<List<Map<String, dynamic>>> managedModule(String module,
+      {String? month}) async {
+    if (!<String>['attendance', 'business-trips', 'reports', 'announcements']
+        .contains(module)) {
+      throw const ApiException('Module không hợp lệ.');
+    }
+    final String path =
+        '/organization/managed/$module${month == null ? '' : '?month=${Uri.encodeQueryComponent(month)}'}';
+    if (module == 'reports') {
+      final Map<String, dynamic> response = await _request(path);
+      return (response['employees'] as List<dynamic>)
+          .map((dynamic row) => row as Map<String, dynamic>)
+          .toList();
+    }
+    return (await _requestList(path))
+        .map((dynamic row) => row as Map<String, dynamic>)
+        .toList();
+  }
 
   Future<List<AttendanceExplanation>> managedExplanations() async =>
       (await _requestList('/attendance/explanations'))

@@ -72,7 +72,7 @@ export default function ManagedPage() {
           <ScopedDirectory key={`${scope.key}-${version}`} scope={scope} />
         </> : <EmptyState title="Không có phạm vi để xem" description="Quyền hết hiệu lực hoặc chưa có team hoạt động. Không có dữ liệu giả được hiển thị." />}
       </section>
-      <Notice>Trang này chỉ đọc danh sách tổ chức. Xử lý giải trình tại mục Giải trình hai bước; chỉ người được chỉ định và có quyền hiện hành mới được xác nhận/duyệt.</Notice>
+      <Notice>Danh sách tổ chức chỉ đọc. Dùng Giải trình hai bước / Xử lý nghỉ phép cho đơn được chỉ định; Theo dõi phạm vi quản lý để đọc chấm công, công tác, báo cáo và trạng thái thông báo. Các quyền quản trị không được mở thêm.</Notice>
     </>}
   </>;
 }

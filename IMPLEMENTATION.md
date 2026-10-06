@@ -48,7 +48,7 @@
 - Admin manages teams, membership and grants from `/dashboard/organization`; grants are changed by revoke/reissue rather than rewriting historical decisions. Team deactivation temporarily disables its grants; reactivation allows unexpired/unrevoked grants to become effective again. Expired/revoked grants never regain access.
 - Read-only scoped organization endpoints return only identity/code/name and branches relevant to the granted department/team. Current account, employee, scope and grant validity are checked each request, independent of role snapshots in JWT. Existing privileged roles and existing module access are not silently reconfigured.
 - Down migration refuses to run once organization data exists; export/migrate data first. No automatic backfill of teams/grants and no fake workflow confirmations.
-- PQ2 channel sessions, PQ3 explanation routing/Admin immediate reroute and PQ4 manager app are implemented below. PQ5 other modules remains `NOT_IMPLEMENTED`. See `docs/PERMISSIONS_PLAN.md` for the approved plan and handoff.
+- PQ2 channel sessions, PQ3 explanation routing/Admin immediate reroute and PQ4 manager app are implemented below. PQ5 adds leave routing and scoped read-only modules below. See `docs/PERMISSIONS_PLAN.md` for the approved plan and handoff.
 
 ### PQ2 — current manager access and channel sessions
 
@@ -131,12 +131,12 @@
 ### Customer alignment C6 — leave request and approval
 
 - Migration `1790467200000-leave-operations` records the submitting account and submission time and adds indexes for employee/date and status/date queries.
-- Admin/legacy Manager can record a request for an employee; an authenticated employee can list and submit only their own requests through `/leave-requests/mine`.
-- Backend owns date-range validation, active-request overlap detection, one-step review and the mandatory rejection reason. Every submission and review is written to `configuration_audit_logs`.
+- Admin can record a request for an employee (PQ5 removes legacy global Manager authority); an authenticated employee can list and submit only their own requests through `/leave-requests/mine`.
+- Backend owns date-range validation, active-request overlap detection, PQ5 two-step review and the mandatory rejection reason. Every submission and review is written to `configuration_audit_logs`.
 - Leave changes are rejected when any affected attendance month is locked. A month with a pending leave request cannot be locked, so the monthly report cannot silently finalize unresolved leave.
 - Approved leave is already consumed by the daily attendance/monthly reporting projection; rejected leave is excluded.
 - Mobile lists only the signed-in employee's requests and submits requests through `/leave-requests/mine`. Business rules remain authoritative in Backend rather than being duplicated in the client.
-- C6 originally remained full-day/date-range only. Customer review CR6 supersedes that restriction with Admin-configurable policies and balances while keeping attachments, delegation and multi-level approval outside scope.
+- C6 originally remained full-day/date-range only. Customer review CR6 supersedes that restriction with Admin-configurable policies and balances while keeping attachments/delegation/workflows beyond the approved PQ5 two steps outside scope.
 
 ### Customer alignment C7 — internal announcements
 
@@ -174,8 +174,8 @@
 - A submitted request reserves balance. Approval rechecks it under a row lock; rejection or cancellation releases it because usage is derived from current request state. Cross-year requests are rejected only for balance-tracked policies.
 - Full-day duration uses the employee override or department schedule when available and falls back to policy day minutes only when no scheduled minutes resolve. Partial-day requests must stay on one date.
 - Admin can initialize yearly balances and make signed adjustments with a mandatory reason. Policy, balance and request transitions are recorded in `configuration_audit_logs`.
-- Admin Web exposes policy/balance operation and one-step review. Mobile shows the signed-in employee's balances, policy-aware request options and allowed cancellation. Reporting labels approved partial leave as `PARTIAL_LEAVE` instead of treating the whole day as leave.
-- CR6 does not implement attachments, tenure-based automatic accrual, cash conversion, payroll effects or multi-level approval.
+- Admin Web exposes policy/balance operation; PQ5 replaces one-step review with its assigned workflow workspace. Mobile shows the signed-in employee's balances, policy-aware request options and allowed cancellation. Reporting labels approved partial leave as `PARTIAL_LEAVE` instead of treating the whole day as leave.
+- CR6 does not implement attachments, tenure-based automatic accrual, cash conversion or payroll effects. PQ5 adds only the approved two-step leave workflow.
 
 ### Mobile completion — UX and Android package
 
@@ -302,3 +302,12 @@ Một feature chỉ hoàn thành khi:
 - UI có loading, empty, success và error state tương ứng.
 - Không ghi log secret, token, tọa độ hoặc dữ liệu cá nhân quá mức cần thiết.
 - Diff đã được review; tài liệu canonical được cập nhật nếu behavior thay đổi.
+
+## PQ5 — architecture and rollout
+
+- Migration 1791763200000-leave-two-step-workflow adds leave_approval_routes, nullable stage/snapshot/actor columns and monotonic version. Pending legacy waits routing; final history unchanged. Down refuses to erase configured routes/decisions.
+- Leave Domain stays ORM-free. Application workflow checks current grants/distinct actors; serializes per employee via advisory lock, locks affected periods/requests and invokes existing balance validation inside final approval transaction. Confirmation remains SUBMITTED. Period lock now rechecks pending leave under its row lock to avoid concurrent submission being silently finalized.
+- Leave defaults never read explanation defaults on submission; copy fills Web form and requires explicit Admin save. Defaults update unfinished pending steps, per-item reroute leaves defaults alone; completed confirmer/team/time immutable. Audit/inbox atomic, tracked push post-commit.
+- Dedicated organization/managed read-only adapter derives eligible employees from grants/current organization/team memberships. Reporting reuses monthly projection with an additive employee allow-list before aggregation. Global guards/export/period permissions unchanged. Omit outside participants, GPS/evidence, private notice body and global totals.
+- Web /dashboard/leave-workflow and /dashboard/managed-modules; Mobile scoped leave queue/detail, own routing detail and read-only operational screen. Existing five tabs, user-edited leave form, session/GPS flow unchanged. No generic workflow engine/dependencies.
+- Controlled dev cleanup exposed optional DTO undefined overriding persisted policy values on partial PATCH. Filter undefined fields to preserve existing policy settings; no policy rule changed. Old unguarded LeaveService list/history methods replaced by authorized workflow reads.

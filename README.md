@@ -154,3 +154,9 @@ Theo chỉ thị hiện hành của Tech Lead, vẫn bổ sung test cho business
 ## GitNexus
 
 Chỉ chạy sau khi repository có code đủ ý nghĩa. Quy trình và lệnh an toàn nằm trong `CLAUDE.md`. Thư mục `.gitnexus/` là index cục bộ và không được commit.
+
+## PQ5 — nghỉ phép và phạm vi quản lý
+
+Admin cấu hình tuyến nghỉ phép **riêng** tại /dashboard/leave-workflow; nút sao chép tuyến giải trình chỉ điền form, cần lưu rõ ràng và hai tuyến không liên kết tự động. Leader xác nhận → Trưởng phòng quyết định, Admin không duyệt thêm. /dashboard/managed-modules cho quản lý chỉ đọc chấm công/công tác/báo cáo/trạng thái thông báo đúng scope, không cấp xuất Excel/chốt kỳ/quản trị. App có lối vào từ Hôm nay theo capability và theo dõi tuyến đơn phép cá nhân; giữ form hiện hữu, không retry quyết định tự động.
+
+Chạy pnpm --dir backend migration:run để áp dụng 1791763200000-leave-two-step-workflow; cập nhật Backend **trước** Web/app. Pending cũ cần Admin phân tuyến/xác nhận thật; terminal giữ nguyên, rollback chặn khi có workflow data. Chi tiết và giới hạn nghiệm thu: [kế hoạch phân quyền](docs/PERMISSIONS_PLAN.md).
