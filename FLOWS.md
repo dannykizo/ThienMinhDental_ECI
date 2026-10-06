@@ -14,6 +14,17 @@ Các flow Backend/Admin Web dưới đây đã được triển khai trong Web-f
 
 **Implementation status:** Migration `1790035200000-customer-organization-rbac` đã bổ sung HCM/HN, phân công tổ chức nhiều-nhiều, phạm vi chi nhánh và role Kế toán trưởng/Quản lý khu vực. Customer review CR1 và migration `1790899200000-employee-lifecycle` bổ sung sửa hồ sơ/cơ cấu, ngừng làm việc, khôi phục, thu hồi phiên và lịch sử audit trên Admin Web. Danh sách nhân viên và Dashboard đã áp dụng scope; các module nghiệp vụ còn lại chỉ cấp quyền mới khi truy vấn theo scope tương ứng được triển khai.
 
+## PQ1 — team and scoped management (implemented)
+
+1. Admin tạo team trong một phòng ban. Mã duy nhất trong phòng ban; mã và phòng ban không được chuyển sau khi tạo. Thành viên có thể thuộc HCM/HN nhưng phải có phân công còn hiệu lực trong phòng ban của team.
+2. Admin thêm/rút thành viên. Rút yêu cầu lý do, đóng record và giữ lịch sử; thêm lại tạo record mới. Thành viên không tự có quyền Leader, rút thành viên không tự thu hồi quyền quản lý đã cấp riêng.
+3. Admin cấp Trưởng phòng theo phòng ban hoặc Leader theo team cho hồ sơ có tài khoản đang hoạt động. Người được chỉ định không bắt buộc là thành viên phạm vi đó. Hình thức tạm thời/chính thức và thời hạn/vô thời hạn là hai lựa chọn độc lập. Thời điểm có múi giờ rõ ràng; không cho quyền cùng người/vai trò/phạm vi trùng khoảng hiệu lực.
+4. Chỉ Admin sửa team/cấp/thu hồi quyền/xem audit. Thu hồi yêu cầu lý do và có hiệu lực ngay cho lần yêu cầu Backend tiếp theo, kể cả JWT/phiên cũ vẫn còn hợp lệ. Ngừng team tạm ngừng hiệu lực grant của team; khôi phục team cho grant chưa hết hạn/thu hồi hoạt động lại nếu các điều kiện khác hợp lệ.
+5. `/organization/mine` trả quyền hiện hành/capability; `/organization/teams` chỉ trả team trong phạm vi quản lý; `/organization/teams/:id/members` trả nhân sự cơ bản còn đủ điều kiện. Trưởng phòng đọc `/organization/departments/:id/employees` trong phòng được cấp; Leader không được mở rộng sang toàn phòng. Không lộ liên hệ, tài khoản, phòng/chi nhánh ngoài phạm vi qua các API này.
+6. Phân công tổ chức/tài khoản/team/phòng ban không hợp lệ làm quyền hoặc thành viên mất hiệu lực khi đọc; giữ record để Admin xử lý, không âm thầm xóa. Audit tạo/sửa team, thêm/rút thành viên, cấp/thu hồi quyền nằm trong transaction của thao tác.
+
+**Boundary:** Admin Web có trang `/dashboard/organization`. PQ1 không thay guard/role/luồng duyệt của module cũ, không mở Web shell cho quản lý mới, không sửa app hoặc quy tắc một phiên. Phiên Web + Mobile đồng thời (PQ2), tuyến giải trình hai bước và Admin đổi tuyến trực tiếp (PQ3), thao tác quản lý trên app (PQ4) đều `NOT_IMPLEMENTED`. Lịch sử cũ không bị chuyển tuyến/đổi người duyệt.
+
 ## Authentication session and device
 
 1. Web hoặc Mobile gửi định danh thiết bị ổn định cùng thông tin đăng nhập.

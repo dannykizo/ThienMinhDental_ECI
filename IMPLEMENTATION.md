@@ -40,6 +40,16 @@
 - Admin có quyền ghi cấu hình nhân sự. Kế toán trưởng đọc dữ liệu nhân viên/chấm công và báo cáo. Quản lý khu vực chỉ được cấp endpoint đã thực thi scope chi nhánh ở Backend.
 - Khóa nhân viên đồng thời thu hồi quyền đăng nhập; không hard-delete hồ sơ hay mã nhân viên.
 
+### PQ1 — organization and time-bound management access
+
+- Migration `1791504000000-organization-management-access` adds `organization_teams`, `organization_team_memberships` and `organization_management_grants`. Every team has one immutable parent department; members may span branches only within current department assignments. Codes are unique within the department. Membership rows are ended, not deleted.
+- `organization-access` is an isolated NestJS module using the existing PostgreSQL/TypeORM DataSource; pure Domain grant policy does not import ORM. Existing employee organization assignments remain authoritative, including secondary departments. Assignment dates use Vietnam calendar dates; grants use explicit-offset timestamps with a half-open validity interval `[from,until)`.
+- Scoped role codes `DEPARTMENT_HEAD` and `TEAM_LEADER` exist only on management grants, NOT in `user_roles` or JWT role claims. Grant creation never provisions legacy `MANAGER` or broad module permissions. Account-row serialization rejects overlapping grant windows; membership uniqueness and transactionally written audit protect retries/history.
+- Admin manages teams, membership and grants from `/dashboard/organization`; grants are changed by revoke/reissue rather than rewriting historical decisions. Team deactivation temporarily disables its grants; reactivation allows unexpired/unrevoked grants to become effective again. Expired/revoked grants never regain access.
+- Read-only scoped organization endpoints return only identity/code/name and branches relevant to the granted department/team. Current account, employee, scope and grant validity are checked each request, independent of role snapshots in JWT. Existing privileged roles and existing module access are not silently reconfigured.
+- Down migration refuses to run once organization data exists; export/migrate data first. No automatic backfill of teams/grants and no fake workflow confirmations.
+- PQ2 dual-channel sessions, PQ3 approval routing/Admin immediate reroute, PQ4 manager app and PQ5 per-module rollout remain `NOT_IMPLEMENTED`. See `docs/PERMISSIONS_PLAN.md` for the approved plan and handoff.
+
 ### Customer review CR1 — employee lifecycle
 
 - Migration `1790899200000-employee-lifecycle` lưu ngày ngừng làm việc, lý do, người thao tác và thời điểm đổi trạng thái mà không xóa hồ sơ hoặc dữ liệu nghiệp vụ.

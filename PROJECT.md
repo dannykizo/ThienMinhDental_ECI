@@ -39,6 +39,9 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Mọi sửa đổi thủ công với bảng công phải có người sửa, thời gian, lý do, giá trị cũ và mới.
 - Nhân viên chủ động tạo đơn giải trình với ngày công, loại vấn đề và nội dung; có thể chụp hoặc đính kèm một ảnh minh chứng, không bắt buộc. Admin tiếp nhận và duyệt/từ chối; lý do từ chối không bắt buộc. Duyệt giải trình không tự điều chỉnh bảng công. Không yêu cầu GPS khi tạo/chọn ảnh giải trình. Đơn cũ từ Admin được giữ tương thích nhưng không tạo yêu cầu Admin mới.
 - Một nhân viên có thể thuộc nhiều phòng ban nhưng phải có đúng một phân công tổ chức chính tại một thời điểm.
+- PQ1 bổ sung team thuộc đúng một phòng ban, có thể xuyên chi nhánh. Thành viên phải có phân công còn hiệu lực trong phòng đó; rút thành viên giữ lịch sử, không xóa vật lý. Mã/phòng ban của team không đổi sau khi tạo.
+- Tư cách thành viên và quyền quản lý độc lập. Chỉ Admin cấp/thu hồi quyền `DEPARTMENT_HEAD` theo phòng ban hoặc `TEAM_LEADER` theo team; một người có thể nhận nhiều phạm vi. Hình thức tạm thời/chính thức độc lập với thời hạn có giới hạn/vô thời hạn. Quyền có hiệu lực từ thời điểm bắt đầu (bao gồm) đến kết thúc (không bao gồm), được kiểm tra tại Backend mỗi request.
+- PQ1 chỉ mở danh sách tổ chức cơ bản trong đúng phạm vi, không gán role toàn cục `MANAGER`, không mở dữ liệu liên hệ/tài khoản hay quyền duyệt đơn. Tài khoản/hồ sơ/phạm vi ngừng hoạt động khiến quyền tạm không hiệu lực; khôi phục không phục hồi quyền đã thu hồi/hết hạn. Quyền toàn cục có sẵn được giữ nguyên, không tự bị giới hạn bởi grant mới.
 - Nhân viên nghỉ việc được chuyển sang trạng thái ngừng làm việc với ngày hiệu lực và lý do bắt buộc; hồ sơ, tài khoản và phiên đăng nhập bị khóa nhưng mã nhân viên cùng lịch sử nghiệp vụ không bị xóa vật lý. Admin có thể khôi phục hồ sơ bằng một quyết định có audit.
 - Phiên đăng nhập có hiệu lực tối đa 30 ngày. Mỗi tài khoản chỉ có một thiết bị hoạt động; đăng nhập mới thu hồi phiên cũ và lịch sử đăng nhập/đăng xuất được giữ để Admin kiểm tra.
 - Mỗi lần nhân sự đăng nhập phải tạo cảnh báo email tới địa chỉ Admin đã cấu hình. Lỗi gửi email không được chặn đăng nhập nhưng phải hiển thị trạng thái giao nhận trong Admin Web.
@@ -56,8 +59,8 @@ Sản phẩm ưu tiên xác nhận đáng tin cậy: **ai, lúc nào, ở đâu 
 - Tuyển dụng, onboarding, đào tạo, hợp đồng lao động, BHXH.
 - Quản lý tài sản và kho thiết bị.
 - GPS tracking nền/liên tục hoặc bản đồ theo dõi nhân viên cả ngày.
-- Microservices, Kubernetes, message broker hoặc workflow nhiều cấp.
-- Bộ máy phân quyền động ngoài bốn nhóm Admin, Kế toán trưởng, Quản lý khu vực và Nhân viên.
+- Microservices, Kubernetes, message broker hoặc workflow nhiều cấp ngoài tuyến Leader xác nhận → Trưởng phòng duyệt đã được duyệt trong kế hoạch PQ (tuyến này còn `NOT_IMPLEMENTED` tại PQ1).
+- Bộ máy phân quyền tùy biến tổng quát ngoài role hiện có và quyền quản lý theo phạm vi/thời hạn đã chốt trong PQ.
 
 ## Success criteria
 

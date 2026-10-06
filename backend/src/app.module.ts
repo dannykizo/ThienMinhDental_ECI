@@ -15,6 +15,7 @@ import { WorkSchedulesModule } from './modules/work-schedules/work-schedules.mod
 import { DisciplinaryActionsModule } from './modules/disciplinary-actions/disciplinary-actions.module.js';
 import { validateEnvironment } from './config/validate-environment.js';
 import { OperationsModule } from './modules/operations/operations.module.js';
+import { OrganizationAccessModule } from './modules/organization-access/organization-access.module.js';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { OperationsModule } from './modules/operations/operations.module.js';
     HealthModule,
     AuthModule,
     EmployeesModule,
+    OrganizationAccessModule,
     WorkSchedulesModule,
     OfficeLocationsModule,
     AttendanceModule,

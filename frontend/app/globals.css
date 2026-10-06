@@ -1254,6 +1254,20 @@ tbody tr:hover {
   scroll-margin-top: 24px;
 }
 
+.organization-tabs {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 0 8px;
+}
+
+.organization-tabs button { flex-shrink: 0; }
+.organization-fields { display: contents; border: 0; padding: 0; margin: 0; min-width: 0; }
+.organization-history-toggle { padding: 0 24px 18px; font-size: 0.85rem; }
+.organization-history-toggle label { display: flex; gap: 8px; align-items: center; }
+.organization-audit { padding: 20px 24px; }
+.organization-audit pre { overflow: auto; max-height: 320px; padding: 12px; background: var(--canvas); font-size: 0.8rem; }
+
 .panel-heading {
   display: flex;
   padding: 20px 24px;

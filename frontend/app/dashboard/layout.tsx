@@ -15,6 +15,7 @@ import {
   LogOut,
   MapPin,
   Menu,
+  Network,
   ShieldCheck,
   ShieldAlert,
   TriangleAlert,
@@ -61,6 +62,13 @@ const navigation: NavItem[] = [
     href: '/dashboard/access',
     ready: true,
     icon: ShieldCheck,
+  },
+  {
+    group: 'NHÂN SỰ',
+    label: 'Tổ chức & phân quyền',
+    href: '/dashboard/organization',
+    ready: true,
+    icon: Network,
   },
   {
     group: 'VẬN HÀNH',
