@@ -87,7 +87,7 @@ export class ReportingService {
     return row ?? {};
   }
 
-  async monthly(month: string, employeeId?: string, departmentId?: string): Promise<MonthlyRow[]> {
+  async monthly(month: string, employeeId?: string, departmentId?: string, allowedEmployeeIds?: string[]): Promise<MonthlyRow[]> {
     this.validateMonth(month);
     const rows = await this.dataSource.query<MonthlyRawRow[]>(`WITH bounds AS (
       SELECT $1::date AS month_start, LEAST(($1::date + INTERVAL '1 month - 1 day')::date, (now() AT TIME ZONE 'Asia/Bangkok')::date) AS month_end
@@ -119,6 +119,7 @@ export class ReportingService {
       ) selected_schedule ON true
       WHERE e.is_active=true
         AND ($2::uuid IS NULL OR e.id=$2::uuid) AND ($3::uuid IS NULL OR e.department_id=$3::uuid)
+        AND ($4::uuid[] IS NULL OR e.id=ANY($4::uuid[]))
     ), event_rollup AS (
       SELECT employee_id,(server_time AT TIME ZONE 'Asia/Bangkok')::date work_date,
         MIN(server_time) FILTER (WHERE event_type='CHECK_IN') checked_in_at,
@@ -138,7 +139,7 @@ export class ReportingService {
       COALESCE(er.risk_flags,'{}') AS "riskFlags",(SELECT COUNT(*)::int FROM attendance_adjustments aa WHERE aa.employee_id=s.employee_id AND aa.work_date=s.work_date) AS "adjustmentCount",
       s.start_time AS "scheduleStartTime",s.end_time AS "scheduleEndTime",s.late_tolerance_minutes AS "lateToleranceMinutes",
       s.early_leave_tolerance_minutes AS "earlyLeaveToleranceMinutes",s.required_work_minutes AS "scheduleRequiredWorkMinutes"
-      FROM scheduled s LEFT JOIN event_rollup er ON er.employee_id=s.employee_id AND er.work_date=s.work_date ORDER BY s.work_date,s.full_name`, [`${month}-01`, employeeId ?? null, departmentId ?? null]);
+      FROM scheduled s LEFT JOIN event_rollup er ON er.employee_id=s.employee_id AND er.work_date=s.work_date ORDER BY s.work_date,s.full_name`, [`${month}-01`, employeeId ?? null, departmentId ?? null, allowedEmployeeIds ?? null]);
     return rows.map(({ scheduleStartTime, scheduleEndTime, lateToleranceMinutes, earlyLeaveToleranceMinutes, scheduleRequiredWorkMinutes, ...row }) => ({
       ...row,
       ...calculateWorkSummary(row.checkedInAt, row.checkedOutAt, {
@@ -262,6 +263,8 @@ export class ReportingService {
       if (current?.status === 'LOCKED') throw new ConflictException({ code: 'ATTENDANCE_PERIOD_ALREADY_LOCKED', message: 'Kỳ công đã được chốt.' });
       const [pending] = await manager.query<Array<{ count: string }>>(`SELECT count(*)::text AS count FROM attendance_explanation_requests WHERE work_date >= $1::date AND work_date < $1::date + interval '1 month' AND status IN ('REQUESTED','SUBMITTED')`, [`${month}-01`]);
       if (Number(pending.count) > 0) throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: 'Có giải trình đang mở. Hãy xử lý trước khi chốt kỳ.' });
+      const [pendingLeave] = await manager.query<Array<{ count: string }>>(`SELECT count(*)::text AS count FROM leave_requests WHERE status='SUBMITTED' AND start_date < $1::date + interval '1 month' AND end_date >= $1::date`, [`${month}-01`]);
+      if (Number(pendingLeave.count) > 0) throw new ConflictException({ code: 'ATTENDANCE_PERIOD_HAS_BLOCKERS', message: 'Có đơn nghỉ đang mở. Hãy xử lý đủ hai bước trước khi chốt kỳ.' });
       const [saved] = await manager.query<Array<{ id: string }>>(`INSERT INTO attendance_periods(period_month,status,locked_by,locked_at,reopened_by,reopened_at,reopen_reason) VALUES($1::date,'LOCKED',$2,now(),NULL,NULL,NULL) ON CONFLICT(period_month) DO UPDATE SET status='LOCKED',locked_by=$2,locked_at=now(),reopened_by=NULL,reopened_at=NULL,reopen_reason=NULL,updated_at=now() RETURNING id`, [`${month}-01`, user.id]);
       await manager.query(`INSERT INTO configuration_audit_logs(resource_type,resource_id,action,old_value,new_value,created_by) VALUES('ATTENDANCE_PERIOD',$1,'LOCK',$2::jsonb,$3::jsonb,$4)`, [saved.id, JSON.stringify({ status: current?.status ?? 'OPEN' }), JSON.stringify({ status: 'LOCKED', month, reason: reason?.trim() || null }), user.id]);
     });

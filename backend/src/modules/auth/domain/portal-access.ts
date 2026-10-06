@@ -35,6 +35,8 @@ export function portalAccess(roles: RoleCode[], grants: ManagementGrant[], now: 
   const navigation = [...(admin ? adminRoutes : accountant ? accountingRoutes : area || legacy ? legacyManagerRoutes : [])];
   if (scoped) navigation.push('/dashboard/managed');
   if (admin || scoped) navigation.push('/dashboard/explanations');
+  if (admin || scoped) navigation.push('/dashboard/leave-workflow');
+  if (scoped) navigation.push('/dashboard/managed-modules');
   return {
     webAllowed: globalWeb || scoped,
     // PQ2 applies to explicitly appointed, currently eligible managers.

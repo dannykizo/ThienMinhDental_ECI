@@ -196,6 +196,14 @@ export class AttendancePeriodEntity {
 
 @Entity({ name: 'leave_requests' })
 export class LeaveRequestEntity {
+  @Column({ type: 'varchar', length: 30, name: 'approval_stage', nullable: true }) approvalStage!: import('../../modules/leave/domain/leave-workflow.js').LeaveStage | null;
+  @Column({ type: 'uuid', name: 'workflow_team_id', nullable: true }) workflowTeamId!: string | null;
+  @Column({ type: 'uuid', name: 'leader_user_id', nullable: true }) leaderUserId!: string | null;
+  @Column({ type: 'uuid', name: 'head_user_id', nullable: true }) headUserId!: string | null;
+  @Column({ type: 'integer', name: 'route_version', default: 0 }) routeVersion!: number;
+  @Column({ type: 'uuid', name: 'confirmed_by', nullable: true }) confirmedBy!: string | null;
+  @Column({ type: 'timestamptz', name: 'confirmed_at', nullable: true }) confirmedAt!: Date | null;
+  @Column({ type: 'text', name: 'confirmation_note', nullable: true }) confirmationNote!: string | null;
   @PrimaryGeneratedColumn('uuid') id!: string;
   @Column({ type: 'uuid', name: 'employee_id' }) employeeId!: string;
   @Column({ type: 'varchar', length: 30, name: 'leave_type' }) leaveType!: string;

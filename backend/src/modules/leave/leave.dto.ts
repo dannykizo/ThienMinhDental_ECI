@@ -17,8 +17,21 @@ export class CreateLeaveRequestDto extends CreateOwnLeaveRequestDto {
 }
 
 export class ReviewLeaveRequestDto {
+  @IsInt() @Min(0) expectedVersion!: number;
   @IsIn(['APPROVED', 'REJECTED']) status!: 'APPROVED' | 'REJECTED';
   @IsOptional() @IsString() @MaxLength(2000) reviewNote?: string;
+}
+
+export class ConfirmLeaveRequestDto {
+  @IsInt() @Min(0) expectedVersion!: number;
+  @IsOptional() @IsString() @MaxLength(2000) confirmationNote?: string;
+}
+export class SetLeaveRouteDto {
+  @IsUUID() teamId!: string;
+  @IsUUID() leaderUserId!: string;
+  @IsUUID() headUserId!: string;
+  @IsInt() @Min(0) expectedVersion!: number;
+  @IsString() @MinLength(5) @MaxLength(2000) reason!: string;
 }
 
 export class CreateLeavePolicyDto {

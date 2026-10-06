@@ -5,6 +5,8 @@ import { EmployeeLeaveBalanceEntity, LeaveBalanceAdjustmentEntity, LeavePolicyEn
 import { AuthModule } from '../auth/auth.module.js';
 import { LeaveController } from './leave.controller.js';
 import { LeaveService } from './leave.service.js';
+import { LeaveWorkflowService } from './application/leave-workflow.service.js';
+import { AnnouncementsModule } from '../announcements/announcements.module.js';
 
-@Module({ imports: [AuthModule, TypeOrmModule.forFeature([LeaveRequestEntity, LeavePolicyEntity, EmployeeLeaveBalanceEntity, LeaveBalanceAdjustmentEntity])], controllers: [LeaveController], providers: [LeaveService] })
+@Module({ imports: [AuthModule, AnnouncementsModule, TypeOrmModule.forFeature([LeaveRequestEntity, LeavePolicyEntity, EmployeeLeaveBalanceEntity, LeaveBalanceAdjustmentEntity])], controllers: [LeaveController], providers: [LeaveService, LeaveWorkflowService] })
 export class LeaveModule {}

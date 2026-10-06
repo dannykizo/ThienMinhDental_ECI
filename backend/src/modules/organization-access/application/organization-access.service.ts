@@ -89,7 +89,9 @@ export class OrganizationAccessService {
       departmentName: grant.departmentName, teamId: grant.teamId, teamName: grant.teamName,
       appointmentType: grant.appointmentType, validFrom: grant.validFrom, validUntil: grant.validUntil })),
       capabilities: { manageOrganization: user.roles.includes(RoleCode.Admin), readScopedDirectory: user.roles.includes(RoleCode.Admin) || grants.length > 0,
-        reviewWorkflow: grants.length > 0 ? 'EXPLANATION_TWO_STEP' : 'NOT_GRANTED' } };
+        reviewWorkflow: grants.length > 0 ? 'EXPLANATION_TWO_STEP' : 'NOT_GRANTED',
+        leaveWorkflow: grants.length > 0 ? 'LEAVE_TWO_STEP' : 'NOT_GRANTED',
+        readManagedModules: grants.length > 0 } };
   }
 
   async listTeams(user: AuthenticatedUserView): Promise<Team[]> {

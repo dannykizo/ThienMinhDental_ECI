@@ -19,7 +19,7 @@ describe('PQ2 manager portal/session policy', () => {
       expect(access.webAllowed).toBe(true);
       expect(access.sessionMode).toBe('WEB_AND_MOBILE');
       expect(access.homePath).toBe('/dashboard/managed');
-      expect(access.navigation).toEqual(['/dashboard/managed', '/dashboard/explanations']);
+      expect(access.navigation).toEqual(['/dashboard/managed', '/dashboard/explanations', '/dashboard/leave-workflow', '/dashboard/managed-modules']);
       expect(access.managementGrants[0]).not.toHaveProperty('reason');
     }
   });
