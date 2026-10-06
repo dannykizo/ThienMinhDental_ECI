@@ -3,6 +3,7 @@
 ## Quyết định đã duyệt
 
 - Admin quản trị cơ cấu, quyền và tuyến. Nhân viên gửi → Leader xác nhận → Trưởng phòng duyệt/từ chối; Admin không phải duyệt thêm, được xem lịch sử và người xử lý.
+- Điều chỉnh sau PQ5: Tech Lead xác nhận Admin quyết định thay cho **cả nghỉ phép và giải trình**, nhưng **chỉ khi tuyến thiếu hoặc không còn hợp lệ**. Yêu cầu lý do, người xử lý thực tế và thông báo cho nhân viên; không bypass tuyến hợp lệ hoặc quyết định lại đơn đã kết thúc. Các bàn giao PQ3/PQ5 phía dưới ghi nhận hành vi trước điều chỉnh này.
 - Mỗi team thuộc đúng một phòng ban, chỉ xuyên chi nhánh; không có team xuyên phòng ban trong phạm vi hiện tại. Một người có thể thuộc nhiều phòng/team và được Admin cấp nhiều phạm vi quản lý.
 - Membership không phải management grant. Quyền có hình thức tạm thời/chính thức, độc lập với thời hạn có giới hạn/vô thời hạn.
 - Admin chỉnh tuyến là thao tác quản trị trực tiếp: lưu là áp dụng ngay cho bước chưa thực hiện; không tạo đơn xin đổi tuyến, không sửa người từng xử lý, không tự cấp quyền ngoài phạm vi.
@@ -195,3 +196,31 @@ Tech Lead duyệt ma trận và **tuyến phép riêng**. Sao chép tuyến gi�
 - GitNexus registry không có repo và runner local không tồn tại; skill impact dùng checklist, rà source/call-site/diff. Không query repo khác hoặc giả định đã chạy graph impact/detect_changes.
 
 Điểm dừng: **PQ5**, không tự mở ERP hoặc lát cắt mới. Việc tiếp theo chỉ là nghiệm thu UI đã triển khai trên Web/điện thoại, không phải thêm scope.
+
+## Điều chỉnh sau PQ5 — Admin dự phòng & Admin workspace UX
+
+### Phạm vi được duyệt
+
+- Hai workspace xử lý nghỉ phép/giải trình: tách Hàng đợi đơn và Cấu hình tuyến, giữ brand tím/trắng, không redesign các module khác. Hàng đợi dùng summary thật, chip ngang, tìm kiếm/phân trang, thẻ ngắn và drawer chi tiết. Lý do/nội dung đầy đủ, actual actor/time, tuyến và audit nằm trong drawer; raw audit chỉ mở khi cần đối soát.
+- Sửa thiếu module-page ở trang nghỉ phép, panel không có padding và nút lưu bị grid kéo giãn. Form hai cột, nút lưu ở footer, cấu hình cũ không còn trong lựa chọn hiện hành được ghi rõ và không mở chỉnh default không hợp lệ. Menu phân biệt Chính sách & quỹ phép / Xử lý nghỉ phép / Xử lý giải trình.
+- Admin dự phòng chỉ cho SUBMITTED đang thiếu/không còn tuyến hợp lệ, checked live trong transaction. Tuyến khỏe vẫn qua Leader → Head. Không tự duyệt đơn của mình/người gửi, không để actual confirmer quyết định, không xử lý REQUESTED chưa có phản hồi, terminal hoặc kỳ khóa. Không tự mở lại kỳ hay sửa bảng công.
+- Review dùng expectedVersion và adminOverrideReason ≥5 ký tự. canAdminReview là capability riêng từ Backend, không đổi canReview/canConfirm để giả quyền Head. API không có explicit reason vẫn không cho Admin bypass. Nghỉ phép từ chối vẫn yêu cầu reviewNote, approval vẫn gọi balance validator trong cùng transaction.
+
+### File/module và dữ liệu
+
+- Backend: migration 1791849600000-admin-fallback-review; data-source/workforce entities; leave và attendance Domain/workflow services/review DTO. Ngoài lớp UI theo chỉ thị trực tiếp về quyền duyệt thay và thông báo. decision_method nullable cho lịch sử, ROUTED/ADMIN_FALLBACK cho quyết định mới; admin_override_reason chỉ thuộc fallback. Down từ chối xóa provenance khi có quyết định mới.
+- Không điền xác nhận giả; giữ team/người/thời điểm xác nhận đã có. reviewedBy/reviewedAt là actual actor/time. Audit ADMIN_FALLBACK_REVIEW và inbox cùng transaction; push qua sender tracked sau commit. Thông báo quyết định routed hoặc fallback ghi tên người xử lý thực tế.
+- Web: hai workspace components/pages, workflow-ui.tsx (drawer/focus/steps/history), workflow.css scoped + root import, sidebar labels. Không thay API nhân sự/báo cáo/scoped modules, không thêm framework/package hoặc generic workflow engine.
+- Test nguồn mới backend/test/admin-fallback-review.spec.ts: missing/healthy/revoked/expired route, non-Admin/self/submitter/confirmer/terminal, explicit intent/trimmed reason, provenance/audit/inbox name/no fake confirmation, leave balance callback. Không chạy suite theo chỉ thị Tech Lead.
+- Canonical PROJECT/FLOWS/IMPLEMENTATION/README cập nhật quyết định mới. Không chỉnh Mobile, không đóng gói APK; form dirty của Tech Lead giữ nguyên ngoài commit. App hiện hữu nhận tên actual actor qua Hộp thư/metadata hiện có.
+
+### Kiểm tra và giới hạn thực tế
+
+- Typecheck/lint đạt; root Backend/Web build và cả static Cloudflare/regular Web build đạt. Migration local áp dụng; sửa chặt NULL check đã revert/reapply **trước khi có decision_method data** (kiểm tra cả hai bảng 0), không mất dữ liệu lịch sử. Health OK, API watch được khởi động lại có chủ đích sau build; Web dev giữ chạy.
+- 32 API checks development-only UXA-DEV-0A3FB2 đạt: missing route/explicit intent/whitespace reason/non-Admin/stale; healthy route capability/direct request denied; Leader confirmation thật; thu hồi Leader không làm mất Head step đã xác nhận; thu hồi Head cho fallback; actual Admin provenance, giữ absent/completed confirmation, terminal denial; phép dùng 480/960 phút và rejection giải phóng reservation; explanation optional reviewNote; Admin self-denial; inbox actual Admin name; 4 fallback audits; không sửa attendance.
+- Kiểm tra fixture có lần đầu dừng do script kỳ vọng login 201 thay vì contract 200; cleanup đã xử lý. Sau 32 checks, script kỳ vọng cancel 200 thay vì 201 nên dừng cleanup sau một cancel đã thành công; hoàn tất cleanup có kiểm tra lại. Không sửa API contract để hợp script. Hai fixture departments inactive; team inactive, 2 grants revoked, membership ended, policy inactive, pending fixture leave=0. Tổng 6 users (5 employee profiles, 1 cleanup-only Admin) inactive/sessions revoked. Giữ default routes/history/audit/inbox; không hard-delete, không thay phiên demo Web/app.
+- Chrome authenticated desktop: cả hai workspace hiển thị đúng spacing/menu; tab cấu hình và form nút lưu không kéo cao; drawer, lý do bắt buộc và Escape hủy dialog không đổi đơn. Không submit/review/reroute các đơn có sẵn qua UI. Summary vẫn 2 đơn nghỉ mở sau cleanup, không có pending fixture.
+- Chưa nghiệm thu mọi kích thước màn hình/chữ lớn/trình duyệt khác hoặc submit form/routed-manager UI thực tế. Push thật lên điện thoại chưa xác nhận; inbox tên người quyết định đã kiểm tra, FCM phụ thuộc deployment/token. Không tuyên bố đã deploy production; cần migration + Backend trước Web mới.
+- GitNexus không có repo trong registry, runner local không tồn tại. Dùng skill impact checklist và source/call-site/diff để rà ranh giới; không claim graph impact/detect_changes.
+
+Điểm dừng tại điều chỉnh đã duyệt này. Các module Admin khác giữ hiện trạng; không tự mở ERP hoặc một milestone mới.

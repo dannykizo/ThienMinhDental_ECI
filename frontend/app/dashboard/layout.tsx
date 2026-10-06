@@ -43,7 +43,7 @@ interface NavItem {
 const navigation: NavItem[] = [
   { group: 'VẬN HÀNH', label: 'Xử lý nghỉ phép', href: '/dashboard/leave-workflow', ready: true, icon: Clock3 },
   { group: 'VẬN HÀNH', label: 'Theo dõi phạm vi quản lý', href: '/dashboard/managed-modules', ready: true, icon: Clock3 },
-  { group: 'VẬN HÀNH', label: 'Giải trình hai bước', href: '/dashboard/explanations', ready: true, icon: Clock3 },
+  { group: 'VẬN HÀNH', label: 'Xử lý giải trình', href: '/dashboard/explanations', ready: true, icon: Clock3 },
   {
     group: 'TỔNG QUAN',
     label: 'Tổng quan',
@@ -109,7 +109,7 @@ const navigation: NavItem[] = [
   },
   {
     group: 'NHÂN SỰ',
-    label: 'Đơn nghỉ phép',
+    label: 'Chính sách & quỹ phép',
     href: '/dashboard/leave',
     ready: true,
     icon: CalendarCheck2,

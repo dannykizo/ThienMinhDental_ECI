@@ -1,5 +1,7 @@
 'use client';
 
+import { ClipboardList, GitBranch, RefreshCw, Search, Settings2, ShieldCheck, ArrowRight, CalendarDays } from 'lucide-react';
+import { WorkflowDrawer, WorkflowSteps, WorkflowHistory } from '@/components/workflow-ui';
 import { type FormEvent, useEffect, useState } from 'react';
 import { EmptyState, LoadingState, Notice, Pagination, StatusBadge, ToastNotice, formatDate } from '@/components/admin-ui';
 import { EmployeePicker } from '@/components/employee-picker';
@@ -12,6 +14,7 @@ interface Explanation {
   workflowTeamId: string | null; workflowDepartmentId: string | null; leaderUserId: string | null; headUserId: string | null; teamName: string | null; departmentName: string | null;
   leaderName: string | null; headName: string | null; confirmedBy: string | null; confirmedByName: string | null; confirmedAt: string | null;
   confirmationNote: string | null; reviewedByName: string | null; reviewedAt: string | null; reviewNote: string | null;
+  decisionMethod: string | null; adminOverrideReason: string | null; canAdminReview: boolean;
   canConfirm: boolean; canReview: boolean; canReroute: boolean; routingRequired: boolean;
 }
 interface Route { employeeId: string; employeeCode: string; fullName: string; teamId: string; teamName: string; leaderUserId: string; leaderName: string; headUserId: string; headName: string; version: number; }
@@ -19,7 +22,7 @@ interface Member { employeeId: string; userId: string; employeeCode: string; ful
 interface Grant { userId: string; employeeId: string; name: string; roleCode: string; teamId: string | null; departmentId: string; }
 interface Options { members: Member[]; grants: Grant[]; }
 interface Audit { id: string; action: string; actorName: string; createdAt: string; oldValue: unknown; newValue: unknown; }
-const stageLabels: Record<string, string> = { EMPLOYEE_RESPONSE: 'Chờ nhân viên phản hồi yêu cầu cũ', WAITING_ROUTING: 'Chờ Admin phân tuyến', LEADER_CONFIRMATION: 'Bước 1 · Chờ Leader xác nhận', HEAD_APPROVAL: 'Bước 2 · Chờ Trưởng phòng duyệt', COMPLETED: 'Đã xử lý hai bước' };
+const stageLabels: Record<string, string> = { EMPLOYEE_RESPONSE: 'Chờ nhân viên phản hồi yêu cầu cũ', WAITING_ROUTING: 'Chờ Admin xử lý tuyến', LEADER_CONFIRMATION: 'Bước 1 · Chờ Leader xác nhận', HEAD_APPROVAL: 'Bước 2 · Chờ Trưởng phòng duyệt', COMPLETED: 'Đã kết thúc xử lý' };
 const issueLabels: Record<string, string> = { MISSING_CHECK_IN: 'Thiếu check-in', MISSING_CHECK_OUT: 'Thiếu check-out', DUPLICATE_ATTEMPT: 'Chấm công trùng', WRONG_DATE_OR_DEVICE_TIME: 'Sai ngày / giờ thiết bị', GPS_RISK: 'Rủi ro GPS', OTHER: 'Khác' };
 
 export function ExplanationsWorkspace({ onChanged }: { onChanged?: () => Promise<void> }) {
@@ -32,9 +35,13 @@ export function ExplanationsWorkspace({ onChanged }: { onChanged?: () => Promise
   const [employeeId, setEmployeeId] = useState(''); const [teamId, setTeamId] = useState(''); const [leaderId, setLeaderId] = useState(''); const [headId, setHeadId] = useState(''); const [reason, setReason] = useState('');
   const [editing, setEditing] = useState<Explanation | null>(null);
   const [history, setHistory] = useState<{ id: string; entries: Audit[] } | null>(null);
+  const [view, setView] = useState<'QUEUE' | 'ROUTES'>('QUEUE');
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [routeSearch, setRouteSearch] = useState(''); const [routePage, setRoutePage] = useState(1);
   const { request, dialog } = useActionDialog();
 
   async function load(): Promise<void> {
+    setItems(null); setHistory(null); setDetailId(null);
     const session = await getAdminSession();
     const isAdmin = session.roles.includes('ADMIN');
     const [rows, choices, defaults] = await Promise.all([
@@ -54,6 +61,10 @@ export function ExplanationsWorkspace({ onChanged }: { onChanged?: () => Promise
     }
     void initial(); return () => { cancelled = true; };
   }, []);
+  useEffect(() => {
+    const focus = () => { if (document.querySelector('.dialog-backdrop')) return; void load().catch((caught: unknown) => { setError(caught instanceof Error ? caught.message : 'Không còn đọc được phạm vi.'); }); };
+    window.addEventListener('focus', focus); return () => window.removeEventListener('focus', focus);
+  }, []);
   async function refresh(): Promise<void> {
     if (busy) return; setBusy(true); setError('');
     try { await load(); } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể tải lại.'); } finally { setBusy(false); }
@@ -64,7 +75,7 @@ export function ExplanationsWorkspace({ onChanged }: { onChanged?: () => Promise
   }
   function editItem(item: Explanation): void {
     setEditing(item); setEmployeeId(item.employeeId); setTeamId(item.workflowTeamId ?? ''); setLeaderId(item.leaderUserId ?? ''); setHeadId(item.headUserId ?? ''); setReason('');
-    document.getElementById('explanation-routing-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setDetailId(null); setView('ROUTES');
   }
   async function saveRoute(event: FormEvent): Promise<void> {
     event.preventDefault(); if (busy) return;
@@ -78,17 +89,17 @@ export function ExplanationsWorkspace({ onChanged }: { onChanged?: () => Promise
       await load(); await onChanged?.();
     } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể lưu tuyến.'); } finally { setBusy(false); }
   }
-  async function process(item: Explanation, action: 'CONFIRM' | 'APPROVED' | 'REJECTED'): Promise<void> {
-    if (busy) return;
-    const note = await request({ title: action === 'CONFIRM' ? 'Leader xác nhận giải trình' : action === 'APPROVED' ? 'Trưởng phòng duyệt giải trình' : 'Trưởng phòng từ chối giải trình', description: action === 'CONFIRM' ? 'Xác nhận bước 1 và chuyển cho Trưởng phòng. Đây chưa phải quyết định phê duyệt.' : 'Quyết định kết thúc đơn và thông báo cho nhân viên. Duyệt không tự sửa giờ công.', confirmLabel: action === 'CONFIRM' ? 'Xác nhận và chuyển bước 2' : action === 'APPROVED' ? 'Duyệt' : 'Từ chối', fieldLabel: 'Ghi chú / lý do (không bắt buộc)', required: false, danger: action === 'REJECTED' });
-    if (note === null) return; setBusy(true); setError(''); setMessage('');
+  async function process(item: Explanation, action: 'CONFIRM' | 'APPROVED' | 'REJECTED', fallback = false): Promise<void> {
+    if (busy) return; setBusy(true);
+    const note = await request({ title: fallback ? `Admin ${action === 'APPROVED' ? 'duyệt' : 'từ chối'} thay giải trình` : action === 'CONFIRM' ? 'Leader xác nhận giải trình' : action === 'APPROVED' ? 'Duyệt giải trình' : 'Từ chối giải trình', description: fallback ? 'Chỉ thực hiện khi tuyến thiếu hoặc không còn hợp lệ. Backend kiểm tra lại quyền, giữ lịch sử xác nhận và thông báo tên bạn cho nhân viên.' : action === 'CONFIRM' ? 'Xác nhận bước 1 và chuyển cho Trưởng phòng; chưa phải quyết định phê duyệt.' : 'Quyết định cuối thông báo tên người xử lý; không tự sửa bảng công.', confirmLabel: action === 'CONFIRM' ? 'Xác nhận và chuyển tiếp' : action === 'APPROVED' ? 'Xác nhận duyệt' : 'Xác nhận từ chối', fieldLabel: fallback ? 'Lý do Admin xử lý thay (bắt buộc)' : 'Ghi chú / lý do (không bắt buộc)', required: fallback, minLength: fallback ? 5 : undefined, danger: action === 'REJECTED' });
+    if (note === null) { setBusy(false); return; } setError(''); setMessage('');
     try {
-      await apiRequest(`/attendance/explanations/${item.id}/${action === 'CONFIRM' ? 'confirm' : 'review'}`, { method: 'PATCH', body: JSON.stringify({ expectedVersion: item.routeVersion, ...(action === 'CONFIRM' ? { confirmationNote: note } : { status: action, reviewNote: note }) }) });
+      await apiRequest(`/attendance/explanations/${item.id}/${action === 'CONFIRM' ? 'confirm' : 'review'}`, { method: 'PATCH', body: JSON.stringify({ expectedVersion: item.routeVersion, ...(action === 'CONFIRM' ? { confirmationNote: note } : { status: action, reviewNote: note, ...(fallback ? { adminOverrideReason: note } : {}) }) }) });
       setMessage(action === 'CONFIRM' ? 'Đã xác nhận; chuyển Trưởng phòng duyệt.' : 'Đã ghi quyết định và gửi thông báo vào hộp thư nhân viên.'); await load(); await onChanged?.();
-    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể xử lý đơn.'); } finally { setBusy(false); }
+    } catch (caught) { setItems(null); setHistory(null); setDetailId(null); setError(caught instanceof Error ? caught.message : 'Không thể xử lý đơn. Tải lại để kiểm tra, không tự gửi lại.'); } finally { setBusy(false); }
   }
   async function showHistory(item: Explanation): Promise<void> {
-    if (busy) return; setBusy(true); setError(''); setHistory(null);
+    if (busy) return; setBusy(true); setError(''); setHistory(null); setDetailId(item.id);
     try { setHistory({ id: item.id, entries: await apiRequest<Audit[]>(`/attendance/explanations/${item.id}/history`) }); }
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Không tải được audit.'); } finally { setBusy(false); }
   }
@@ -98,37 +109,72 @@ export function ExplanationsWorkspace({ onChanged }: { onChanged?: () => Promise
   const chosenEmployee = options.members.find((m) => m.employeeId === employeeId);
   const leaders = [...new Map(options.grants.filter((g) => g.roleCode === 'TEAM_LEADER' && g.teamId === teamId && g.userId !== chosenEmployee?.userId).map((g) => [g.userId, g])).values()];
   const heads = [...new Map(options.grants.filter((g) => g.roleCode === 'DEPARTMENT_HEAD' && g.departmentId === (selectedTeam?.departmentId ?? editing?.workflowDepartmentId) && g.userId !== chosenEmployee?.userId && g.userId !== leaderId && g.userId !== editing?.confirmedBy).map((g) => [g.userId, g])).values()];
-  const visible = (items ?? []).filter((item) => (filter === 'ALL' || filter === 'OPEN' && ['SUBMITTED', 'REQUESTED'].includes(item.status) || filter === 'ACTION' && (item.canConfirm || item.canReview) || item.approvalStage === filter || item.status === filter) && `${item.employeeCode} ${item.fullName} ${item.workDate}`.toLocaleLowerCase('vi').includes(search.trim().toLocaleLowerCase('vi')));
+  const routeChoicesValid = Boolean(employeeId && teamId && leaderId && headId && (editing?.confirmedBy || chosenEmployee && selectedTeam && leaders.some(grant => grant.userId === leaderId)) && heads.some(grant => grant.userId === headId));
+  const visible = (items ?? []).filter((item) => (filter === 'ALL' || filter === 'OPEN' && ['SUBMITTED', 'REQUESTED'].includes(item.status) || filter === 'ACTION' && (item.canConfirm || item.canReview || item.canAdminReview) || item.approvalStage === filter || item.status === filter) && `${item.employeeCode} ${item.fullName} ${item.workDate}`.toLocaleLowerCase('vi').includes(search.trim().toLocaleLowerCase('vi')));
   const safePage = Math.min(page, Math.max(1, Math.ceil(visible.length / 10)));
 
-  return <section className="subsection">
+  const detail = (items ?? []).find(item => item.id === detailId);
+  const openItems = (items ?? []).filter(item => ['SUBMITTED','REQUESTED'].includes(item.status));
+  const actionCount = openItems.filter(item => item.canConfirm || item.canReview || item.canAdminReview).length;
+  const routingCount = openItems.filter(item => item.routingRequired).length;
+  const filteredRoutes = routes.filter(route => `${route.employeeCode} ${route.fullName} ${route.teamName}`.toLocaleLowerCase('vi').includes(routeSearch.trim().toLocaleLowerCase('vi')));
+  const safeRoutePage = Math.min(routePage, Math.max(1, Math.ceil(filteredRoutes.length / 10)));
+  function closeDetail(): void {
+    const opener = document.getElementById(`workflow-open-${detailId}`);
+    setDetailId(null); setHistory(null);
+    window.queueMicrotask(() => opener?.focus());
+  }
+  function changeView(value: 'QUEUE' | 'ROUTES'): void { if (!busy) { setView(value); setDetailId(null); } }
+
+  return <section className="workflow-workspace">
     {dialog}{message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}{error && <Notice kind="error">{error}</Notice>}
-    <p className="muted">Nhân viên gửi → Leader xác nhận → Trưởng phòng duyệt/từ chối. Admin quản trị tuyến, không duyệt thay. Quyền hiện hành do Backend kiểm tra mỗi thao tác.</p>
-    <div className="toolbar"><label>Trạng thái<select value={filter} disabled={busy} onChange={(e) => { setFilter(e.target.value); setPage(1); }}><option value="OPEN">Đang mở</option><option value="ACTION">Đến lượt tôi xử lý</option><option value="WAITING_ROUTING">Chờ phân tuyến</option><option value="LEADER_CONFIRMATION">Chờ Leader</option><option value="HEAD_APPROVAL">Chờ Trưởng phòng</option><option value="APPROVED">Đã duyệt</option><option value="REJECTED">Từ chối</option><option value="ALL">Tất cả trong phạm vi</option></select></label><label>Tìm kiếm<input type="search" placeholder="Mã, họ tên, ngày công…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></label><button type="button" className="secondary-button" disabled={busy} onClick={() => void refresh()}>{busy ? 'Đang xử lý…' : 'Tải lại'}</button></div>
-    {items === null ? !error && <LoadingState /> : visible.length === 0 ? <EmptyState title="Chưa có đơn phù hợp" description="Đổi bộ lọc hoặc tải lại. Quản lý chỉ thấy đơn được chỉ định trong phạm vi quyền còn hiệu lực." /> : <>
-      <div className="card-list">{visible.slice((safePage - 1) * 10, safePage * 10).map((item) => <article className="list-card" key={item.id}>
-        <div><p className="mono">{item.employeeCode} · {issueLabels[item.issueType] ?? item.issueType}</p><h3>{item.fullName}</h3><small>Ngày công: {item.workDate} · Gửi: {formatDate(item.createdAt)}</small>
-          <p>{item.approvalStage ? stageLabels[item.approvalStage] : 'Đơn lịch sử · giữ nguyên quyết định cũ'}</p>
-          {item.source === 'ADMIN_REQUEST' && <p className="muted">Yêu cầu cũ: {item.requestNote}{item.dueAt && ` · Hạn phản hồi: ${formatDate(item.dueAt)}`}</p>}
-          {item.teamName && <p className="muted">{item.departmentName} / {item.teamName} · Leader: {item.leaderName} → Trưởng phòng: {item.headName}</p>}
-          {item.responseText && <p style={{ whiteSpace: 'pre-wrap' }}>{item.responseText}</p>}
-          {item.evidenceImageReference ? <p><a href={`${new URL(apiUrl).origin}${item.evidenceImageReference}`} target="_blank" rel="noreferrer">Mở ảnh minh chứng có xác thực</a></p> : <p className="muted">Không đính kèm minh chứng.</p>}
-          {item.confirmedAt && <p>Leader đã xác nhận: {item.confirmedByName} · {formatDate(item.confirmedAt)}{item.confirmationNote && ` · ${item.confirmationNote}`}</p>}
-          {item.reviewedAt && <p>Người quyết định: {item.reviewedByName} · {formatDate(item.reviewedAt)}{item.reviewNote && ` · ${item.reviewNote}`}</p>}
-          <div className="action-group"><button className="table-action" disabled={busy} onClick={() => void showHistory(item)} type="button">Lịch sử xử lý</button>{item.canReroute && <button className="table-action" disabled={busy} onClick={() => editItem(item)} type="button">Đổi tuyến</button>}</div>
-        </div><div><StatusBadge value={item.status} /><div className="action-group">{item.canConfirm && <button className="table-action success-action" disabled={busy} onClick={() => void process(item, 'CONFIRM')}>Xác nhận bước 1</button>}{item.canReview && <><button className="table-action success-action" disabled={busy} onClick={() => void process(item, 'APPROVED')}>Duyệt bước 2</button><button className="table-action danger-action" disabled={busy} onClick={() => void process(item, 'REJECTED')}>Từ chối</button></>}</div></div>
-      </article>)}</div><Pagination page={safePage} pageSize={10} total={visible.length} onPageChange={setPage} /></>}
-    {history && <section className="editor-panel"><h3>Lịch sử đơn {history.id}</h3><button className="secondary-button" onClick={() => setHistory(null)} type="button">Đóng lịch sử</button>{history.entries.length === 0 ? <p className="muted">Đơn lịch sử chưa có audit theo luồng mới; không tạo bản ghi giả.</p> : <div className="audit-list">{history.entries.map((entry) => <div key={entry.id}><strong>{entry.action} · {entry.actorName} · {formatDate(entry.createdAt)}</strong><details><summary>Giá trị trước / sau</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify({ before: entry.oldValue, after: entry.newValue }, null, 2)}</pre></details></div>)}</div>}</section>}
-    {admin && <section className="editor-panel" id="explanation-routing-editor"><h2>{editing ? `Đổi tuyến đơn · ${editing.fullName}` : 'Tuyến mặc định theo nhân viên'}</h2><p className="muted">Mỗi nhân viên chọn rõ một team/phòng và hai người có quyền hiện hành. Lưu tuyến mặc định cũng cập nhật đơn đang mở; không tự chọn phòng chính. Không cần phê duyệt lại thao tác của Admin.</p>
-      <form className="form-grid" onSubmit={(e) => void saveRoute(e)}><fieldset className="span-2" disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
+    <div className="workflow-summary">
+      <button type="button" disabled={busy || items === null} onClick={() => { changeView('QUEUE'); setFilter('OPEN'); setPage(1); }}><span className="workflow-summary-icon"><ClipboardList size={20} /></span><span><small>Đơn đang mở</small><strong>{items === null ? '—' : openItems.length}</strong></span></button>
+      <button type="button" disabled={busy || items === null} onClick={() => { changeView('QUEUE'); setFilter('ACTION'); setPage(1); }}><span className="workflow-summary-icon"><ShieldCheck size={20} /></span><span><small>Đến lượt bạn xử lý</small><strong>{items === null ? '—' : actionCount}</strong></span></button>
+      <button type="button" disabled={busy || items === null} onClick={() => { changeView('QUEUE'); setFilter('WAITING_ROUTING'); setPage(1); }}><span className="workflow-summary-icon warning"><GitBranch size={20} /></span><span><small>Tuyến cần xử lý</small><strong>{items === null ? '—' : routingCount}</strong></span></button>
+    </div>
+    <nav className="workflow-tabs" aria-label="Khu vực xử lý"><button type="button" aria-current={view === 'QUEUE' ? 'page' : undefined} disabled={busy} onClick={() => changeView('QUEUE')}><ClipboardList size={17} />Hàng đợi đơn</button>{admin && <button type="button" aria-current={view === 'ROUTES' ? 'page' : undefined} disabled={busy} onClick={() => changeView('ROUTES')}><Settings2 size={17} />Cấu hình tuyến</button>}<button type="button" className="workflow-refresh" disabled={busy} onClick={() => void refresh()}><RefreshCw size={16} className={busy ? 'workflow-spin' : ''} />{busy ? 'Đang xử lý…' : 'Tải lại'}</button></nav>
+    {view === 'QUEUE' && <>
+      <div className="workflow-queue-toolbar"><div className="workflow-search"><Search size={17} aria-hidden="true" /><input aria-label="Tìm đơn theo mã nhân viên, họ tên hoặc ngày" type="search" placeholder="Tìm mã nhân viên, họ tên, ngày…" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} /></div><span className="muted">{items === null ? 'Đang tải dữ liệu' : `${visible.length} đơn trong phạm vi`}</span></div>
+      <div className="workflow-filters" aria-label="Lọc trạng thái"><button type="button" aria-pressed={filter === 'OPEN'} disabled={busy} onClick={() => { setFilter('OPEN'); setPage(1); }}>Đang mở</button><button type="button" aria-pressed={filter === 'ACTION'} disabled={busy} onClick={() => { setFilter('ACTION'); setPage(1); }}>Đến lượt tôi</button><button type="button" aria-pressed={filter === 'WAITING_ROUTING'} disabled={busy} onClick={() => { setFilter('WAITING_ROUTING'); setPage(1); }}>Cần Admin</button><button type="button" aria-pressed={filter === 'LEADER_CONFIRMATION'} disabled={busy} onClick={() => { setFilter('LEADER_CONFIRMATION'); setPage(1); }}>Chờ Leader</button><button type="button" aria-pressed={filter === 'HEAD_APPROVAL'} disabled={busy} onClick={() => { setFilter('HEAD_APPROVAL'); setPage(1); }}>Chờ Trưởng phòng</button><button type="button" aria-pressed={filter === 'APPROVED'} disabled={busy} onClick={() => { setFilter('APPROVED'); setPage(1); }}>Đã duyệt</button><button type="button" aria-pressed={filter === 'REJECTED'} disabled={busy} onClick={() => { setFilter('REJECTED'); setPage(1); }}>Từ chối</button><button type="button" aria-pressed={filter === 'EMPLOYEE_RESPONSE'} disabled={busy} onClick={() => { setFilter('EMPLOYEE_RESPONSE'); setPage(1); }}>Chờ phản hồi</button><button type="button" aria-pressed={filter === 'ALL'} disabled={busy} onClick={() => { setFilter('ALL'); setPage(1); }}>Tất cả</button></div>
+      {items === null ? !error && <LoadingState /> : visible.length === 0 ? <EmptyState title="Chưa có đơn phù hợp" description="Thử thay đổi bộ lọc hoặc tìm kiếm. Danh sách chỉ hiển thị dữ liệu trong phạm vi quyền hiện hành." /> : <>
+        <div className="workflow-list">{visible.slice((safePage - 1) * 10, safePage * 10).map(item => <article className="workflow-card" key={item.id}>
+          <div className="workflow-card-main"><div className="workflow-person"><span className="workflow-avatar" aria-hidden="true">{item.fullName?.trim().slice(0,1).toLocaleUpperCase('vi') || '?'}</span><div><h3>{item.fullName}</h3><span className="workflow-code">{item.employeeCode}</span></div></div>
+            <div className="workflow-card-meta"><span><CalendarDays size={15} />{item.workDate}</span><span>{issueLabels[item.issueType] ?? item.issueType}</span></div>
+            <p className="workflow-preview">{item.responseText ?? item.requestNote ?? 'Chờ nhân viên phản hồi'}</p>
+            <span className={item.routingRequired ? 'workflow-stage warning' : 'workflow-stage'}>{item.decisionMethod === 'ADMIN_FALLBACK' ? 'Admin đã quyết định thay' : item.approvalStage ? stageLabels[item.approvalStage] : 'Đơn lịch sử'}</span>
+          </div>
+          <div className="workflow-card-side"><StatusBadge value={item.status} /><p>{item.reviewedByName ? `Người quyết định: ${item.reviewedByName}` : item.teamName ?? 'Chưa có tuyến hợp lệ'}</p><button id={`workflow-open-${item.id}`} type="button" className="secondary-button" disabled={busy} onClick={() => void showHistory(item)}>Xem & xử lý<ArrowRight size={15} /></button></div>
+        </article>)}</div><Pagination page={safePage} pageSize={10} total={visible.length} onPageChange={setPage} />
+      </>}
+      <p className="workflow-help">Leader xác nhận → Trưởng phòng quyết định. {admin ? 'Admin chỉ xử lý thay khi tuyến thiếu hoặc không còn hợp lệ, có lý do và lưu vết.' : 'Quyền xử lý được Backend kiểm tra tại mỗi thao tác.'}</p>
+    </>}
+    {admin && view === 'ROUTES' && <div className="workflow-routing">
+      <section className="workflow-panel" id="explanation-routing-editor"><header className="workflow-panel-header"><span className="workflow-eyebrow">THIẾT LẬP TUYẾN</span><h2>{editing ? `Đổi tuyến · ${editing.fullName}` : 'Tuyến mặc định theo nhân viên'}</h2><p>Chọn team và hai người xử lý. Lưu áp dụng ngay cho các bước chưa hoàn tất; không sửa người hay thời điểm đã xác nhận.</p></header>
+
+        <form className="form-grid workflow-route-form" onSubmit={(e) => void saveRoute(e)}><fieldset className="workflow-route-fields" disabled={busy}>
         {editing ? <p><strong>{editing.employeeCode} · {editing.fullName}</strong></p> : <EmployeePicker employees={employees} value={employeeId} onChange={selectEmployee} />}
         <label>Team / phòng ban<select required value={teamId} disabled={Boolean(editing?.confirmedBy)} onChange={(e) => { setTeamId(e.target.value); setLeaderId(''); setHeadId(''); }}><option value="">Chọn team của nhân viên</option>{editing?.confirmedBy && !teams.some((t) => t.teamId === editing.workflowTeamId) && <option value={editing.workflowTeamId ?? ''}>{editing.departmentName} / {editing.teamName} · phạm vi đã xác nhận</option>}{teams.map((m) => <option key={m.teamId} value={m.teamId}>{m.departmentName} / {m.teamName}</option>)}</select></label>
         <label>Leader xác nhận<select required value={leaderId} disabled={Boolean(editing?.confirmedBy)} onChange={(e) => { setLeaderId(e.target.value); setHeadId(''); }}><option value="">Chọn Leader được cấp quyền</option>{editing?.confirmedBy && !leaders.some((g) => g.userId === editing.leaderUserId) && <option value={editing.leaderUserId ?? ''}>{editing.leaderName} · đã xác nhận</option>}{leaders.map((g) => <option key={g.userId} value={g.userId}>{g.name}</option>)}</select></label>
         <label>Trưởng phòng duyệt<select required value={headId} onChange={(e) => setHeadId(e.target.value)}><option value="">Chọn Trưởng phòng được cấp quyền</option>{heads.map((g) => <option key={g.userId} value={g.userId}>{g.name}</option>)}</select></label>
-        <label>Lý do cấu hình / đổi tuyến<textarea required minLength={5} maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-      </fieldset><div className="action-group"><button className="primary-button" disabled={busy || !employeeId || !teamId || !leaderId || !headId}>{busy ? 'Đang lưu…' : 'Lưu và áp dụng ngay'}</button>{editing && <button type="button" className="secondary-button" disabled={busy} onClick={() => selectEmployee('')}>Hủy đổi tuyến</button>}</div></form>
-      {options.members.length === 0 && <p className="muted">Chưa có thành viên team hợp lệ. Cấu hình tại Tổ chức & phân quyền trước.</p>}
-      <h3>Tuyến đã cấu hình</h3>{routes.length === 0 ? <p className="muted">Chưa có tuyến mặc định; đơn mới vẫn được tiếp nhận và chờ Admin phân tuyến.</p> : <div className="audit-list">{routes.map((r) => <div key={r.employeeId}><strong>{r.employeeCode} · {r.fullName}</strong><span>{r.teamName} · {r.leaderName} → {r.headName}</span><button className="table-action" disabled={busy} type="button" onClick={() => selectEmployee(r.employeeId)}>Chỉnh tuyến mặc định</button></div>)}</div>}
-    </section>}
+        <label className="workflow-field-wide">Lý do cấu hình / đổi tuyến<textarea required minLength={5} maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} /></label>
+      </fieldset><div className="workflow-form-actions"><button className="primary-button" disabled={busy || !routeChoicesValid}>{busy ? 'Đang lưu…' : 'Lưu và áp dụng ngay'}</button>{editing && <button type="button" className="secondary-button" disabled={busy} onClick={() => selectEmployee('')}>Hủy chỉnh sửa</button>}</div></form>
+
+        {options.members.length === 0 && <div className="workflow-panel-note"><Notice kind="info">Chưa có thành viên team hợp lệ. <a href="/dashboard/organization">Cấu hình Tổ chức & phân quyền</a> trước khi đặt tuyến. Đơn đã gửi vẫn được giữ trong hàng đợi.</Notice></div>}
+      </section>
+      <section className="workflow-panel"><header className="workflow-panel-header"><span className="workflow-eyebrow">TỔNG QUAN CẤU HÌNH</span><h2>Tuyến đã thiết lập <span className="workflow-count">{routes.length}</span></h2><p>Lịch sử cấu hình được giữ lại, kể cả khi người hoặc team ngừng hoạt động. Lựa chọn mới chỉ dùng quyền hợp lệ.</p></header>
+        <div className="workflow-route-search workflow-search"><Search size={16} aria-hidden="true" /><input aria-label="Tìm tuyến đã cấu hình" type="search" placeholder="Tìm nhân viên hoặc team…" value={routeSearch} onChange={event => { setRouteSearch(event.target.value); setRoutePage(1); }} /></div>
+        {filteredRoutes.length === 0 ? <EmptyState title="Chưa có tuyến phù hợp" description="Chọn nhân viên trong biểu mẫu để thiết lập, hoặc đổi từ khóa tìm kiếm." /> : <div className="workflow-route-list">{filteredRoutes.slice((safeRoutePage - 1) * 10,safeRoutePage * 10).map(route => <article key={route.employeeId} className="workflow-route-card"><div><h3>{route.fullName}</h3><small>{route.employeeCode} · {route.teamName}</small>{!employees.some(employee => employee.id === route.employeeId) && <p className="workflow-route-historical">Không còn trong lựa chọn cấu hình hiện hành</p>}<div className="workflow-route-people"><span>{route.leaderName}</span><ArrowRight size={14} /><span>{route.headName}</span></div></div><button type="button" className="table-action" disabled={busy || !employees.some(employee => employee.id === route.employeeId)} onClick={() => { selectEmployee(route.employeeId); document.getElementById('explanation-routing-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Chỉnh tuyến</button></article>)}</div>}
+        <Pagination page={safeRoutePage} pageSize={10} total={filteredRoutes.length} onPageChange={setRoutePage} />
+      </section>
+    </div>}
+    {detail && <WorkflowDrawer title={detail.fullName} subtitle={`${detail.employeeCode} · Đơn giải trình`} busy={busy} onClose={closeDetail}>
+      <div className="workflow-detail-status"><StatusBadge value={detail.status} /><span>{detail.decisionMethod === 'ADMIN_FALLBACK' ? 'Admin quyết định thay' : detail.approvalStage ? stageLabels[detail.approvalStage] : 'Đơn lịch sử'}</span></div>
+      <dl className="workflow-facts"><div><dt>Ngày công</dt><dd>{detail.workDate}</dd></div><div><dt>Vấn đề</dt><dd>{issueLabels[detail.issueType] ?? detail.issueType}</dd></div><div><dt>Gửi lúc</dt><dd>{formatDate(detail.createdAt)}</dd></div>{detail.dueAt && <div><dt>Hạn phản hồi yêu cầu cũ</dt><dd>{formatDate(detail.dueAt)}</dd></div>}</dl><div className="workflow-detail-block"><h3>Nội dung giải trình</h3><p className="workflow-full-text">{detail.responseText ?? detail.requestNote ?? 'Chưa có phản hồi.'}</p>{detail.evidenceImageReference ? <a className="secondary-button" href={`${new URL(apiUrl).origin}${detail.evidenceImageReference}`} target="_blank" rel="noreferrer">Mở ảnh minh chứng có xác thực</a> : <p className="muted">Không đính kèm minh chứng.</p>}</div>
+      <div className="workflow-detail-block"><h3>Tuyến & người xử lý</h3>{detail.teamName && <p className="muted">{detail.departmentName} / {detail.teamName}</p>}<WorkflowSteps leader={detail.leaderName} head={detail.headName} confirmed={detail.confirmedByName} confirmedAt={detail.confirmedAt} reviewed={detail.reviewedByName} reviewedAt={detail.reviewedAt} fallback={detail.decisionMethod === 'ADMIN_FALLBACK'} terminal={!['SUBMITTED','REQUESTED'].includes(detail.status)} />{detail.confirmationNote && <p className="workflow-full-text">Ghi chú xác nhận: {detail.confirmationNote}</p>}{detail.reviewNote && <p className="workflow-full-text">Ghi chú quyết định: {detail.reviewNote}</p>}{detail.adminOverrideReason && <Notice kind="info">Lý do Admin xử lý thay: {detail.adminOverrideReason}</Notice>}</div>
+      {detail.canAdminReview && <Notice kind="info"><strong>Tuyến đang thiếu hoặc không còn hợp lệ.</strong> Bạn có thể cấu hình lại, hoặc quyết định thay với lý do. Nhân viên sẽ nhận thông báo tên người xử lý.</Notice>}
+      <div className="workflow-detail-actions">{detail.canConfirm && <button type="button" className="primary-button" disabled={busy} onClick={() => void process(detail,'CONFIRM')}>Xác nhận & chuyển tiếp</button>}{detail.canReview && <><button type="button" className="primary-button" disabled={busy} onClick={() => void process(detail,'APPROVED')}>Duyệt đơn</button><button type="button" className="danger-button" disabled={busy} onClick={() => void process(detail,'REJECTED')}>Từ chối</button></>}{detail.canAdminReview && <><button type="button" className="primary-button" disabled={busy} onClick={() => void process(detail,'APPROVED',true)}><ShieldCheck size={17} />Admin duyệt thay</button><button type="button" className="danger-button" disabled={busy} onClick={() => void process(detail,'REJECTED',true)}>Từ chối thay</button></>}{detail.canReroute && <button type="button" className="secondary-button" disabled={busy} onClick={() => editItem(detail)}><GitBranch size={16} />Đổi tuyến</button>}</div>
+      <div className="workflow-detail-block"><h3>Lịch sử xử lý</h3>{history?.id === detail.id ? <WorkflowHistory entries={history.entries} /> : busy ? <LoadingState /> : <p className="muted">Chưa tải được lịch sử. Đóng chi tiết và mở lại để thử lại.</p>}</div>
+    </WorkflowDrawer>}
   </section>;
 }

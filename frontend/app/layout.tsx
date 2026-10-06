@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import 'leaflet/dist/leaflet.css';
 import './globals.css';
+import './workflow.css';
 
 export const metadata: Metadata = {
   title: 'Thiên Minh Dental Workforce',
