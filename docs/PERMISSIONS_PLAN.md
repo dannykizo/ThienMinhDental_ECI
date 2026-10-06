@@ -16,7 +16,7 @@
 | PQ1 | Team, thành viên, quyền theo phạm vi/thời hạn, Admin Web, danh sách tổ chức cơ bản có scope | Implemented; API và Web đã kiểm tra |
 | PQ2 | Quản lý đăng nhập Web + một Mobile đồng thời; refresh/revocation và quyền hiện hành | Implemented; API đã kiểm tra, UI authenticated chưa xác nhận do Chrome chặn API |
 | PQ3 | Giải trình hai bước, tuyến mặc định theo nhân viên, Admin đổi bước chưa xử lý, evidence/audit/inbox/push | Implemented; API/build đã kiểm tra, UI authenticated bị Chrome chặn API |
-| PQ4 | Khu vực quản lý trong app hiện tại, dùng cùng API | NOT_IMPLEMENTED |
+| PQ4 | Khu vực quản lý trong app hiện tại, dùng cùng API | Implemented; analyze/debug build/Hot Reload đạt, nghiệm thu thao tác quản lý trên điện thoại còn thiếu |
 | PQ5 | Nghỉ phép trước; quyền công tác/chấm công/báo cáo/thông báo theo từng module đã xác định | NOT_IMPLEMENTED |
 
 Mỗi lát cắt đi Database → Backend API → Web/App liên quan → kiểm tra phù hợp → bàn giao. Không triển khai đồng thời các lát cắt. Theo chỉ thị Tech Lead, không tự chạy test suite; vẫn bổ sung test cho thay đổi API/permission và báo rõ chưa chạy.
@@ -124,4 +124,30 @@ Các danh sách scoped không trả email/số điện thoại/tài khoản/phâ
 - GitNexus không có index repo này/local runner; rà search/call-site/diff, không query repo khác hoặc giả định đã chạy impact/detect_changes.
 - Deploy: migration + Backend trước Web. Mobile hiện tại vẫn gửi/hiển thị `SUBMITTED`/nhận thông báo, chưa hiển thị chi tiết stage hoặc có màn quản lý mới; thuộc PQ4. Chưa kiểm chứng push thật, concurrency/DB outage và rollback trên production.
 
-Điểm dừng hiện hành: **PQ3**. PQ4/PQ5 `NOT_IMPLEMENTED`, không tự chuyển sang app quản lý hoặc module khác.
+Điểm dừng tại bàn giao PQ3: chưa thực hiện PQ4/PQ5. Trạng thái hiện hành bên dưới.
+
+## PQ4 — phạm vi bàn giao
+
+- Giữ app/năm tab nhân viên. Lối vào Xử lý giải trình tại Home và tab Giải trình dùng `/organization/mine` capability `EXPLANATION_TWO_STEP`, không suy từ membership/role. Refresh quyền khi khôi phục/login/resume/làm mới danh sách; lỗi refresh không cấp lối vào bằng snapshot cũ.
+- Manager queue dùng `/attendance/explanations`, lọc ngang theo bước/cần tôi xử lý, tìm mã/tên/ngày/team và phân trang cục bộ 10 mục. Chi tiết tải lại scope/list/history; hiển thị team/phòng, bước, người chỉ định và người đã xử lý thật/thời gian/ghi chú.
+- Leader chỉ có xác nhận; Head duyệt/từ chối theo Backend capabilities. Dialog mô tả hậu quả, ghi chú tùy chọn; `expectedVersion` bắt buộc. Lỗi stale/403/kỳ khóa/mạng không tự gửi lại, không đưa vào queue nhân viên; bỏ cache actionable và yêu cầu đọc lại. Reload/resume trong lúc dialog mở làm snapshot không còn dùng được. Không sửa chấm công hay thêm cấp Admin.
+- Evidence Bearer cùng API host, chỉ nhận reference định dạng attendance hiện hữu. Bytes ở memory, xóa khi reload/phiên kết thúc; không chia sẻ token qua external URL hoặc lưu ảnh ra gallery. History hiển thị action/actor/time/status/ghi chú, không in payload GPS/raw audit nhạy cảm.
+- Employee list có bước/actor/time/note, màn chi tiết read-only với ảnh/history, giữ latest100 và queue hiện hữu. Global Admin không có grant không được app tự nâng thành người xử lý; Admin cấu hình tuyến/grant trên Web.
+
+### File/module và ranh giới PQ4
+
+- `mobile/lib/services/api_client.dart`: additive model/capability/history, scoped read/confirm/review/evidence; 403 nghiệp vụ không phải kết thúc phiên. Authentication/refresh 401/revocation vẫn xử lý như trước. Call-site `endsSession` đã rà ở session restore và queue; không đổi lifetime/token rotation.
+- `mobile/lib/app.dart`, `features/shell/employee_shell.dart`: đọc current capabilities, xóa khi kết thúc phiên, revalidate resume. `features/attendance/attendance_home.dart`: chỉ thêm lối vào quản lý.
+- `features/explanations`: màn manager queue/detail mới, workflow presentation chung, tích hợp chi tiết/bước vào đơn cá nhân. Không đổi GPS/queue/phụ thuộc.
+- `mobile/test/explanation_management_test.dart`: legacy metadata, capability, actor/stage, 403 giữ phiên, expectedVersion/note, stale không retry, evidence reference/authentication, dialog cancel và nút theo capability/read-only/revoked scope. Test nguồn bổ sung nhưng không chạy suite.
+- PROJECT/FLOWS/IMPLEMENTATION/README/mobile README và kế hoạch này cập nhật hiện trạng. Không sửa Backend/Admin Web/schema; không migration mới. Không chỉnh/stage thay đổi có sẵn `mobile/lib/features/leave/leave_request_screen.dart` của Tech Lead.
+
+### Kiểm tra và giới hạn PQ4
+
+- `dart format`, scoped `flutter analyze --no-pub` trên các file chạm và test mới: đạt (no issues). `git diff --check` đạt. Không chạy `flutter test`/pnpm test; không xuất APK release/bàn giao.
+- USB `32a65649` (RMX5555), reverse tcp:3001 được khôi phục. `flutter run --no-pub --dart-define=API_BASE_URL=http://127.0.0.1:3001/api`: build/cài debug/start thành công, Hot Reload thành công. Log Flutter/AndroidRuntime mức error của PID hiện hành chưa thấy exception trong lượt kiểm tra startup; không coi đây là nghiệm thu toàn bộ UI. Tooling còn cảnh báo Java native access/Firebase Built-in Kotlin tương tự các lượt trước; không nâng dependency ngoài scope.
+- PostgreSQL healthy; Backend localhost3001/api/health `ok`; API/Web được bật development mode/giữ chạy nền. Không đăng nhập thay thế phiên nhân viên demo, không cấp quyền/tuyến thật hay tạo quyết định giải trình để demo.
+- Chưa thao tác trực tiếp màn manager queue/dialog/ảnh/duyệt/từ chối trên điện thoại với tài khoản Leader/Head; chưa nghiệm thu font lớn/bàn phím, network ambiguity/reroute/revocation UI. Cần Admin cấu hình tài khoản/quyền/tuyến development-only phù hợp rồi kiểm tra thủ công; không giả định startup/analyze thay cho flow đó. Push thật vẫn phụ thuộc Firebase, PQ4 giữ route push về Inbox hiện hữu.
+- GitNexus MCP chưa có index repo này và runner local không tồn tại. Skill impact dùng làm checklist; kiểm tra search/call-site/diff trực tiếp, không tuyên bố đã query impact/detect_changes hoặc dùng graph repo khác.
+
+Điểm dừng hiện hành: **PQ4**. PQ5 `NOT_IMPLEMENTED`; không tự triển khai nghỉ phép hai bước hoặc module tiếp theo.

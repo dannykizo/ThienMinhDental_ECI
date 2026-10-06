@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
@@ -26,7 +27,6 @@ class ApiException implements Exception {
 
   bool get endsSession =>
       status == 401 ||
-      status == 403 ||
       code == 'SESSION_EXPIRED' ||
       code == 'SESSION_REVOKED' ||
       code == 'SESSION_USER_UNAVAILABLE' ||
@@ -39,6 +39,42 @@ class ApiException implements Exception {
 }
 
 enum ApiAvailability { available, offline, backendUnavailable }
+
+class ManagementAccess {
+  const ManagementAccess(
+      {required this.canReviewExplanations, required this.grants});
+
+  factory ManagementAccess.fromJson(Map<String, dynamic> json) =>
+      ManagementAccess(
+        canReviewExplanations: (json['capabilities']
+                as Map<String, dynamic>?)?['reviewWorkflow'] ==
+            'EXPLANATION_TWO_STEP',
+        grants: (json['grants'] as List<dynamic>? ?? <dynamic>[])
+            .map((dynamic item) =>
+                ManagementGrantView.fromJson(item as Map<String, dynamic>))
+            .toList(),
+      );
+
+  final bool canReviewExplanations;
+  final List<ManagementGrantView> grants;
+}
+
+class ManagementGrantView {
+  ManagementGrantView.fromJson(Map<String, dynamic> json)
+      : roleCode = json['roleCode'] as String,
+        departmentName = json['departmentName'] as String?,
+        teamName = json['teamName'] as String?,
+        appointmentType = json['appointmentType'] as String,
+        validUntil = json['validUntil'] == null
+            ? null
+            : DateTime.parse(json['validUntil'] as String).toLocal();
+
+  final String roleCode;
+  final String? departmentName;
+  final String? teamName;
+  final String appointmentType;
+  final DateTime? validUntil;
+}
 
 class SessionUser {
   const SessionUser({
@@ -169,6 +205,22 @@ class AttendanceExplanation {
     required this.workDate,
     this.source = 'ADMIN_REQUEST',
     this.createdAt,
+    this.approvalStage,
+    this.routeVersion,
+    this.canConfirm = false,
+    this.canReview = false,
+    this.routingRequired = false,
+    this.employeeCode,
+    this.fullName,
+    this.teamName,
+    this.departmentName,
+    this.leaderName,
+    this.headName,
+    this.confirmedByName,
+    this.confirmedAt,
+    this.confirmationNote,
+    this.reviewedByName,
+    this.reviewedAt,
   });
 
   factory AttendanceExplanation.fromJson(Map<String, dynamic> json) =>
@@ -188,6 +240,26 @@ class AttendanceExplanation {
         reviewNote: json['reviewNote'] as String?,
         status: json['status'] as String,
         workDate: json['workDate'] as String,
+        approvalStage: json['approvalStage'] as String?,
+        routeVersion: (json['routeVersion'] as num?)?.toInt(),
+        canConfirm: json['canConfirm'] == true,
+        canReview: json['canReview'] == true,
+        routingRequired: json['routingRequired'] == true,
+        employeeCode: json['employeeCode'] as String?,
+        fullName: json['fullName'] as String?,
+        teamName: json['teamName'] as String?,
+        departmentName: json['departmentName'] as String?,
+        leaderName: json['leaderName'] as String?,
+        headName: json['headName'] as String?,
+        confirmedByName: json['confirmedByName'] as String?,
+        confirmedAt: json['confirmedAt'] == null
+            ? null
+            : DateTime.parse(json['confirmedAt'] as String).toLocal(),
+        confirmationNote: json['confirmationNote'] as String?,
+        reviewedByName: json['reviewedByName'] as String?,
+        reviewedAt: json['reviewedAt'] == null
+            ? null
+            : DateTime.parse(json['reviewedAt'] as String).toLocal(),
       );
 
   final DateTime? dueAt;
@@ -201,6 +273,37 @@ class AttendanceExplanation {
   final String? reviewNote;
   final String status;
   final String workDate;
+  final String? approvalStage;
+  final int? routeVersion;
+  final bool canConfirm;
+  final bool canReview;
+  final bool routingRequired;
+  final String? employeeCode;
+  final String? fullName;
+  final String? teamName;
+  final String? departmentName;
+  final String? leaderName;
+  final String? headName;
+  final String? confirmedByName;
+  final DateTime? confirmedAt;
+  final String? confirmationNote;
+  final String? reviewedByName;
+  final DateTime? reviewedAt;
+}
+
+class ExplanationHistoryEntry {
+  ExplanationHistoryEntry.fromJson(Map<String, dynamic> json)
+      : action = json['action'] as String,
+        actorName = json['actorName'] as String,
+        createdAt = DateTime.parse(json['createdAt'] as String).toLocal(),
+        before = json['oldValue'] as Map<String, dynamic>?,
+        after = json['newValue'] as Map<String, dynamic>?;
+
+  final String action;
+  final String actorName;
+  final DateTime createdAt;
+  final Map<String, dynamic>? before;
+  final Map<String, dynamic>? after;
 }
 
 class BusinessTripAssignment {
@@ -560,6 +663,85 @@ class ApiClient {
 
   Future<void> logout() async {
     await _request('/auth/logout', method: 'POST');
+  }
+
+  Future<ManagementAccess> managementAccess() async =>
+      ManagementAccess.fromJson(await _request('/organization/mine'));
+
+  Future<List<AttendanceExplanation>> managedExplanations() async =>
+      (await _requestList('/attendance/explanations'))
+          .map((dynamic item) =>
+              AttendanceExplanation.fromJson(item as Map<String, dynamic>))
+          .toList();
+
+  Future<List<ExplanationHistoryEntry>> explanationHistory(String id) async =>
+      (await _requestList(
+              '/attendance/explanations/${Uri.encodeComponent(id)}/history'))
+          .map((dynamic item) =>
+              ExplanationHistoryEntry.fromJson(item as Map<String, dynamic>))
+          .toList();
+
+  Future<void> confirmExplanation(
+      AttendanceExplanation item, String note) async {
+    await _request(
+        '/attendance/explanations/${Uri.encodeComponent(item.id)}/confirm',
+        method: 'PATCH',
+        body: <String, dynamic>{
+          'expectedVersion': _explanationVersion(item),
+          if (note.trim().isNotEmpty) 'confirmationNote': note.trim(),
+        });
+  }
+
+  Future<void> reviewExplanation(AttendanceExplanation item,
+      {required bool approve, required String note}) async {
+    await _request(
+        '/attendance/explanations/${Uri.encodeComponent(item.id)}/review',
+        method: 'PATCH',
+        body: <String, dynamic>{
+          'expectedVersion': _explanationVersion(item),
+          'status': approve ? 'APPROVED' : 'REJECTED',
+          if (note.trim().isNotEmpty) 'reviewNote': note.trim(),
+        });
+  }
+
+  int _explanationVersion(AttendanceExplanation item) {
+    final int? version = item.routeVersion;
+    if (version == null || version < 0) {
+      throw const ApiException(
+          'Backend chưa cung cấp phiên bản tuyến. Hãy tải lại đơn.',
+          code: 'EXPLANATION_VERSION_REQUIRED');
+    }
+    return version;
+  }
+
+  /// Never attach credentials to a URL supplied by the server or another host.
+  Future<Uint8List> explanationEvidence(String reference) async {
+    if (!RegExp(r'^/api/attendance/evidence/[0-9a-f-]{36}\.(jpg|png|webp)$',
+            caseSensitive: false)
+        .hasMatch(reference)) {
+      throw const ApiException('Đường dẫn ảnh minh chứng không hợp lệ.',
+          code: 'INVALID_EVIDENCE_REFERENCE');
+    }
+    final String path = reference.substring(4);
+    http.Response response = await _sendRequest(path, method: 'GET');
+    if (response.statusCode == 401 && refreshToken != null) {
+      await _refreshAccessToken();
+      response = await _sendRequest(path, method: 'GET');
+    }
+    if (response.statusCode == 401) {
+      final ApiException error = _sessionErrorFrom(response);
+      await _endSession(error);
+      throw error;
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _decodeResponse(response);
+    }
+    if (!(response.headers['content-type'] ?? '').startsWith('image/') ||
+        response.bodyBytes.length > 5 * 1024 * 1024) {
+      throw const ApiException('Phản hồi ảnh minh chứng không hợp lệ.',
+          code: 'INVALID_EVIDENCE_RESPONSE');
+    }
+    return response.bodyBytes;
   }
 
   Future<SessionUser> me() async {

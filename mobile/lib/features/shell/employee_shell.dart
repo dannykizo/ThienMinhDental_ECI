@@ -20,7 +20,8 @@ class EmployeeShell extends StatefulWidget {
   State<EmployeeShell> createState() => _EmployeeShellState();
 }
 
-class _EmployeeShellState extends State<EmployeeShell> {
+class _EmployeeShellState extends State<EmployeeShell>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
   late int _inboxNavigationRequest;
   late int _foregroundAnnouncementRequest;
@@ -28,19 +29,29 @@ class _EmployeeShellState extends State<EmployeeShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _inboxNavigationRequest = widget.session.inboxNavigationRequest;
     _foregroundAnnouncementRequest =
         widget.session.foregroundAnnouncementRequest;
     widget.session.addListener(_onSessionChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(widget.session.refreshUnreadAnnouncements());
+      unawaited(widget.session.refreshManagementAccess());
     });
   }
 
   @override
   void dispose() {
     widget.session.removeListener(_onSessionChanged);
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(widget.session.refreshManagementAccess());
+    }
   }
 
   void _onSessionChanged() {

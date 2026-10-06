@@ -12,6 +12,8 @@ import '../../presentation/widgets/app_form_controls.dart';
 import '../../presentation/widgets/app_list_controls.dart';
 import '../../services/api_client.dart';
 import '../../services/pending_explanation_queue.dart';
+import 'explanation_workflow_view.dart';
+import 'managed_explanations_screen.dart';
 
 class ExplanationListScreen extends StatefulWidget {
   const ExplanationListScreen({required this.session, super.key});
@@ -67,6 +69,7 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
     }
     if (syncQueue) await _syncPending(showResult: false);
     try {
+      await widget.session.refreshManagementAccess();
       final List<AttendanceExplanation> items =
           await widget.session.api.myAttendanceExplanations();
       if (mounted) {
@@ -141,6 +144,21 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
         surfaceTintColor: Colors.transparent,
         title: const Text('Giải trình chấm công'),
         actions: <Widget>[
+          ListenableBuilder(
+            listenable: widget.session,
+            builder: (BuildContext context, Widget? child) =>
+                widget.session.managementAccess?.canReviewExplanations == true
+                    ? IconButton(
+                        tooltip: 'Xử lý giải trình được giao',
+                        icon: const Icon(Icons.supervisor_account_outlined),
+                        onPressed: () => Navigator.of(context).push<void>(
+                          MaterialPageRoute<void>(
+                              builder: (_) => ManagedExplanationsScreen(
+                                  session: widget.session)),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+          ),
           IconButton(
             tooltip: 'Làm mới',
             onPressed: _loading ? null : () => _load(syncQueue: true),
@@ -158,7 +176,7 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
               eyebrow: 'Đơn của bạn',
               title: 'Giải trình của bạn',
               description:
-                  'Chủ động báo cáo vấn đề để Admin xem xét. Có thể chụp hoặc đính kèm ảnh minh chứng; không bắt buộc.',
+                  'Chủ động báo cáo vấn đề: Leader xác nhận, Trưởng phòng quyết định. Có thể chụp hoặc đính kèm ảnh; không bắt buộc. Admin phân tuyến khi cần.',
             ),
             if (_pending.isNotEmpty) ...<Widget>[
               const SizedBox(height: 18),
@@ -180,7 +198,7 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
                           child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: <Widget>[
-                                const Text('CHỜ MẠNG · CHƯA GỬI TỚI ADMIN',
+                                const Text('CHỜ MẠNG · CHƯA GỬI TỚI HỆ THỐNG',
                                     style: TextStyle(
                                         fontWeight: FontWeight.w800,
                                         fontSize: 11)),
@@ -256,6 +274,12 @@ class _ExplanationListScreenState extends State<ExplanationListScreen>
                     item: item,
                     pending: pendingIds.contains(item.id),
                     onRespond: () => _openResponse(item),
+                    onDetail: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                            builder: (_) => ExplanationDetailScreen(
+                                session: widget.session,
+                                id: item.id,
+                                managed: false))),
                   ),
                 ),
               ),
@@ -577,11 +601,13 @@ class _ExplanationCard extends StatelessWidget {
     required this.item,
     required this.onRespond,
     required this.pending,
+    required this.onDetail,
   });
 
   final AttendanceExplanation item;
   final VoidCallback onRespond;
   final bool pending;
+  final VoidCallback onDetail;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -637,11 +663,16 @@ class _ExplanationCard extends StatelessWidget {
               Text('Ghi chú duyệt: ${item.reviewNote}',
                   style: const TextStyle(fontSize: 12, height: 1.4)),
             ],
+            ExplanationWorkflowView(item: item),
+            TextButton.icon(
+                onPressed: onDetail,
+                icon: const Icon(Icons.history_rounded),
+                label: const Text('Xem chi tiết và lịch sử')),
             if (item.status == 'REJECTED' &&
                 (item.reviewNote == null || item.reviewNote!.isEmpty))
               const Padding(
                   padding: EdgeInsets.only(top: 6),
-                  child: Text('Admin không ghi thêm lý do từ chối.',
+                  child: Text('Người xử lý không ghi thêm lý do từ chối.',
                       style: TextStyle(color: brandMuted, fontSize: 12))),
             if (item.status == 'REQUESTED' && !pending) ...<Widget>[
               const SizedBox(height: 14),

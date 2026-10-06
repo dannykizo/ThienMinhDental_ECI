@@ -60,6 +60,8 @@ class SessionController extends ChangeNotifier {
   late final PendingExplanationQueue explanationQueue;
   final FlutterSecureStorage _storage;
   SessionUser? user;
+  ManagementAccess? managementAccess;
+  Future<void>? _managementRefresh;
   bool isBootstrapping = true;
   bool isCheckingAvailability = false;
   bool isRestoringSession = false;
@@ -135,6 +137,7 @@ class SessionController extends ChangeNotifier {
     try {
       user = await api.me();
       sessionNotice = null;
+      await refreshManagementAccess();
     } on ApiException catch (error) {
       if (error.isConnectionFailure) {
         sessionNotice = SessionNotice(
@@ -198,6 +201,7 @@ class SessionController extends ChangeNotifier {
     user = result.user;
     sessionNotice = null;
     await _storeTokens(result.accessToken, result.refreshToken);
+    await refreshManagementAccess();
     await pushNotifications.syncCurrentToken();
     await refreshUnreadAnnouncements();
     notifyListeners();
@@ -234,6 +238,31 @@ class SessionController extends ChangeNotifier {
     } on Object {
       // Badge giữ giá trị gần nhất khi mạng yếu; màn Hộp thư hiển thị lỗi chi tiết.
     }
+  }
+
+  Future<void> refreshManagementAccess() async {
+    if (_managementRefresh != null) return _managementRefresh;
+    final Future<void> refresh = _loadManagementAccess();
+    _managementRefresh = refresh;
+    try {
+      await refresh;
+    } finally {
+      _managementRefresh = null;
+    }
+  }
+
+  Future<void> _loadManagementAccess() async {
+    final String? ownerId = user?.id;
+    if (ownerId == null) return;
+    ManagementAccess? next;
+    try {
+      next = await api.managementAccess();
+    } on Object {
+      // No stale grant creates an entry point on a failed permission refresh.
+    }
+    if (user?.id != ownerId) return;
+    managementAccess = next;
+    notifyListeners();
   }
 
   void announceInboxChanged() {
@@ -276,6 +305,7 @@ class SessionController extends ChangeNotifier {
 
   Future<void> _clearSession() async {
     user = null;
+    managementAccess = null;
     api.accessToken = null;
     api.refreshToken = null;
     unreadAnnouncementCount = 0;

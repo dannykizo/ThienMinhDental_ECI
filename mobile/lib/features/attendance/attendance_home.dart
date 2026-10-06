@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
+import '../explanations/managed_explanations_screen.dart';
 
 class AttendanceHome extends StatefulWidget {
   const AttendanceHome({
@@ -310,6 +311,30 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                 onOpenLeave: widget.onOpenLeave,
                 onOpenInbox: widget.onOpenInbox,
               ),
+              ListenableBuilder(
+                  listenable: widget.session,
+                  builder: (BuildContext context, Widget? child) => widget
+                              .session
+                              .managementAccess
+                              ?.canReviewExplanations ==
+                          true
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 16),
+                          child: Card(
+                              child: ListTile(
+                            leading: const Icon(
+                                Icons.supervisor_account_outlined,
+                                color: brandPurple),
+                            title: const Text('Xử lý giải trình'),
+                            subtitle: const Text(
+                                'Khu vực quản lý · các đơn được giao'),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: () => Navigator.of(context).push<void>(
+                                MaterialPageRoute<void>(
+                                    builder: (_) => ManagedExplanationsScreen(
+                                        session: widget.session))),
+                          )))
+                      : const SizedBox.shrink()),
               const SizedBox(height: 18),
               Container(
                 decoration: BoxDecoration(
