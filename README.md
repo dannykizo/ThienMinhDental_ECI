@@ -142,6 +142,8 @@ flutter run --dart-define=API_BASE_URL=http://127.0.0.1:3001/api
 
 ## Kiểm tra chất lượng
 
+Android push readiness (2026-10-07): đã bổ sung kênh thông báo/icon Android, banner hệ thống foreground, mở tin từ push qua inbox có xác thực, trạng thái đăng ký/Backend và retry khi resume/mạng phục hồi. Backend loại thiết bị không còn phiên Mobile hợp lệ, giới hạn preview Unicode; hộp thư giữ nội dung đầy đủ. **Chưa coi là nghiệm thu push thật** khi thiếu Firebase credential/quyền điện thoại. Nhắc check-out chờ chốt policy. Xem [runbook và checklist push](docs/PUSH_ACCEPTANCE.md).
+
 ```bash
 pnpm typecheck
 pnpm lint

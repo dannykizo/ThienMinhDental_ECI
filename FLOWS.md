@@ -176,6 +176,8 @@ Per recipient: DELIVERED -> READ -> ACKNOWLEDGED (chỉ tin quan trọng)
 
 **Trạng thái hiện tại:** Customer review CR4 đã triển khai Admin Web, Backend API và hộp thư Mobile cho nháp/chỉnh sửa/xuất bản/thu hồi, đối tượng toàn công ty/cá nhân/phòng ban, badge chưa đọc, chi tiết tin, xác nhận tin quan trọng, thống kê người chưa đọc/chưa xác nhận và phạm vi Trưởng phòng. API hộp thư trả phạm vi cùng tên đối tượng; Mobile gắn nhãn rõ `TOÀN CÔNG TY`, phòng ban hoặc cá nhân và giải thích phạm vi trong chi tiết thay vì suy đoán từ nội dung. Backend lưu trạng thái push theo từng người nhận, cung cấp chẩn đoán cấu hình/thiết bị và cho Admin gửi lại; Mobile báo rõ tình trạng thiếu cấu hình, quyền thông báo hoặc token. Môi trường chỉ gửi push thật sau khi cấu hình Firebase deployment. File/ảnh, mức khẩn cấp, hẹn giờ, thời hạn hiển thị và lưu trữ tự động vẫn là `NOT_IMPLEMENTED` do W39 chưa được khách hàng giải thích.
 
+**Android push readiness (2026-10-07):** Foreground có system notification và refresh inbox, background dùng FCM notification payload; tap mở đúng tin sau khi API xác thực quyền, không tự đánh dấu đọc/xác nhận chỉ vì nhận push. Đăng ký lỗi hoặc Backend chưa bật push phải hiện rõ và có retry; resume/mạng phục hồi thử lại đăng ký. Không gửi tới máy thiếu phiên Mobile còn hiệu lực. Nhân viên tự kiểm soát quyền/banner/âm thanh/kênh tại hệ điều hành. Nút thông báo thử trên máy chỉ kiểm tra local, không xác nhận FCM hoạt động. Nhắc check-out chưa triển khai, chờ Tech Lead chốt thời điểm/chính sách. Checklist và giới hạn thực tế tại docs/PUSH_ACCEPTANCE.md.
+
 ## Admin Web + Mobile Inbox — disciplinary actions
 
 ```text

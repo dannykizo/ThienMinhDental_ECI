@@ -9,6 +9,7 @@ import {
 } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
 import { DataSource } from 'typeorm';
+import { announcementPushPayload } from './announcement-push.payload.js';
 import { PushDeviceTokenEntity } from '../../../database/entities/push-device-token.entity.js';
 import type {
   AnnouncementPushResult,
@@ -19,6 +20,7 @@ interface PushTokenRow {
   employeeId: string;
   id: string;
   token: string;
+  userId: string;
 }
 
 @Injectable()
@@ -65,6 +67,7 @@ export class FirebaseAnnouncementPushSender
     requiresAcknowledgement: boolean;
     title: string;
   }): Promise<AnnouncementPushResult> {
+    if (input.employeeIds.length === 0) return this.skippedResult([], 'NO_RECIPIENTS');
     if (!this.app) {
       return this.skippedResult(input.employeeIds, 'PUSH_NOT_CONFIGURED');
     }
@@ -78,11 +81,18 @@ export class FirebaseAnnouncementPushSender
           'device.id AS id',
           'device.employee_id AS "employeeId"',
           'device.token AS token',
+          'device.user_id AS "userId"',
         ])
         .where('device.is_active = true')
         .andWhere('device.employee_id IN (:...employeeIds)', {
           employeeIds: input.employeeIds,
         })
+        .andWhere(`EXISTS (SELECT 1 FROM employees e JOIN users u ON u.id=e.user_id
+          JOIN auth_sessions s ON s.user_id=u.id
+          WHERE e.id=device.employee_id AND u.id=device.user_id
+            AND e.is_active=true AND u.is_active=true
+            AND s.client_type='MOBILE' AND s.device_id=device.device_id
+            AND s.revoked_at IS NULL AND s.expires_at>now())`)
         .getRawMany<PushTokenRow>();
     } catch (error) {
       this.logger.error(`Unable to load FCM devices: ${this.errorMessage(error)}`);
@@ -105,19 +115,9 @@ export class FirebaseAnnouncementPushSender
     try {
       for (let offset = 0; offset < tokens.length; offset += 500) {
         const chunk = tokens.slice(offset, offset + 500);
-        const response = await getMessaging(this.app).sendEachForMulticast({
-          android: {
-            notification: { channelId: 'announcements' },
-            priority: 'high',
-          },
-          data: {
-            announcementId: input.announcementId,
-            requiresAcknowledgement: String(input.requiresAcknowledgement),
-            type: 'ANNOUNCEMENT',
-          },
-          notification: { body: input.body, title: input.title },
-          tokens: chunk.map((item) => item.token),
-        });
+        const response = await getMessaging(this.app).sendEach(chunk.map((item) => ({
+          ...announcementPushPayload(input, item.userId), token: item.token,
+        })));
 
         const now = new Date();
         await Promise.all(

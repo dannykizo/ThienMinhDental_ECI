@@ -1132,11 +1132,11 @@ class ApiClient {
     );
   }
 
-  Future<void> registerPushDevice({
+  Future<bool> registerPushDevice({
     required String deviceId,
     required String token,
   }) async {
-    await _request(
+    final Map<String, dynamic> response = await _request(
       '/announcements/push-devices',
       body: <String, dynamic>{
         'deviceId': deviceId,
@@ -1145,6 +1145,7 @@ class ApiClient {
       },
       method: 'POST',
     );
+    return response['pushConfigured'] == true;
   }
 
   Future<void> unregisterPushDevice({required String deviceId}) async {

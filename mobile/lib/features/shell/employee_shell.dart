@@ -33,6 +33,7 @@ class _EmployeeShellState extends State<EmployeeShell>
     _inboxNavigationRequest = widget.session.inboxNavigationRequest;
     _foregroundAnnouncementRequest =
         widget.session.foregroundAnnouncementRequest;
+    if (widget.session.pendingAnnouncementId != null) _selectedIndex = 4;
     widget.session.addListener(_onSessionChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(widget.session.refreshUnreadAnnouncements());
@@ -51,6 +52,8 @@ class _EmployeeShellState extends State<EmployeeShell>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(widget.session.refreshManagementAccess());
+      unawaited(widget.session.syncPush());
+      unawaited(widget.session.refreshUnreadAnnouncements());
     }
   }
 

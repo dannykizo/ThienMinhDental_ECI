@@ -52,6 +52,7 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
   }
 
   void _onSessionChanged() {
+    if (mounted) setState(() {});
     if (_revision == widget.session.announcementRevision) return;
     _revision = widget.session.announcementRevision;
     unawaited(_load());
@@ -75,6 +76,21 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
           _items = items;
           _hasLoaded = true;
         });
+        final String? requested = widget.session.pendingAnnouncementId;
+        if (requested != null) {
+          widget.session.pendingAnnouncementId = null;
+          final List<EmployeeAnnouncement> matching = items
+              .where((EmployeeAnnouncement item) => item.id == requested)
+              .toList();
+          if (matching.isEmpty) {
+            setState(() => _error =
+                'Thông báo này không còn khả dụng cho tài khoản hiện tại.');
+          } else {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) unawaited(_open(matching.first));
+            });
+          }
+        }
       }
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -136,8 +152,10 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
               if (!widget.session.pushNotifications.configured) ...<Widget>[
                 const SizedBox(height: 16),
                 const _PushNotConfigured(),
-              ] else if (!widget
-                  .session.pushNotifications.permissionGranted) ...<Widget>[
+              ] else if (!widget.session.pushNotifications.permissionGranted ||
+                  !widget.session.pushNotifications.android.enabled ||
+                  widget.session.pushNotifications.android.importance ==
+                      0) ...<Widget>[
                 const SizedBox(height: 16),
                 const _PushPermissionRequired(),
               ] else if (widget.session.pushNotifications.currentToken ==
@@ -145,6 +163,8 @@ class _AnnouncementInboxScreenState extends State<AnnouncementInboxScreen> {
                 const SizedBox(height: 16),
                 const _PushTokenPending(),
               ],
+              const SizedBox(height: 12),
+              _PushReadiness(session: widget.session),
               if (_error != null && _items.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 16),
                 AppErrorState(
@@ -610,6 +630,85 @@ class _AudienceNotice extends StatelessWidget {
           ],
         ),
       );
+}
+
+class _PushReadiness extends StatelessWidget {
+  const _PushReadiness({required this.session});
+  final SessionController session;
+
+  @override
+  Widget build(BuildContext context) {
+    final push = session.pushNotifications;
+    final String label = push.initializationError != null
+        ? 'Chưa thể khởi tạo đầy đủ thông báo. Hãy thử lại.'
+        : push.registrationError != null
+            ? 'Chưa đăng ký được thiết bị với Backend. Hãy thử lại khi có mạng.'
+            : push.backendConfigured == false
+                ? 'Backend chưa bật Firebase push. Hộp thư vẫn hoạt động.'
+                : !push.configured
+                    ? 'Cần bản app có cấu hình Firebase để nhận push.'
+                    : !push.registered
+                        ? 'Thiết bị chưa hoàn tất đăng ký nhận push.'
+                        : !push.permissionGranted ||
+                                !push.android.enabled ||
+                                push.android.importance == 0
+                            ? 'Thông báo hệ thống đang bị tắt.'
+                            : push.android.importance < 4
+                                ? 'Đã đăng ký push; kênh đang không bật banner nổi.'
+                                : 'Đã đăng ký nhận push. Việc hiển thị tùy cài đặt điện thoại.';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: brandLine),
+          borderRadius: BorderRadius.circular(8)),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(label, style: const TextStyle(fontSize: 12, height: 1.4)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, children: <Widget>[
+              TextButton.icon(
+                  onPressed: session.isSyncingPush
+                      ? null
+                      : () => session.syncPush(retryInitialization: true),
+                  icon: const Icon(Icons.sync, size: 18),
+                  label: Text(session.isSyncingPush
+                      ? 'Đang kiểm tra…'
+                      : 'Kiểm tra lại push')),
+              TextButton.icon(
+                  onPressed: () => push.android.openSettings(),
+                  icon: const Icon(Icons.settings_outlined, size: 18),
+                  label: const Text('Cài đặt thông báo')),
+              TextButton.icon(
+                  onPressed: () async {
+                    final String? owner = session.user?.id;
+                    if (owner == null) return;
+                    bool shown = false;
+                    try {
+                      shown = await push.android.show(
+                        id: 'workforce-notification-check',
+                        owner: owner,
+                        title: 'Kiểm tra thông báo Thiên Minh',
+                        body:
+                            'Đây là thông báo thử trên thiết bị, không phải push gửi qua Firebase.',
+                      );
+                    } on Object {
+                      /* Show truthful local verification status below. */
+                    }
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(shown
+                            ? 'Đã yêu cầu hiển thị thông báo thử trên máy; chưa kiểm tra gửi qua Firebase.'
+                            : 'Chưa thể hiện thông báo thử. Kiểm tra quyền thông báo trên điện thoại.')));
+                  },
+                  icon:
+                      const Icon(Icons.notifications_active_outlined, size: 18),
+                  label: const Text('Thông báo thử trên máy')),
+            ]),
+          ]),
+    );
+  }
 }
 
 class _PushNotConfigured extends StatelessWidget {

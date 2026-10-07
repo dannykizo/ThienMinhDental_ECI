@@ -24,6 +24,8 @@ Tab `Hộp thư` đồng bộ thông báo theo tài khoản và hiển thị rõ
 
 ## Cấu hình Firebase Cloud Messaging
 
+Android push readiness (2026-10-07) bổ sung kênh `announcements` importance HIGH, icon thông báo riêng và native foreground notification; background do FCM xử lý. Tap mở đúng tin sau khi API xác thực quyền. Hộp thư báo tình trạng cấu hình, quyền/kênh, đăng ký và Backend push; có nút kiểm tra lại, mở Cài đặt thông báo và thông báo thử **local-only**. Quyền/banner/âm thanh do người dùng kiểm soát. Backend không gửi tới máy thiếu phiên Mobile còn hiệu lực. Đây là sửa code/readiness, không thay thế kiểm tra push thật trên điện thoại; xem `docs/PUSH_ACCEPTANCE.md`. Nhắc check-out chưa triển khai trong khi chờ chốt policy.
+
 Hộp thư vẫn hoạt động khi chưa có Firebase. Để nhận push thật, Backend cần `FIREBASE_PUSH_ENABLED=true`, `FIREBASE_PROJECT_ID` và `GOOGLE_APPLICATION_CREDENTIALS` trỏ tới service-account JSON nằm ngoài repository. Mobile nhận cấu hình public bằng các dart define sau:
 
 ```powershell

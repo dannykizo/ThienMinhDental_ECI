@@ -55,7 +55,13 @@ export class AnnouncementsService {
         devicesWithErrorCount: number;
         lastPushAt: Date | null;
       }>
-    >(`SELECT COUNT(*) FILTER (WHERE is_active=true)::int AS "activeDeviceCount",COUNT(*) FILTER (WHERE is_active=true AND last_error IS NOT NULL)::int AS "devicesWithErrorCount",MAX(last_push_at) AS "lastPushAt" FROM push_device_tokens`);
+    >(`SELECT COUNT(*) FILTER (WHERE is_active=true AND EXISTS (
+      SELECT 1 FROM auth_sessions s JOIN users u ON u.id=s.user_id JOIN employees e ON e.user_id=u.id
+      WHERE s.user_id=device.user_id AND s.device_id=device.device_id AND s.client_type='MOBILE'
+        AND s.revoked_at IS NULL AND s.expires_at>now() AND u.is_active=true AND e.is_active=true
+        AND e.id=device.employee_id))::int AS "activeDeviceCount",
+      COUNT(*) FILTER (WHERE is_active=true AND last_error IS NOT NULL)::int AS "devicesWithErrorCount",
+      MAX(last_push_at) AS "lastPushAt" FROM push_device_tokens device`);
     return {
       activeDeviceCount: status?.activeDeviceCount ?? 0,
       configured: this.pushSender.isConfigured(),
@@ -81,6 +87,16 @@ export class AnnouncementsService {
     }
     const employeeId = user.employeeId;
     await this.dataSource.transaction(async (manager) => {
+      // Serialize registration with login/session replacement; do not revive
+      // an old phone merely because its FCM token refresh arrives late.
+      await manager.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [user.id]);
+      const [session] = await manager.query<Array<{ id: string }>>(`SELECT s.id FROM auth_sessions s
+        JOIN users u ON u.id=s.user_id JOIN employees e ON e.user_id=u.id
+        WHERE s.user_id=$1 AND s.device_id=$2 AND s.client_type='MOBILE'
+          AND s.revoked_at IS NULL AND s.expires_at>now()
+          AND u.is_active=true AND e.is_active=true AND e.id=$3`, [user.id, input.deviceId, employeeId]);
+      if (!session) throw new ForbiddenException({ code: 'PUSH_DEVICE_SESSION_REQUIRED',
+        message: 'Thiết bị cần có phiên app nhân viên còn hiệu lực để nhận thông báo.' });
       const repository = manager.getRepository(PushDeviceTokenEntity);
       const sameToken = await repository.findOne({
         where: { token: input.token },

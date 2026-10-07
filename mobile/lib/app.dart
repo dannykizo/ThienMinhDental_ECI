@@ -73,12 +73,14 @@ class SessionController extends ChangeNotifier {
   int announcementRevision = 0;
   int unreadAnnouncementCount = 0;
   String? foregroundAnnouncementTitle;
+  String? pendingAnnouncementId;
+  bool isSyncingPush = false;
 
   Future<void> bootstrap() async {
     try {
       await _loadAppVersion();
       await _restoreSession();
-      await initializePush();
+      unawaited(initializePush());
     } finally {
       isBootstrapping = false;
       notifyListeners();
@@ -86,11 +88,14 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> initializePush() async {
+    pushNotifications.currentUserId = () => user?.id;
     pushNotifications.onTokenChanged = (String token) async {
       if (user != null) await _registerPushToken(token);
     };
-    pushNotifications.onInboxRequested = () {
+    pushNotifications.onInboxRequested = (String? id) {
+      pendingAnnouncementId = id;
       inboxNavigationRequest += 1;
+      announcementRevision += 1;
       notifyListeners();
     };
     pushNotifications.onForegroundAnnouncement = (message) {
@@ -109,6 +114,26 @@ class SessionController extends ChangeNotifier {
       }
     } on Object {
       // Firebase chưa cấu hình không được làm gián đoạn Hộp thư hoặc đăng nhập.
+    }
+    notifyListeners();
+  }
+
+  Future<void> syncPush({bool retryInitialization = false}) async {
+    if (isSyncingPush) return;
+    isSyncingPush = true;
+    notifyListeners();
+    try {
+      if (retryInitialization) await pushNotifications.initialize();
+      await pushNotifications.refreshStatus();
+      if (user != null) await pushNotifications.syncCurrentToken();
+    } on Object {
+      if (user != null) {
+        pushNotifications.registered = false;
+        pushNotifications.registrationError = 'PUSH_REGISTRATION_FAILED';
+      }
+    } finally {
+      isSyncingPush = false;
+      notifyListeners();
     }
   }
 
@@ -202,7 +227,7 @@ class SessionController extends ChangeNotifier {
     sessionNotice = null;
     await _storeTokens(result.accessToken, result.refreshToken);
     await refreshManagementAccess();
-    await pushNotifications.syncCurrentToken();
+    unawaited(syncPush());
     await refreshUnreadAnnouncements();
     notifyListeners();
   }
@@ -309,17 +334,29 @@ class SessionController extends ChangeNotifier {
     api.accessToken = null;
     api.refreshToken = null;
     unreadAnnouncementCount = 0;
+    pendingAnnouncementId = null;
+    await pushNotifications.clearAccount();
     await _storage.delete(key: _accessTokenKey);
     await _storage.delete(key: _refreshTokenKey);
   }
 
   Future<void> _registerPushToken(String token) async {
-    final String deviceId = await _getOrCreateDeviceId();
+    final String? owner = user?.id;
+    if (owner == null) return;
     try {
-      await api.registerPushDevice(deviceId: deviceId, token: token);
+      final String deviceId = await _getOrCreateDeviceId();
+      final bool configured =
+          await api.registerPushDevice(deviceId: deviceId, token: token);
+      if (user?.id != owner) return;
+      pushNotifications.backendConfigured = configured;
+      pushNotifications.registered = true;
+      pushNotifications.registrationError = null;
     } on Object {
-      // Hộp thư vẫn là nguồn dữ liệu chính nếu đăng ký push tạm thời thất bại.
+      if (user?.id != owner) return;
+      pushNotifications.registered = false;
+      pushNotifications.registrationError = 'PUSH_REGISTRATION_FAILED';
     }
+    notifyListeners();
   }
 
   Future<void> _loadAppVersion() async {
@@ -334,6 +371,9 @@ class SessionController extends ChangeNotifier {
   void _handleAvailabilityChanged(ApiAvailability availability) {
     if (apiAvailability == availability) return;
     apiAvailability = availability;
+    if (availability == ApiAvailability.available && user != null) {
+      unawaited(syncPush());
+    }
     notifyListeners();
   }
 
