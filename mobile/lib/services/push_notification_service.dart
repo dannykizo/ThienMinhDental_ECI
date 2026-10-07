@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -104,11 +105,9 @@ class PushNotificationService {
 
       final FirebaseMessaging messaging = FirebaseMessaging.instance;
       await messaging.setAutoInitEnabled(true);
-      final NotificationSettings settings = await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
+      // Initialization/resume is read-only: only an explicit user action asks.
+      final NotificationSettings settings =
+          await messaging.getNotificationSettings();
       authorizationStatus = settings.authorizationStatus;
 
       _foregroundSubscription ??= FirebaseMessaging.onMessage.listen(
@@ -134,7 +133,7 @@ class PushNotificationService {
         (String token) async {
           currentToken = token;
           try {
-            await onTokenChanged?.call(token);
+            if (permissionGranted) await onTokenChanged?.call(token);
           } on Object {
             registered = false;
             registrationError = 'PUSH_REGISTRATION_FAILED';
@@ -190,6 +189,21 @@ class PushNotificationService {
     } on Object {
       initializationError = 'PUSH_STATUS_UNAVAILABLE';
     }
+  }
+
+  Future<void> requestPermission() async {
+    if (Platform.isAndroid) {
+      // Works even before Firebase is configured; never implies push readiness.
+      await android.requestPermission();
+    } else if (configured) {
+      authorizationStatus = (await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      ))
+          .authorizationStatus;
+    }
+    await refreshStatus();
   }
 
   Future<void> clearAccount() async {

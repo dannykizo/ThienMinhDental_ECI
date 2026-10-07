@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.os.Build
 import android.net.Uri
@@ -15,6 +17,23 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val channelId = "announcements"
     private var bridge: MethodChannel? = null
+    private val notificationPermissionCode = 6107
+    private var permissionResult: MethodChannel.Result? = null
+
+    private fun notificationStatus(manager: NotificationManager): Map<String, Any> {
+        val runtimeRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        val granted = !runtimeRequired ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val asked = getPreferences(MODE_PRIVATE).getBoolean("notifications_requested", false)
+        return mapOf(
+            "enabled" to manager.areNotificationsEnabled(),
+            "permissionGranted" to granted,
+            "canRequestPermission" to (runtimeRequired && !granted &&
+                (!asked || shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS))),
+            "importance" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                (manager.getNotificationChannel(channelId)?.importance ?: 0) else 4
+        )
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -27,11 +46,18 @@ class MainActivity : FlutterActivity() {
         bridge = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vn.thienminh/notifications")
         bridge?.setMethodCallHandler { call, result ->
             when (call.method) {
-                "status" -> result.success(mapOf(
-                    "enabled" to manager.areNotificationsEnabled(),
-                    "importance" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                        (manager.getNotificationChannel(channelId)?.importance ?: 0) else 4
-                ))
+                "status" -> result.success(notificationStatus(manager))
+                "requestPermission" -> {
+                    if (permissionResult != null) {
+                        result.error("PERMISSION_REQUEST_BUSY", "Permission request already open", null)
+                    } else if (notificationStatus(manager)["canRequestPermission"] != true) {
+                        result.success(notificationStatus(manager))
+                    } else {
+                        permissionResult = result
+                        getPreferences(MODE_PRIVATE).edit().putBoolean("notifications_requested", true).apply()
+                        requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notificationPermissionCode)
+                    }
+                }
                 "clear" -> { manager.cancelAll(); result.success(null) }
                 "initialTap" -> result.success(consumeTap(intent))
                 "settings" -> {
@@ -85,6 +111,14 @@ class MainActivity : FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == notificationPermissionCode) {
+            permissionResult?.success(notificationStatus(getSystemService(NotificationManager::class.java)))
+            permissionResult = null
         }
     }
 

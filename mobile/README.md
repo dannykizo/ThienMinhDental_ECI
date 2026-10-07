@@ -1,5 +1,16 @@
 # Thiên Minh Dental Workforce — Mobile Android
 
+## Thiết lập quyền lần đầu
+
+Sau đăng nhập/khôi phục phiên hợp lệ, bản cập nhật hiện màn hướng dẫn một lần trên thiết bị. Chọn `Để sau` hoặc `Tiếp tục vào ứng dụng` để vào app mà không bắt buộc cấp quyền. Mở lại qua biểu tượng thiết lập cạnh Đăng xuất trên Trang chủ; quay lại từ Cài đặt sẽ đọc lại trạng thái.
+
+- Thông báo: bấm `Cho phép thông báo` để mở hộp thoại Android 13+, không tự hỏi khi launch/resume/retry. Nếu không thể hỏi lại hoặc muốn chỉnh kênh, mở Cài đặt thông báo. Nút xin quyền không cần Firebase; push Backend vẫn cần Firebase đúng cấu hình.
+- Vị trí: màn hướng dẫn chỉ kiểm tra quyền/GPS/độ chính xác, không lấy tọa độ; vẫn xin quyền tại sự kiện chấm công/công tác, không xin GPS nền.
+- Camera: mở camera hệ thống tại thao tác chụp minh chứng, không thêm quyền CAMERA toàn app.
+- Ảnh: bật Photo Picker của implementation image_picker hiện hữu, fallback trình chọn hệ thống; không xin quyền đọc toàn bộ ảnh/storage. Hai mục này giải thích thao tác chứ không giả lập trạng thái Đã cấp.
+
+Cờ hướng dẫn lưu theo thiết bị trong secure storage, không bị xóa khi logout; quyền OS vẫn được kiểm tra riêng, không dùng cờ để suy ra quyền. Nếu lưu cờ lỗi, vẫn tiếp tục được và hướng dẫn có thể hiện lại lần mở sau. Không đổi API, database hay business rule.
+
 Flutter app dành cho nhân viên. Vertical slice hiện tại gồm đăng nhập, lưu phiên an toàn, chấm công văn phòng, phản hồi giải trình có ảnh bằng chứng, thực hiện phiếu công tác, gửi/theo dõi đơn nghỉ phép và hộp thư thông báo nội bộ.
 
 App không điền sẵn tài khoản demo vào form đăng nhập. Màn khởi động có thương hiệu được hiển thị ngay trong lúc khôi phục phiên an toàn; các tab dùng chung theme, touch target, feedback và hỗ trợ Android autofill/predictive back.

@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'features/auth/login_screen.dart';
+import 'features/permissions/permission_setup_screen.dart';
 import 'features/shell/employee_shell.dart';
 import 'services/api_client.dart';
 import 'services/pending_explanation_queue.dart';
@@ -55,6 +56,7 @@ class SessionController extends ChangeNotifier {
   static const String _refreshTokenKey = 'refresh_token';
   static const String _deviceIdKey = 'device_id';
   static const String _apiBaseUrlKey = 'api_base_url';
+  static const String _permissionSetupKey = 'permission_setup_v1_seen';
   final ApiClient api;
   final PushNotificationService pushNotifications;
   late final PendingExplanationQueue explanationQueue;
@@ -75,6 +77,30 @@ class SessionController extends ChangeNotifier {
   String? foregroundAnnouncementTitle;
   String? pendingAnnouncementId;
   bool isSyncingPush = false;
+  bool needsPermissionSetup = false;
+  bool _permissionSetupSeen = false;
+
+  Future<void> _loadPermissionSetup() async {
+    if (_permissionSetupSeen) return;
+    try {
+      _permissionSetupSeen =
+          await _storage.read(key: _permissionSetupKey) == 'true';
+    } on Object {
+      // Storage failure must not block login or optional setup dismissal.
+    }
+    needsPermissionSetup = !_permissionSetupSeen;
+  }
+
+  Future<void> dismissPermissionSetup() async {
+    _permissionSetupSeen = true;
+    try {
+      await _storage.write(key: _permissionSetupKey, value: 'true');
+    } on Object {
+      // Remember for this run; a future launch may show setup again.
+    }
+    needsPermissionSetup = false;
+    notifyListeners();
+  }
 
   Future<void> bootstrap() async {
     try {
@@ -160,7 +186,9 @@ class SessionController extends ChangeNotifier {
     if (api.accessToken == null && api.refreshToken == null) return;
 
     try {
-      user = await api.me();
+      final SessionUser restored = await api.me();
+      await _loadPermissionSetup();
+      user = restored;
       sessionNotice = null;
       await refreshManagementAccess();
     } on ApiException catch (error) {
@@ -223,6 +251,7 @@ class SessionController extends ChangeNotifier {
       deviceId: deviceId,
       deviceName: '${Platform.operatingSystem} · Thiên Minh Workforce',
     );
+    await _loadPermissionSetup();
     user = result.user;
     sessionNotice = null;
     await _storeTokens(result.accessToken, result.refreshToken);
@@ -476,9 +505,11 @@ class WorkforceApp extends StatelessWidget {
         listenable: session,
         builder: (BuildContext context, Widget? child) {
           if (session.isBootstrapping) return const _StartupScreen();
-          return session.user == null
-              ? LoginScreen(session: session)
-              : EmployeeShell(session: session);
+          if (session.user == null) return LoginScreen(session: session);
+          if (session.needsPermissionSetup) {
+            return PermissionSetupScreen(session: session, firstRun: true);
+          }
+          return EmployeeShell(session: session);
         },
       ),
     );

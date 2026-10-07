@@ -10,6 +10,7 @@ import '../../services/api_client.dart';
 import '../explanations/managed_explanations_screen.dart';
 import '../leave/managed_leave_screen.dart';
 import '../management/managed_modules_screen.dart';
+import '../permissions/permission_setup_screen.dart';
 
 class AttendanceHome extends StatefulWidget {
   const AttendanceHome({
@@ -240,6 +241,17 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                     child: Image.asset('assets/brand/thien-minh-logo.png'),
                   ),
                   const Spacer(),
+                  IconButton(
+                    tooltip: 'Thiết lập quyền ứng dụng',
+                    onPressed: _recording
+                        ? null
+                        : () => Navigator.of(context).push<void>(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => PermissionSetupScreen(
+                                      session: widget.session)),
+                            ),
+                    icon: const Icon(Icons.tune_rounded, size: 22),
+                  ),
                   IconButton.filledTonal(
                     tooltip: 'Đăng xuất',
                     onPressed: widget.session.logout,

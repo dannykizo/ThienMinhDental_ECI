@@ -77,6 +77,14 @@ Không dùng `ABSENT` như một nút trong event flow. `ABSENT`, `LEAVE` và `B
 
 ## Mobile — office attendance
 
+### Thiết lập quyền lần đầu (2026-10-07)
+
+- Sau đăng nhập/khôi phục phiên hợp lệ lần đầu trên bản cập nhật, app hiện `Thiết lập ứng dụng`. `Tiếp tục` hoặc `Để sau` ghi cờ đã xem trên thiết bị; không phụ thuộc việc đã cấp quyền. Mở lại từ biểu tượng thiết lập tại Trang chủ. Mỗi lần mở/resume màn này đều đọc lại quyền OS.
+- Chỉ nút `Cho phép thông báo` mới mở hộp thoại Android; quyền bị chặn hoặc cần chỉnh kênh có nút Cài đặt. Khởi động, đăng nhập, retry push và resume không tự xin quyền. Cấp quyền trước khi có Firebase không được coi là nghiệm thu push.
+- Màn này chỉ kiểm tra permission/dịch vụ/độ chính xác, không lấy tọa độ. Vị trí vẫn xin tại chấm công/bắt đầu/kết thúc công tác; không xin Always/background.
+- Camera dùng thao tác chụp hiện hữu qua camera hệ thống. Đính kèm dùng Android Photo Picker (fallback trình chọn hệ thống khi không hỗ trợ); không xin đọc toàn bộ thư viện/storage. Hai mục hiển thị cách sử dụng, không gắn nhãn `Đã cấp` giả.
+- Từ chối/để sau vẫn vào app/hộp thư/nghỉ phép; chỉ thao tác phụ thuộc quyền bị hạn chế. Không tự gửi thông báo, tạo đơn hoặc ghi chấm công trong onboarding.
+
 1. Nhân viên mở Home; App lấy trạng thái attendance hôm nay.
 2. Khi bấm Check-in/out, App xin quyền và lấy một GPS sample kèm accuracy.
 3. App gửi event, thời gian thiết bị, vị trí và device signals lên Backend.

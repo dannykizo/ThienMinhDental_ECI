@@ -41,7 +41,16 @@ Use a dedicated development/trial employee, not real staff data. Admin publishes
 
 Do not repeatedly publish company-wide test messages or change real requests merely to verify push. A provider acceptance receipt is not a device delivery guarantee.
 
-## Checkout reminders
+## Permission onboarding update — 2026-10-07
+
+- First authenticated use shows an optional setup guide; skip/continue persists a device-local secure-storage flag. Returning users can reopen it from Home. OS permission status is read again on entry/resume, independently of that flag.
+- Launch/login/retry initialization uses `getNotificationSettings`, not `requestPermission`. Explicit Android notification request works without Firebase via the existing native bridge; denied/permanently denied or channel settings remain user-controlled.
+- Setup never reads GPS coordinates or opens camera/gallery. It explains location at attendance/trip events, system-camera capture and selective Photo Picker access. No background location, CAMERA or broad-storage permission is added.
+- Regression widget sources cover no permission/GPS request on entry, optional persisted skip, explicit notification grant and settings access. They are added but **not run** under the current Tech Lead instruction.
+- Firebase and checkout reminder prerequisites above remain outstanding. This update does not claim real FCM delivery acceptance.
+- Verification: `flutter analyze --no-pub` PASS (including new test sources), Android `assembleDebug` PASS. ADB reverse 3001 active and Backend health OK. Debug installation currently waits for user approval in Realme/Oplus InstallGuideActivity; no system permission is granted by the agent. Final phone UI/grant/deny/resume/photo-picker acceptance is pending installation and manual checks. No test suite or release/distribution APK is run/produced. The user-owned leave form remains excluded from commit.
+
+## Checkout reminders (policy pending)
 
 `NOT_IMPLEMENTED`: timing, enablement and per-shift policy await Tech Lead confirmation. Proposed option sent for approval: Admin-configurable delay after the scheduled end, notify only checked-in/not-checked-out employees, at most once per shift. Do not introduce a hard-coded reminder or continuous GPS tracking while waiting.
 
