@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
 
 export class CreateOwnLeaveRequestDto {
   @IsOptional() @IsUUID() policyId?: string;
@@ -7,8 +7,8 @@ export class CreateOwnLeaveRequestDto {
   @IsOptional() @IsIn(['AM', 'PM']) halfDayPeriod?: 'AM' | 'PM';
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) startTime?: string;
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) endTime?: string;
-  @IsDateString() startDate!: string;
-  @IsDateString() endDate!: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsDateString({ strict: true }) startDate!: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/) @IsDateString({ strict: true }) endDate!: string;
   @IsString() @MinLength(3) @MaxLength(2000) reason!: string;
 }
 
@@ -50,17 +50,17 @@ export class CreateLeavePolicyDto {
 }
 
 export class UpdateLeavePolicyDto {
-  @IsOptional() @IsString() @MinLength(2) @MaxLength(120) name?: string;
-  @IsOptional() @IsBoolean() isActive?: boolean;
-  @IsOptional() @IsBoolean() balanceTrackingEnabled?: boolean;
-  @IsOptional() @IsInt() @Min(0) @Max(525600) annualEntitlementMinutes?: number;
-  @IsOptional() @IsInt() @Min(1) @Max(1440) dayMinutes?: number;
-  @IsOptional() @IsBoolean() carryOverEnabled?: boolean;
-  @IsOptional() @IsInt() @Min(0) @Max(525600) maxCarryOverMinutes?: number;
-  @IsOptional() @IsBoolean() allowHalfDay?: boolean;
-  @IsOptional() @IsBoolean() allowHourly?: boolean;
-  @IsOptional() @IsBoolean() allowApprovedCancellation?: boolean;
-  @IsOptional() @IsInt() @Min(0) @Max(365) minimumNoticeDays?: number;
+  @ValidateIf((_o, value) => value !== undefined) @IsString() @MinLength(2) @MaxLength(120) name?: string;
+  @ValidateIf((_o, value) => value !== undefined) @IsBoolean() isActive?: boolean;
+  @ValidateIf((_o, value) => value !== undefined) @IsBoolean() balanceTrackingEnabled?: boolean;
+  @ValidateIf((_o, value) => value !== undefined) @IsInt() @Min(0) @Max(525600) annualEntitlementMinutes?: number;
+  @ValidateIf((_o, value) => value !== undefined) @IsInt() @Min(1) @Max(1440) dayMinutes?: number;
+  @ValidateIf((_o, value) => value !== undefined) @IsBoolean() carryOverEnabled?: boolean;
+  @ValidateIf((_o, value) => value !== undefined) @IsInt() @Min(0) @Max(525600) maxCarryOverMinutes?: number;
+  @ValidateIf((_o, value) => value !== undefined) @IsBoolean() allowHalfDay?: boolean;
+  @ValidateIf((_o, value) => value !== undefined) @IsBoolean() allowHourly?: boolean;
+  @ValidateIf((_o, value) => value !== undefined) @IsBoolean() allowApprovedCancellation?: boolean;
+  @ValidateIf((_o, value) => value !== undefined) @IsInt() @Min(0) @Max(365) minimumNoticeDays?: number;
 }
 
 export class InitializeLeaveBalancesDto {

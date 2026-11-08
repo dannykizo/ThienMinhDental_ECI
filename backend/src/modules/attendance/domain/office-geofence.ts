@@ -20,6 +20,7 @@ export class OfficeGeofence {
   }
 
   distanceFromCenter(point: GeoPoint): number {
+    assertValidGeoPoint(point);
     const latitudeDelta = toRadians(point.latitude - this.center.latitude);
     const longitudeDelta = toRadians(point.longitude - this.center.longitude);
     const centerLatitude = toRadians(this.center.latitude);
@@ -31,8 +32,11 @@ export class OfficeGeofence {
         Math.cos(pointLatitude) *
         Math.sin(longitudeDelta / 2) ** 2;
 
+    // Round-off at antipodes can put haversine just above 1 and turn the
+    // distance into NaN, which would bypass the outside-radius comparison.
+    const boundedHaversine = Math.max(0, Math.min(1, haversine));
     const angularDistance =
-      2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+      2 * Math.atan2(Math.sqrt(boundedHaversine), Math.sqrt(1 - boundedHaversine));
 
     return EARTH_RADIUS_METERS * angularDistance;
   }

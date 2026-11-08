@@ -62,6 +62,7 @@ class SessionController extends ChangeNotifier {
   late final PendingExplanationQueue explanationQueue;
   final FlutterSecureStorage _storage;
   SessionUser? user;
+  int authenticatedNavigationRevision = 0;
   ManagementAccess? managementAccess;
   Future<void>? _managementRefresh;
   bool isBootstrapping = true;
@@ -252,6 +253,7 @@ class SessionController extends ChangeNotifier {
       deviceName: '${Platform.operatingSystem} · Thiên Minh Workforce',
     );
     await _loadPermissionSetup();
+    authenticatedNavigationRevision += 1;
     user = result.user;
     sessionNotice = null;
     await _storeTokens(result.accessToken, result.refreshToken);
@@ -358,12 +360,15 @@ class SessionController extends ChangeNotifier {
       };
 
   Future<void> _clearSession() async {
+    authenticatedNavigationRevision += 1;
     user = null;
     managementAccess = null;
     api.accessToken = null;
     api.refreshToken = null;
     unreadAnnouncementCount = 0;
     pendingAnnouncementId = null;
+    // Remove authenticated routes before waiting for native/storage cleanup.
+    notifyListeners();
     await pushNotifications.clearAccount();
     await _storage.delete(key: _accessTokenKey);
     await _storage.delete(key: _refreshTokenKey);
@@ -426,9 +431,19 @@ class WorkforceApp extends StatelessWidget {
   final SessionController session;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: session,
+        builder: (BuildContext context, Widget? child) => _buildApp(),
+      );
+
+  Widget _buildApp() {
     const BorderRadius controlRadius = BorderRadius.all(Radius.circular(6));
     return MaterialApp(
+      // Home alone does not remove pushed detail/dialog routes. A new identity
+      // or ended session must dispose the old Navigator and its private cache;
+      // ordinary network/badge/capability updates retain the current stack.
+      key:
+          ValueKey((session.user?.id, session.authenticatedNavigationRevision)),
       debugShowCheckedModeBanner: false,
       title: 'Thiên Minh Workforce',
       theme: ThemeData(

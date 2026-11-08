@@ -25,6 +25,8 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   String? _error;
   bool _loading = true;
   bool _hasLoaded = false;
+  bool _cancelling = false;
+  bool _requireRefresh = false;
   String _filter = 'ALL';
 
   List<EmployeeLeaveRequest> get _visibleItems => _items
@@ -39,6 +41,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   }
 
   Future<void> _load() async {
+    if (_cancelling || (_loading && _hasLoaded)) return;
     if (mounted) {
       setState(() {
         _error = null;
@@ -57,15 +60,22 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         _policies = result[1] as List<LeavePolicy>;
         _balances = result[2] as List<LeaveBalance>;
         _hasLoaded = true;
+        _requireRefresh = false;
       });
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _requireRefresh = true;
+        });
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _create() async {
+    if (_loading || _cancelling || _requireRefresh) return;
     if (_policies.isEmpty) {
       setState(() => _error = 'Chưa có chính sách nghỉ phép đang áp dụng.');
       return;
@@ -78,43 +88,64 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         ),
       ),
     );
-    if (created == true) await _load();
+    // A dismissed form can also have an ambiguous server result. Read-only
+    // refresh on return prevents using stale requests/balance on the next action.
+    if (mounted && (created == true || _hasLoaded)) await _load();
   }
 
   Future<void> _cancel(EmployeeLeaveRequest item) async {
-    final TextEditingController controller = TextEditingController();
+    if (_loading || _cancelling || _requireRefresh) return;
+    setState(() => _cancelling = true);
+    String draftReason = '';
+    String? dialogError;
     final String? reason = await showDialog<String>(
       context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Hủy đơn nghỉ'),
-        content: TextField(
-          autofocus: true,
-          controller: controller,
-          maxLength: 2000,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            labelText: 'Lý do hủy',
-          ),
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Quay lại'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.trim().length >= 5) {
-                Navigator.of(context).pop(controller.text.trim());
+      builder: (BuildContext context) => StatefulBuilder(
+        builder: (BuildContext context, StateSetter setDialogState) =>
+            AlertDialog(
+          title: const Text('Hủy đơn nghỉ'),
+          content: TextField(
+            autofocus: true,
+            maxLength: 2000,
+            maxLines: 3,
+            onChanged: (String value) {
+              draftReason = value;
+              if (dialogError != null) {
+                setDialogState(() => dialogError = null);
               }
             },
-            child: const Text('Xác nhận hủy'),
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              errorText: dialogError,
+              labelText: 'Lý do hủy',
+            ),
           ),
-        ],
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Quay lại'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final String value = draftReason.trim();
+                if (value.length < 5) {
+                  setDialogState(
+                    () => dialogError = 'Cần ít nhất 5 ký tự.',
+                  );
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Xác nhận hủy'),
+            ),
+          ],
+        ),
       ),
     );
-    controller.dispose();
-    if (reason == null || !mounted) return;
+    if (reason == null || !mounted) {
+      if (mounted) setState(() => _cancelling = false);
+      return;
+    }
     try {
       await widget.session.api.cancelLeaveRequest(
         leaveRequestId: item.id,
@@ -124,9 +155,17 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Đã hủy đơn nghỉ và hoàn lại số dư.')),
       );
+      setState(() => _cancelling = false);
       await _load();
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _requireRefresh = true;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _cancelling = false);
     }
   }
 
@@ -229,9 +268,12 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _LeaveCard(
                       item: item,
-                      onCancel: item.status == 'SUBMITTED' ||
-                              (item.status == 'APPROVED' &&
-                                  item.allowApprovedCancellation)
+                      onCancel: !_loading &&
+                              !_cancelling &&
+                              !_requireRefresh &&
+                              (item.status == 'SUBMITTED' ||
+                                  (item.status == 'APPROVED' &&
+                                      item.allowApprovedCancellation))
                           ? () => _cancel(item)
                           : null,
                     ),
@@ -250,7 +292,8 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
               child: FilledButton.icon(
-                onPressed: _loading ? null : _create,
+                onPressed:
+                    _loading || _cancelling || _requireRefresh ? null : _create,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(0, 54),
                   padding:
@@ -292,6 +335,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   late DateTime _startDate;
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
   bool _submitting = false;
+  bool _needsReconciliation = false;
 
   @override
   void initState() {
@@ -354,7 +398,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
   }
 
   Future<void> _submit() async {
-    if (_submitting) return;
+    if (_submitting || _needsReconciliation) return;
     FocusManager.instance.primaryFocus?.unfocus();
     final String reason = _reason.text.trim();
     if (reason.length < 3) {
@@ -386,7 +430,12 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
       );
       Navigator.of(context).pop(true);
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _needsReconciliation = error.isRetryable || error.status == 409;
+        });
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -501,29 +550,19 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                         },
                 ),
                 const SizedBox(height: 16),
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: _DateField(
-                        label: _durationType == 'FULL_DAY'
-                            ? 'Từ ngày'
-                            : 'Ngày nghỉ',
-                        onTap: _submitting ? null : _pickStartDate,
-                        value: _displayDate(_startDate),
-                      ),
-                    ),
-                    if (_durationType == 'FULL_DAY') ...<Widget>[
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _DateField(
-                          label: 'Đến ngày',
-                          onTap: _submitting ? null : _pickEndDate,
-                          value: _displayDate(_endDate),
-                        ),
-                      ),
-                    ],
-                  ],
+                _DateField(
+                  label: _durationType == 'FULL_DAY' ? 'Từ ngày' : 'Ngày nghỉ',
+                  onTap: _submitting ? null : _pickStartDate,
+                  value: _displayDate(_startDate),
                 ),
+                if (_durationType == 'FULL_DAY') ...<Widget>[
+                  const SizedBox(height: 16),
+                  _DateField(
+                    label: 'Đến ngày',
+                    onTap: _submitting ? null : _pickEndDate,
+                    value: _displayDate(_endDate),
+                  ),
+                ],
                 if (_durationType == 'HALF_DAY') ...<Widget>[
                   const SizedBox(height: 16),
                   const Text('Buổi nghỉ *',
@@ -599,6 +638,12 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                     compact: true,
                     message: _error!,
                     title: null,
+                    retryLabel: 'Kiểm tra danh sách đơn',
+                    onRetry: _needsReconciliation && !_submitting
+                        ? () async {
+                            Navigator.of(context).pop(true);
+                          }
+                        : null,
                   ),
                 ],
                 const SizedBox(height: 22),
@@ -606,7 +651,7 @@ class _CreateLeaveRequestScreenState extends State<CreateLeaveRequestScreen> {
                     label: 'Gửi đơn nghỉ',
                     icon: Icons.send_rounded,
                     busy: _submitting,
-                    onPressed: _submit),
+                    onPressed: _needsReconciliation ? null : _submit),
                 const SizedBox(height: 12),
                 const Text(
                     'Đơn chỉ được ghi nhận sau khi Backend tiếp nhận thành công.',
@@ -642,6 +687,9 @@ class _BalanceCard extends StatelessWidget {
                 children: <Widget>[
                   Text(item.policyName,
                       style: const TextStyle(fontWeight: FontWeight.w700)),
+                  if (item.initialized == false)
+                    const Text('Số dư dự kiến · chưa khởi tạo',
+                        style: TextStyle(color: brandMuted, fontSize: 11)),
                   const SizedBox(height: 3),
                   Text(
                     'Còn ${_minutesLabel(item.availableMinutes, item.dayMinutes)} · Đang chờ ${_minutesLabel(item.pendingMinutes, item.dayMinutes)}',

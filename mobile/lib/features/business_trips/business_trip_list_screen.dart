@@ -73,7 +73,7 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
         ),
       ),
     );
-    if (changed == true) await _load();
+    if (mounted && (changed == true || _hasLoaded)) await _load();
   }
 
   @override
@@ -102,7 +102,7 @@ class _BusinessTripListScreenState extends State<BusinessTripListScreen> {
                 eyebrow: 'Phân công của bạn',
                 title: 'Phân công công tác',
                 description:
-                    'GPS chỉ được lấy khi bạn bắt đầu hoặc hoàn tất công tác.',
+                    'Phiếu theo dõi việc được giao; bắt đầu/hoàn tất phiếu không thay chấm công. Chấm công hiện trường hằng ngày tại Hôm nay, không cần phiếu. GPS của phiếu chỉ lấy tại thao tác bắt đầu/hoàn tất.',
               ),
               if (_error != null && _items.isNotEmpty) ...<Widget>[
                 const SizedBox(height: 16),
@@ -183,7 +183,7 @@ class BusinessTripDetailScreen extends StatefulWidget {
 
 class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   final TextEditingController _note = TextEditingController();
-  final String _evidenceId = createUuidV4();
+  String _evidenceId = createUuidV4();
   DateTime? _capturedAt;
   String? _error;
   String? _photoPath;
@@ -191,12 +191,15 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   String? _workingLabel;
   String? _photoError;
   bool _completed = false;
+  bool _needsReload = false;
+  late BusinessTripAssignment _trip;
 
   bool get _busy => _workingLabel != null;
 
   @override
   void initState() {
     super.initState();
+    _trip = widget.trip;
     _note.text = widget.trip.note ?? '';
   }
 
@@ -251,11 +254,17 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
         '${appDirectory.path}${Platform.pathSeparator}business-trip-evidence',
       );
       await evidenceDirectory.create(recursive: true);
+      final String evidenceId = createUuidV4();
       final String targetPath =
-          '${evidenceDirectory.path}${Platform.pathSeparator}$_evidenceId.jpg';
+          '${evidenceDirectory.path}${Platform.pathSeparator}$evidenceId.jpg';
       await File(photo.path).copy(targetPath);
+      final String? oldPath = _photoPath;
+      if (oldPath != null) {
+        await File(oldPath).delete().catchError((Object _) => File(oldPath));
+      }
       if (mounted) {
         setState(() {
+          _evidenceId = evidenceId;
           _capturedAt = DateTime.now();
           _photoPath = targetPath;
           _remoteReference = null;
@@ -273,7 +282,7 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   }
 
   Future<void> _start() async {
-    if (_busy) return;
+    if (_busy || _needsReload) return;
     setState(() {
       _error = null;
       _workingLabel = 'Đang lấy GPS…';
@@ -283,7 +292,7 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
       if (mounted) setState(() => _workingLabel = 'Đang bắt đầu…');
       await widget.session.api.startBusinessTrip(
         accuracyMeters: position.accuracy,
-        businessTripId: widget.trip.id,
+        businessTripId: _trip.id,
         latitude: position.latitude,
         longitude: position.longitude,
       );
@@ -296,7 +305,12 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
       );
       Navigator.of(context).pop(true);
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _needsReload = true;
+        });
+      }
     } on Object {
       if (mounted) {
         setState(() => _error = 'Không thể lấy GPS để bắt đầu công tác.');
@@ -307,9 +321,9 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
   }
 
   Future<void> _complete() async {
-    if (_busy) return;
+    if (_busy || _needsReload) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    if (widget.trip.requiresPhoto && _photoPath == null) {
+    if (_trip.requiresPhoto && _photoPath == null) {
       setState(() => _photoError = 'Phiếu này bắt buộc có ảnh hiện trường.');
       return;
     }
@@ -333,7 +347,7 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
       if (mounted) setState(() => _workingLabel = 'Đang hoàn tất…');
       await widget.session.api.completeBusinessTrip(
         accuracyMeters: position.accuracy,
-        businessTripId: widget.trip.id,
+        businessTripId: _trip.id,
         evidenceCapturedAt: _capturedAt,
         evidenceImageReference: reference,
         latitude: position.latitude,
@@ -356,7 +370,12 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
       );
       Navigator.of(context).pop(true);
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _needsReload = true;
+        });
+      }
     } on Object {
       if (mounted) {
         setState(() => _error = 'Không thể hoàn tất công tác lúc này.');
@@ -366,9 +385,36 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
     }
   }
 
+  Future<void> _reloadTrip() async {
+    if (_busy) return;
+    setState(() => _workingLabel = 'Đang tải trạng thái phiếu…');
+    try {
+      final List<BusinessTripAssignment> items =
+          await widget.session.api.myBusinessTrips();
+      final List<BusinessTripAssignment> matches = items
+          .where((BusinessTripAssignment item) => item.id == _trip.id)
+          .toList();
+      if (matches.isEmpty) {
+        throw const ApiException(
+            'Phiếu không còn trong phân công của bạn. Quay lại danh sách.');
+      }
+      if (mounted) {
+        setState(() {
+          _trip = matches.single;
+          _needsReload = false;
+          _error = null;
+        });
+      }
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _workingLabel = null);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final BusinessTripAssignment trip = widget.trip;
+    final BusinessTripAssignment trip = _trip;
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
@@ -386,9 +432,12 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
                   compact: true,
                   message: _error!,
                   title: null,
+                  retryLabel: 'Tải lại trạng thái phiếu',
+                  onRetry: _needsReload && !_busy ? _reloadTrip : null,
                 ),
               ],
-              if (trip.participationStatus == 'ASSIGNED' &&
+              if (!_needsReload &&
+                  trip.participationStatus == 'ASSIGNED' &&
                   !<String>['CANCELLED', 'COMPLETED']
                       .contains(trip.status)) ...<Widget>[
                 const SizedBox(height: 22),
@@ -404,7 +453,9 @@ class _BusinessTripDetailScreenState extends State<BusinessTripDetailScreen> {
                     busyLabel: _workingLabel ?? 'Đang xử lý…',
                     onPressed: _start),
               ],
-              if (trip.participationStatus == 'IN_PROGRESS') ...<Widget>[
+              if (!_needsReload &&
+                  trip.status == 'IN_PROGRESS' &&
+                  trip.participationStatus == 'IN_PROGRESS') ...<Widget>[
                 const SizedBox(height: 22),
                 const AppFormSection(
                     title: '1. Kết quả công tác',

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { RoleCode } from '../auth/domain/role-code.js';
 import { CurrentUser } from '../auth/presentation/current-user.decorator.js';
@@ -19,8 +19,8 @@ export class DisciplinaryActionsController {
   constructor(private readonly service: DisciplinaryActionsService) {}
 
   @Get()
-  list(): Promise<unknown> {
-    return this.service.list();
+  list(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> {
+    return this.service.list(user);
   }
 
   @Post()
@@ -34,7 +34,7 @@ export class DisciplinaryActionsController {
   @Patch(':id')
   update(
     @CurrentUser() user: AuthenticatedUserView,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() input: UpdateDisciplinaryActionDto,
   ): Promise<unknown> {
     return this.service.update(user, id, input);
@@ -43,7 +43,7 @@ export class DisciplinaryActionsController {
   @Post(':id/issue')
   issue(
     @CurrentUser() user: AuthenticatedUserView,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<unknown> {
     return this.service.issue(user, id);
   }
@@ -51,14 +51,14 @@ export class DisciplinaryActionsController {
   @Post(':id/revoke')
   revoke(
     @CurrentUser() user: AuthenticatedUserView,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() input: RevokeDisciplinaryActionDto,
   ): Promise<unknown> {
     return this.service.revoke(user, id, input);
   }
 
   @Get(':id/history')
-  history(@Param('id') id: string): Promise<unknown> {
-    return this.service.history(id);
+  history(@CurrentUser() user: AuthenticatedUserView, @Param('id', ParseUUIDPipe) id: string): Promise<unknown> {
+    return this.service.history(user, id);
   }
 }

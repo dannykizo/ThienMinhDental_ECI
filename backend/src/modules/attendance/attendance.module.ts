@@ -7,10 +7,12 @@ import { AttendanceService } from './attendance.service.js';
 import { AttendanceEvidenceStorage } from './infrastructure/attendance-evidence.storage.js';
 import { AnnouncementsModule } from '../announcements/announcements.module.js';
 import { ExplanationWorkflowService } from './application/explanation-workflow.service.js';
+import { AttendanceDeviceProof } from './infrastructure/attendance-device-proof.js';
+import { AttendanceAbuseGuard } from './infrastructure/attendance-abuse.guard.js';
 
 @Module({
   imports: [AuthModule, AnnouncementsModule, TypeOrmModule.forFeature([AttendanceEventEntity, AttendanceAdjustmentEntity, AttendanceExplanationEntity, OfficeLocationEntity])],
   controllers: [AttendanceController],
-  providers: [AttendanceService, AttendanceEvidenceStorage, ExplanationWorkflowService],
+  providers: [AttendanceService, AttendanceEvidenceStorage, ExplanationWorkflowService, AttendanceDeviceProof, AttendanceAbuseGuard],
 })
 export class AttendanceModule {}

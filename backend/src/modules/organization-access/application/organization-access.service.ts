@@ -6,6 +6,7 @@ import { RoleCode } from '../../auth/domain/role-code.js';
 import { grantCoversTeam, grantStatus, validGrantWindow, type ManagementGrant } from '../domain/management-access.js';
 import { readManagementGrants } from '../infrastructure/management-grant.reader.js';
 import type { CreateManagementGrantDto, CreateTeamDto, UpdateTeamDto } from '../presentation/organization-access.dto.js';
+import { CatalogService, requireActiveCatalogReferences } from './catalog.service.js';
 
 interface Team {
   id: string;
@@ -46,7 +47,7 @@ const teamSelect = `SELECT t.id, t.department_id AS "departmentId", d.name AS "d
 
 @Injectable()
 export class OrganizationAccessService {
-  constructor(@InjectDataSource() private readonly db: DataSource) {}
+  constructor(@InjectDataSource() private readonly db: DataSource, private readonly catalog: CatalogService) {}
 
   private assertAdmin(user: AuthenticatedUserView): void {
     if (!user.roles.includes(RoleCode.Admin)) this.denied();
@@ -91,11 +92,15 @@ export class OrganizationAccessService {
       capabilities: { manageOrganization: user.roles.includes(RoleCode.Admin), readScopedDirectory: user.roles.includes(RoleCode.Admin) || grants.length > 0,
         reviewWorkflow: grants.length > 0 ? 'EXPLANATION_TWO_STEP' : 'NOT_GRANTED',
         leaveWorkflow: grants.length > 0 ? 'LEAVE_TWO_STEP' : 'NOT_GRANTED',
+        overtimeWorkflow: grants.length > 0 ? 'OVERTIME_TWO_STEP' : 'NOT_GRANTED',
         readManagedModules: grants.length > 0 } };
   }
 
   async listTeams(user: AuthenticatedUserView): Promise<Team[]> {
-    if (user.roles.includes(RoleCode.Admin)) return this.db.query<Team[]>(`${teamSelect} ORDER BY d.name,t.name,t.id`);
+    if (user.roles.includes(RoleCode.Admin)) return this.db.query<Team[]>(`SELECT t.id,t.department_id AS "departmentId",d.name AS "departmentName",
+      t.code,t.name,t.is_active AS "isActive",d.is_active AS "departmentActive",
+      EXISTS(SELECT 1 FROM organization_catalog_usage u WHERE u.catalog_table='organization_teams' AND u.catalog_id=t.id) AS "everUsed"
+      FROM organization_teams t JOIN departments d ON d.id=t.department_id ORDER BY d.name,t.name,t.id`);
     const now = new Date();
     const grants = (await this.grantsFor(user.id)).filter((grant) => grantStatus(grant, now) === 'ACTIVE');
     const departments = grants.filter((grant) => grant.roleCode === 'DEPARTMENT_HEAD').map((grant) => grant.departmentId);
@@ -111,11 +116,11 @@ export class OrganizationAccessService {
     const admin = user.roles.includes(RoleCode.Admin);
     const rows = await this.db.query<Member[]>(`SELECT m.id,m.employee_id AS "employeeId",e.employee_code AS "employeeCode",
       e.full_name AS "fullName",m.created_at AS "createdAt",m.ended_at AS "endedAt",m.end_reason AS "endReason",
-      (e.is_active AND t.is_active AND d.is_active AND EXISTS(SELECT 1 FROM employee_organization_assignments a
+      (e.is_active AND COALESCE(u.is_active,false) AND t.is_active AND d.is_active AND EXISTS(SELECT 1 FROM employee_organization_assignments a
         JOIN branches b ON b.id=a.branch_id WHERE a.employee_id=e.id AND a.department_id=t.department_id AND b.is_active AND ${currentAssignment('a')})) AS eligible,
       ARRAY(SELECT DISTINCT b.name FROM employee_organization_assignments a JOIN branches b ON b.id=a.branch_id
         WHERE a.employee_id=e.id AND a.department_id=t.department_id AND b.is_active AND ${currentAssignment('a')} ORDER BY b.name) AS branches
-      FROM organization_team_memberships m JOIN employees e ON e.id=m.employee_id
+      FROM organization_team_memberships m JOIN employees e ON e.id=m.employee_id LEFT JOIN users u ON u.id=e.user_id
       JOIN organization_teams t ON t.id=m.team_id JOIN departments d ON d.id=t.department_id
       WHERE m.team_id=$1 ${admin ? '' : 'AND m.ended_at IS NULL'} ORDER BY m.ended_at NULLS FIRST,e.full_name,m.created_at DESC`, [teamId]);
     return rows.filter((row) => admin || row.eligible).map((row) => ({ ...row, status: row.endedAt ? 'ENDED' : row.eligible ? 'ACTIVE' : 'INACTIVE' }));
@@ -128,9 +133,9 @@ export class OrganizationAccessService {
       if (!grants.some((grant) => grant.roleCode === 'DEPARTMENT_HEAD' && grant.departmentId === departmentId && grantStatus(grant, now) === 'ACTIVE')) this.denied();
     }
     return this.db.query<EmployeeSummary[]>(`SELECT e.id,e.employee_code AS "employeeCode",e.full_name AS "fullName",array_agg(DISTINCT b.name ORDER BY b.name) AS branches
-      FROM employees e JOIN employee_organization_assignments a ON a.employee_id=e.id
+      FROM employees e JOIN users u ON u.id=e.user_id JOIN employee_organization_assignments a ON a.employee_id=e.id
       JOIN departments d ON d.id=a.department_id JOIN branches b ON b.id=a.branch_id
-      WHERE e.is_active AND d.is_active AND b.is_active AND a.department_id=$1 AND ${currentAssignment('a')}
+      WHERE e.is_active AND u.is_active AND d.is_active AND b.is_active AND a.department_id=$1 AND ${currentAssignment('a')}
       GROUP BY e.id ORDER BY e.full_name,e.id`, [departmentId]);
   }
 
@@ -153,15 +158,8 @@ export class OrganizationAccessService {
   }
 
   async updateTeam(user: AuthenticatedUserView, id: string, input: UpdateTeamDto): Promise<Team> {
-    this.assertAdmin(user);
-    return this.db.transaction(async (manager) => {
-      const before = await this.team(manager,id,true);
-      if (input.isActive && !before.departmentActive) throw new BadRequestException({ code: 'DEPARTMENT_INACTIVE', message: 'Phòng ban không hoạt động.' });
-      await manager.query('UPDATE organization_teams SET name=$2,is_active=$3 WHERE id=$1', [id,this.requiredText(input.name),input.isActive]);
-      const after = await this.team(manager,id);
-      await this.audit(manager,user,'ORGANIZATION_TEAM',id,'UPDATE',before,after);
-      return after;
-    });
+    await this.catalog.update(user,'teams',id,input);
+    return this.team(this.db.manager,id);
   }
 
   async addMember(user: AuthenticatedUserView, teamId: string, employeeId: string): Promise<unknown> {
@@ -169,6 +167,7 @@ export class OrganizationAccessService {
     return this.db.transaction(async (manager) => {
       const team = await this.team(manager,teamId,true);
       if (!team.isActive || !team.departmentActive) throw new BadRequestException({ code: 'TEAM_INACTIVE', message: 'Team hoặc phòng ban không hoạt động.' });
+      await requireActiveCatalogReferences(manager, { departments: [team.departmentId] });
       const rows = await manager.query<Array<{ id: string }>>(`SELECT e.id FROM employees e WHERE e.id=$1 AND e.is_active
         AND EXISTS(SELECT 1 FROM employee_organization_assignments a JOIN branches b ON b.id=a.branch_id
           WHERE a.employee_id=e.id AND a.department_id=$2 AND b.is_active AND ${currentAssignment('a')}) FOR SHARE OF e`, [employeeId,team.departmentId]);
@@ -214,6 +213,7 @@ export class OrganizationAccessService {
       } else {
         const team = await this.team(manager,input.teamId!,true);
         if (!team.isActive || !team.departmentActive) throw new BadRequestException({ code: 'TEAM_INACTIVE', message: 'Team hoặc phòng ban không hoạt động.' });
+        await requireActiveCatalogReferences(manager, { departments: [team.departmentId] });
       }
       const overlaps = await manager.query<Array<{ id: string }>>(`SELECT id FROM organization_management_grants
         WHERE user_id=$1 AND role_code=$2 AND department_id IS NOT DISTINCT FROM $3::uuid AND team_id IS NOT DISTINCT FROM $4::uuid
@@ -248,7 +248,7 @@ export class OrganizationAccessService {
       a.old_value AS "oldValue",a.new_value AS "newValue",a.created_at AS "createdAt",COALESCE(e.full_name,u.email) AS "actorName"
       FROM configuration_audit_logs a JOIN users u ON u.id=a.created_by
       LEFT JOIN employees e ON e.user_id=u.id
-      WHERE a.resource_type IN ('ORGANIZATION_TEAM','TEAM_MEMBERSHIP','MANAGEMENT_GRANT') ORDER BY a.created_at DESC,a.id DESC LIMIT 200`);
+      WHERE a.resource_type IN ('ORGANIZATION_BRANCH','ORGANIZATION_DEPARTMENT','ORGANIZATION_POSITION','ORGANIZATION_TEAM','TEAM_MEMBERSHIP','MANAGEMENT_GRANT') ORDER BY a.created_at DESC,a.id DESC LIMIT 200`);
   }
 
 }

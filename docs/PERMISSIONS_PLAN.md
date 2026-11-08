@@ -15,12 +15,14 @@
 | Lát cắt | Phạm vi | Trạng thái |
 |---|---|---|
 | PQ1 | Team, thành viên, quyền theo phạm vi/thời hạn, Admin Web, danh sách tổ chức cơ bản có scope | Implemented; API và Web đã kiểm tra |
-| PQ2 | Quản lý đăng nhập Web + một Mobile đồng thời; refresh/revocation và quyền hiện hành | Implemented; API đã kiểm tra, UI authenticated chưa xác nhận do Chrome chặn API |
-| PQ3 | Giải trình hai bước, tuyến mặc định theo nhân viên, Admin đổi bước chưa xử lý, evidence/audit/inbox/push | Implemented; API/build đã kiểm tra, UI authenticated bị Chrome chặn API |
-| PQ4 | Khu vực quản lý trong app hiện tại, dùng cùng API | Implemented; analyze/debug build/Hot Reload đạt, nghiệm thu thao tác quản lý trên điện thoại còn thiếu |
-| PQ5 | Nghỉ phép hai bước/tuyến riêng; công tác/chấm công/báo cáo/trạng thái thông báo chỉ đọc theo grant | Implemented; API/static checks và Hot Restart đạt, nghiệm thu UI quản lý còn thiếu |
+| PQ2 | Quản lý đăng nhập Web + một Mobile đồng thời; refresh/revocation và quyền hiện hành | Implemented; đăng nhập hai kênh, scope và grant revocation UI đã kiểm tra 07/10; lỗi Web rate-limit/CORS cần sửa |
+| PQ3 | Giải trình hai bước, tuyến mặc định theo nhân viên, Admin đổi bước chưa xử lý, evidence/audit/inbox/push | Implemented; core routed confirm/review/history/inbox Web/app đã kiểm tra; evidence/reroute UI/push còn thiếu |
+| PQ4 | Khu vực quản lý trong app hiện tại, dùng cùng API | Implemented; thao tác Leader/Head trên RMX5555 đã kiểm tra thủ công 07/10; UX nhỏ và ma trận mở rộng còn thiếu |
+| PQ5 | Nghỉ phép hai bước/tuyến riêng; công tác/chấm công/báo cáo/trạng thái thông báo chỉ đọc theo grant | Implemented; core phép và readonly/empty/outage UI Web/app đã kiểm tra; populated data/case mở rộng còn thiếu |
 
 Mỗi lát cắt đi Database → Backend API → Web/App liên quan → kiểm tra phù hợp → bàn giao. Không triển khai đồng thời các lát cắt. Theo chỉ thị Tech Lead, không tự chạy test suite; vẫn bổ sung test cho thay đổi API/permission và báo rõ chưa chạy.
+
+Biên bản nghiệm thu thủ công 07/10/2026: [MANAGER_UI_ACCEPTANCE.md](MANAGER_UI_ACCEPTANCE.md). Ghi rõ ca đạt, lỗi quan sát, cleanup QA và phần chưa chứng nhận; không thay cho nghiệm thu production/push.
 
 ## PQ1 — phạm vi hoàn thành
 

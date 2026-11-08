@@ -31,8 +31,8 @@ export class BusinessTripsController {
     return this.evidenceStorage.store(user, input.evidenceId, file);
   }
   @Get('evidence/:filename')
-  async evidence(@Param('filename') filename: string): Promise<StreamableFile> {
-    const file = await this.evidenceStorage.read(filename);
+  async evidence(@CurrentUser() user: AuthenticatedUserView, @Param('filename') filename: string): Promise<StreamableFile> {
+    const file = await this.evidenceStorage.read(filename, user);
     return new StreamableFile(file.buffer, { type: file.contentType, disposition: 'inline' });
   }
   @Post('lookups/customers') @Roles(RoleCode.Admin) createCustomerLegacy(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateCustomerDto): Promise<unknown> { return this.service.createCustomer(user, input); }

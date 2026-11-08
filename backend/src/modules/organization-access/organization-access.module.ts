@@ -5,6 +5,8 @@ import { OrganizationAccessController } from './presentation/organization-access
 import { ManagedModulesController } from './presentation/managed-modules.controller.js';
 import { ManagedModulesService } from './application/managed-modules.service.js';
 import { ReportingModule } from '../reporting/reporting.module.js';
+import { CatalogService } from './application/catalog.service.js';
+import { CatalogController } from './presentation/catalog.controller.js';
 
-@Module({ imports: [AuthModule, ReportingModule], controllers: [OrganizationAccessController,ManagedModulesController], providers: [OrganizationAccessService,ManagedModulesService], exports: [OrganizationAccessService] })
+@Module({ imports: [AuthModule, ReportingModule], controllers: [OrganizationAccessController,ManagedModulesController,CatalogController], providers: [OrganizationAccessService,ManagedModulesService,CatalogService], exports: [OrganizationAccessService,CatalogService] })
 export class OrganizationAccessModule {}

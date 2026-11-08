@@ -1,0 +1,733 @@
+/* Attendance module styling — Thien Minh Dental Enterprise SaaS */
+
+.attendance-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Metric Cards Grid */
+.att-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.att-metric-card {
+  min-height: 106px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line-crisp);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevation-low);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.att-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevation-mid);
+  border-color: rgba(94, 45, 145, 0.25);
+}
+
+.att-metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.att-metric-top p {
+  font-size: .76rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin: 0;
+}
+
+.att-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  transition: transform 180ms ease;
+}
+
+.att-metric-card:hover .att-metric-icon {
+  transform: scale(1.08);
+}
+
+.att-metric-card strong {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0 3px;
+  display: block;
+}
+
+.att-metric-card span {
+  font-size: .69rem;
+  color: var(--muted-light);
+}
+
+/* Attendance Toolbar & Date Navigation */
+.att-toolbar-card {
+  border: 1px solid var(--line-crisp);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-elevation-low);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.att-toolbar-primary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.att-date-picker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.att-date-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-crisp);
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.att-date-nav-btn:hover {
+  background: var(--brand-primary-light);
+  border-color: rgba(94, 45, 145, 0.3);
+  color: var(--brand-primary);
+}
+
+.att-date-quick-btn {
+  padding: 0 12px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-crisp);
+  background: #ffffff;
+  color: var(--ink);
+  font-size: .78rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.att-date-quick-btn:hover {
+  background: var(--brand-primary-light);
+  border-color: rgba(94, 45, 145, 0.3);
+  color: var(--brand-primary);
+}
+
+.att-date-quick-btn.is-active {
+  background: var(--brand-primary-light);
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+
+.att-date-input-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-crisp);
+  background: #fafafc;
+  color: var(--ink);
+}
+
+.att-date-input-field:focus-within {
+  outline: 2px solid var(--brand-primary-subtle);
+  border-color: var(--brand-primary);
+  background: #fff;
+}
+
+.att-date-input-field input {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: .82rem;
+  font-weight: 550;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Quick Filter Chips */
+.att-filter-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.att-chip-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 20px;
+  font-size: .76rem;
+  font-weight: 550;
+  border: 1px solid var(--line-crisp);
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 160ms cubic-bezier(.16, 1, .3, 1);
+  white-space: nowrap;
+}
+
+.att-chip-button:hover {
+  background: var(--brand-primary-light);
+  border-color: rgba(94, 45, 145, 0.28);
+  color: var(--brand-primary);
+  transform: translateY(-1px);
+}
+
+.att-chip-button.is-active {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+  color: #ffffff;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(94, 45, 145, 0.28);
+}
+
+.att-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.att-chip-count {
+  font-size: .7rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.05);
+  font-variant-numeric: tabular-nums;
+}
+
+.att-chip-button.is-active .att-chip-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* Attendance Matrix / High-density compact table */
+.att-matrix-card {
+  border: 1px solid var(--line-crisp);
+  border-radius: var(--radius-lg);
+  background: #ffffff;
+  box-shadow: var(--shadow-elevation-low);
+  overflow: hidden;
+  position: relative;
+}
+
+.att-matrix-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  gap: 16px;
+}
+
+.att-matrix-heading h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+
+.att-matrix-heading p {
+  margin: 0;
+  font-size: .76rem;
+  color: var(--muted);
+}
+
+.att-matrix-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.att-matrix-count-badge {
+  font-size: .74rem;
+  font-weight: 600;
+  color: var(--brand-primary);
+  background: var(--brand-primary-light);
+  border: 1px solid rgba(94, 45, 145, 0.14);
+  padding: 4px 11px;
+  border-radius: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two-way scrollable matrix container */
+.att-matrix-wrap {
+  position: relative;
+  max-height: calc(100vh - 360px);
+  min-height: 420px;
+  overflow-x: auto;
+  overflow-y: auto;
+  border-top: 1px solid var(--line-crisp);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(94, 45, 145, 0.25) transparent;
+}
+
+.att-matrix-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: .8rem;
+}
+
+/* Header Cells (Sticky Top) */
+.att-matrix-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8fafc;
+  backdrop-filter: blur(8px);
+  padding: 10px 16px;
+  font-size: .73rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line-crisp);
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+/* Frozen First Column (Pinned Left) */
+.att-col-pinned {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: #ffffff;
+  min-width: 210px;
+  max-width: 250px;
+  box-shadow: 3px 0 8px rgba(0, 0, 0, 0.04);
+  border-right: 1px solid var(--line-crisp);
+}
+
+/* Top-Left Corner Cell (Sticky Top & Left Intersection) */
+.att-th-pinned {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 8 !important;
+  background: #f8fafc !important;
+  box-shadow: 3px 2px 8px rgba(0, 0, 0, 0.05);
+  border-right: 1px solid var(--line-crisp);
+}
+
+/* Table Body Rows */
+.att-matrix-table tbody tr {
+  background: #ffffff;
+  transition: background-color 140ms ease;
+}
+
+.att-matrix-table tbody tr:hover {
+  background-color: rgba(94, 45, 145, 0.035);
+}
+
+.att-matrix-table tbody tr:hover .att-col-pinned {
+  background-color: #faf8fd;
+}
+
+.att-matrix-table tbody td {
+  padding: 10px 16px;
+  font-size: .79rem;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.65);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Person Cell Layout */
+.att-person-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.att-person-initial {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--brand-primary-light);
+  border: 1px solid rgba(94, 45, 145, 0.14);
+  color: var(--brand-primary);
+  font-size: .82rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.att-person-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.att-person-info strong {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.att-person-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .7rem;
+  color: var(--muted);
+}
+
+.att-code-tag {
+  font-family: monospace;
+  font-weight: 600;
+  color: #334155;
+}
+
+/* Time Cells (Tabular Numbers) */
+.att-time-cell {
+  font-size: .82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.att-time-empty {
+  color: var(--muted-light);
+  font-weight: 400;
+}
+
+.att-duration-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.att-duration-cell strong {
+  font-size: .8rem;
+  font-weight: 600;
+}
+
+.att-ot-badge {
+  font-size: .68rem;
+  font-weight: 600;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 1px 6px;
+  border-radius: 8px;
+  width: fit-content;
+}
+
+/* Distinct Status Chips (4 Brand Status Standards) */
+.att-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: .72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* 1. Đủ công: Xanh ngọc (Emerald) */
+.att-chip-full {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+/* 2. Thiếu chấm công / Chưa ra về: Đỏ (Rose/Red) */
+.att-chip-incomplete {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+}
+
+/* 3. Công tác hiện trường: Cam Thiên Minh (Orange/Amber) */
+.att-chip-trip {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #c2410c;
+}
+
+/* 4. Nghỉ phép: Vàng hổ phách (Yellow/Amber) */
+.att-chip-leave {
+  background: #fefce8;
+  border: 1px solid #fef08a;
+  color: #a16207;
+}
+
+/* Đang làm việc / Check-in: Tím Thiên Minh */
+.att-chip-working {
+  background: #f7f2fc;
+  border: 1px solid #e9def2;
+  color: #5e2d91;
+}
+
+/* Chưa chấm công: Xám nhạt */
+.att-chip-none {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #64748b;
+}
+
+/* Pulse indicator for live working status */
+.att-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5e2d91;
+  position: relative;
+}
+
+.att-pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 1px solid #5e2d91;
+  animation: pulse-ring 1.8s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+}
+
+/* Risk flags badges */
+.att-risk-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: .7rem;
+  font-weight: 550;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+}
+
+.att-risk-ok {
+  color: #059669;
+  font-size: .72rem;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Interactive Hover Tooltip Popover */
+.att-interactive-row {
+  cursor: default;
+}
+
+.att-tooltip-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.att-hover-popover {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(17, 14, 24, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(14px);
+  border-radius: 12px;
+  padding: 10px 14px;
+  color: #f1f0f3;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  z-index: 50;
+  pointer-events: none;
+  animation: ep-preview-in 160ms cubic-bezier(.16, 1, .3, 1) both;
+  font-size: .74rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.att-hover-popover strong {
+  color: #fff;
+  font-size: .8rem;
+}
+
+.att-hover-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d1c8dc;
+}
+
+.att-hover-popover-item span:first-child {
+  color: #94a3b8;
+  min-width: 65px;
+}
+
+/* Action button for admin inspection */
+.att-inspect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line-crisp);
+  background: #ffffff;
+  color: var(--brand-primary);
+  font-size: .74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.att-inspect-btn:hover {
+  background: var(--brand-primary-light);
+  border-color: rgba(94, 45, 145, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Admin Detail Inspection Drawer / Overlay */
+.att-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(14, 13, 20, 0.45);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.att-detail-dialog {
+  width: min(720px, 94vw);
+  max-height: 88vh;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid var(--line-crisp);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: ep-workspace-in 240ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.att-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line-crisp);
+}
+
+.att-detail-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.att-detail-header p {
+  margin: 3px 0 0;
+  font-size: .76rem;
+  color: var(--muted);
+}
+
+.att-detail-body {
+  padding: 20px 22px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.att-event-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line-crisp);
+  background: #fafafc;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.att-event-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.att-event-header h4 {
+  margin: 0;
+  font-size: .84rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.att-evidence-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: var(--brand-primary-light);
+  border: 1px solid rgba(94, 45, 145, 0.2);
+  color: var(--brand-primary);
+  font-size: .78rem;
+  font-weight: 600;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.att-evidence-preview:hover {
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .att-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .att-toolbar-primary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 600px) {
+  .att-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}

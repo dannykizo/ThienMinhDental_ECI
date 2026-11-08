@@ -40,13 +40,11 @@ export function calculateWorkSummary(
   }
   const start = new Date(checkedInAt);
   const end = new Date(checkedOutAt);
-  const workedMinutes = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 60_000));
-  let overtimeMinutes = 0;
-  if (schedule) {
-    const checkoutMinutes = localMinutes(end);
-    overtimeMinutes = Math.max(0, checkoutMinutes - timeToMinutes(schedule.endTime));
-  }
-  return { workedMinutes, overtimeMinutes, requiredWorkMinutes, isFullWorkday: workedMinutes >= requiredWorkMinutes };
+  const elapsed = end.getTime() - start.getTime();
+  const workedMinutes = Number.isFinite(elapsed) ? Math.max(0, Math.floor(elapsed / 60_000)) : 0;
+  // Tech Lead R4: late checkout is not OT. A separate employee OT request is required.
+  // No approved-request integration exists yet; never invent OT from clock timestamps.
+  return { workedMinutes, overtimeMinutes: 0, requiredWorkMinutes, isFullWorkday: workedMinutes >= requiredWorkMinutes };
 }
 
 export function localMinutes(date: Date): number {
@@ -56,7 +54,7 @@ export function localMinutes(date: Date): number {
     minute: '2-digit',
     hour12: false,
   }).format(date).split(':').map(Number);
-  return parts[0] * 60 + parts[1];
+  return parts[0] * 60 + parts[1] + date.getUTCSeconds() / 60 + date.getUTCMilliseconds() / 60_000;
 }
 
 function timeToMinutes(value: string): number {

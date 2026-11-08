@@ -1,16 +1,23 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../app.dart';
 import '../../presentation/widgets/app_async_state.dart';
 import '../../services/api_client.dart';
+import '../../services/attendance_device.dart';
 import '../explanations/managed_explanations_screen.dart';
 import '../leave/managed_leave_screen.dart';
+import '../overtime/managed_overtime_screen.dart';
 import '../management/managed_modules_screen.dart';
 import '../permissions/permission_setup_screen.dart';
+import '../profile/profile_screen.dart';
+import 'checkin_photo.dart';
 
 class AttendanceHome extends StatefulWidget {
   const AttendanceHome({
@@ -36,6 +43,8 @@ class _AttendanceHomeState extends State<AttendanceHome> {
   TodayAttendance? _today;
   String? _error;
   String? _success;
+  String? _deviceError;
+  String? _deviceNotice;
   bool _loading = true;
   bool _refreshInFlight = false;
   bool _retryAttendance = false;
@@ -96,9 +105,36 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       _retryAttendance = true;
       _lastEvent = null;
       _locationRecovery = null;
-      _actionState = _AttendanceActionState.locating;
+      _actionState = _AttendanceActionState.preparing;
     });
+    File? stampedPhoto;
+    XFile? cameraPhoto;
     try {
+      final String? owner = widget.session.user?.id;
+      if (owner == null) {
+        throw const ApiException('Đăng nhập lại trước khi chấm công.');
+      }
+      String attendanceType = today.attendanceType ?? 'OFFICE';
+      String? fieldWorkContent;
+      final bool checkIn = today.status == 'NOT_CHECKED_IN';
+      if (checkIn) {
+        final choice = await showDialog<({String type, String? content})>(
+          context: context,
+          builder: (_) => const _CheckInChoiceDialog(),
+        );
+        if (choice == null || !mounted) return;
+        attendanceType = choice.type;
+        fieldWorkContent = choice.content;
+      }
+      if (!mounted) return;
+      final binding = await widget.session.api
+          .registerAttendanceDevice(await AttendanceDevice.publicKey(owner));
+      if (binding['status'] != 'ACTIVE') {
+        throw ApiException(
+            'Điện thoại đang chờ Admin xác nhận tại Tài khoản & thiết bị → Thiết bị chấm công. Mã khóa: ${binding['fingerprint']}. Sau khi được duyệt, thử lại.');
+      }
+      if (!mounted || widget.session.user?.id != owner) return;
+      setState(() => _actionState = _AttendanceActionState.locating);
       final bool enabled = await Geolocator.isLocationServiceEnabled();
       if (!enabled) {
         if (mounted) {
@@ -115,8 +151,8 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       }
       if (permission == LocationPermission.denied) {
         if (mounted) {
-          setState(() => _error =
-              'Bạn cần cấp quyền vị trí chính xác để chấm công tại văn phòng.');
+          setState(() =>
+              _error = 'Bạn cần cấp quyền vị trí chính xác để chấm công.');
         }
         return;
       }
@@ -139,16 +175,80 @@ class _AttendanceHomeState extends State<AttendanceHome> {
       if (mounted) {
         setState(() {
           _actionState = _AttendanceActionState.sending;
-          _lastAccuracyMeters = position.accuracy;
+          _lastAccuracyMeters = checkIn ? position.accuracy : null;
         });
       }
+      String? captureId;
+      if (checkIn) {
+        final CheckInCapture capture = await widget.session.api.prepareCheckIn(
+          attendanceType: attendanceType,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          accuracyMeters: position.accuracy,
+          mockLocationSignal: position.isMocked,
+          fieldWorkContent: fieldWorkContent,
+        );
+        if (!mounted) return;
+        setState(() => _actionState = _AttendanceActionState.capturing);
+        cameraPhoto = await ImagePicker().pickImage(
+            source: ImageSource.camera, maxWidth: 1000, imageQuality: 85);
+        if (cameraPhoto == null || !mounted) return;
+        stampedPhoto = await stampCheckInPhoto(cameraPhoto.path, capture);
+        if (!mounted) return;
+        final bool confirmed = await showDialog<bool>(
+                context: context,
+                builder: (_) => AlertDialog(
+                      title: const Text('Xác nhận ảnh check-in'),
+                      content: SingleChildScrollView(
+                          child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: <Widget>[
+                            Image.file(stampedPhoto!, fit: BoxFit.contain),
+                            const SizedBox(height: 12),
+                            const Text(
+                                'Timemark là mốc chuẩn bị chụp từ Backend. Giờ công được ghi khi gửi thành công; ảnh không thay thế đối soát GPS.'),
+                          ])),
+                      actions: <Widget>[
+                        TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Hủy')),
+                        FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Gửi check-in')),
+                      ],
+                    )) ??
+            false;
+        if (!confirmed || !mounted) return;
+        setState(() => _actionState = _AttendanceActionState.sending);
+        await widget.session.api.uploadAttendanceEvidence(
+            evidenceId: capture.id, filePath: stampedPhoto.path);
+        captureId = capture.id;
+      }
+      final String eventType = checkIn ? 'CHECK_IN' : 'CHECK_OUT';
+      final challenge = await widget.session.api.attendanceChallenge(
+        eventType: eventType,
+        attendanceType: attendanceType,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracyMeters: position.accuracy,
+        mockLocationSignal: position.isMocked,
+        checkinCaptureId: captureId,
+      );
+      if (!mounted || widget.session.user?.id != owner) return;
+      final signature =
+          await AttendanceDevice.sign(owner, challenge['payload'] as String);
+      if (!mounted || widget.session.user?.id != owner) return;
       final RecordedAttendanceEvent event =
           await widget.session.api.recordOfficeEvent(
         accuracyMeters: position.accuracy,
-        eventType: today.status == 'NOT_CHECKED_IN' ? 'CHECK_IN' : 'CHECK_OUT',
+        eventType: eventType,
         latitude: position.latitude,
         longitude: position.longitude,
         mockLocationSignal: position.isMocked,
+        attendanceType: attendanceType,
+        checkinCaptureId: captureId,
+        challengeId: challenge['id'] as String,
+        signature: signature,
       );
       if (mounted) {
         setState(() {
@@ -156,16 +256,30 @@ class _AttendanceHomeState extends State<AttendanceHome> {
           _success =
               'Đã ghi nhận giờ $action lúc ${DateFormat('HH:mm').format(event.serverTime)}.'
               '${event.riskFlags.isEmpty ? '' : ' Cần đối soát theo thông tin bên dưới.'}';
-          _lastEvent = event;
+          _lastEvent = checkIn ? event : null;
           _retryAttendance = false;
         });
       }
       await _load(clearFeedback: false);
+    } on PlatformException catch (error) {
+      if (mounted) {
+        setState(() => _error = error.message ??
+            'Không xác thực được sinh trắc; chưa gửi chấm công. Liên hệ Admin nếu cần giải trình.');
+      }
+    } on MissingPluginException {
+      if (mounted) {
+        setState(() => _error =
+            'Cần cập nhật app Android để xác thực thiết bị chấm công.');
+      }
     } on ApiException catch (error) {
       if (mounted) {
-        setState(() => _error = error.code == 'OFFICE_LOCATION_NOT_CONFIGURED'
-            ? 'Chi nhánh của bạn chưa có tọa độ văn phòng chính thức. Vui lòng liên hệ Admin cấu hình trước khi chấm công.'
-            : error.message);
+        setState(() {
+          // A lost response may have committed. Require a read, never replay attendance.
+          _retryAttendance = false;
+          _error = error.code == 'OFFICE_LOCATION_NOT_CONFIGURED'
+              ? 'Chi nhánh của bạn chưa có tọa độ văn phòng chính thức. Vui lòng liên hệ Admin cấu hình trước khi chấm công.'
+              : '${error.message} Tải lại trạng thái trước khi thao tác tiếp.';
+        });
       }
     } on TimeoutException {
       if (mounted) {
@@ -189,9 +303,19 @@ class _AttendanceHomeState extends State<AttendanceHome> {
     } on Object {
       if (mounted) {
         setState(() => _error =
-            'Không thể lấy vị trí lúc này. Hãy kiểm tra GPS và thử lại.');
+            'Không thể hoàn tất chấm công lúc này. Kiểm tra quyền camera/vị trí và tải lại trạng thái để thử lại.');
       }
     } finally {
+      try {
+        if (stampedPhoto != null && await stampedPhoto.exists()) {
+          await stampedPhoto.delete();
+        }
+        if (cameraPhoto != null && await File(cameraPhoto.path).exists()) {
+          await File(cameraPhoto.path).delete();
+        }
+      } on FileSystemException {
+        // Cache cleanup must not turn a successful check-in into a failed operation.
+      }
       if (mounted) {
         setState(() => _actionState = _AttendanceActionState.idle);
       }
@@ -206,6 +330,96 @@ class _AttendanceHomeState extends State<AttendanceHome> {
         await Geolocator.openAppSettings();
       case null:
         break;
+    }
+  }
+
+  // Recovery retry uses the current key; never reset a key again on network error.
+  Future<void> _retryDeviceRegistration() async {
+    if (_recording) return;
+    final owner = widget.session.user?.id;
+    if (owner == null) return;
+    setState(() {
+      _deviceError = null;
+      _deviceNotice = null;
+      _actionState = _AttendanceActionState.preparing;
+    });
+    try {
+      final binding = await widget.session.api
+          .registerAttendanceDevice(await AttendanceDevice.publicKey(owner));
+      if (!mounted || widget.session.user?.id != owner) return;
+      setState(() => _deviceNotice = binding['status'] == 'ACTIVE'
+          ? 'Điện thoại đã được gắn với tài khoản. Mỗi lượt chấm công vẫn cần sinh trắc.'
+          : 'Khóa đang chờ Admin xác nhận. Mã khóa: ${binding['fingerprint']}.');
+      // Only a successful read of Today can clear stale attendance feedback;
+      // an ACTIVE device alone is not proof that attendance is available.
+      if (mounted && widget.session.user?.id == owner) {
+        await _load(clearFeedback: false);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _deviceError = error is ApiException
+            ? error.message
+            : error is PlatformException
+                ? error.message
+                : 'Không đọc được khóa thiết bị.');
+      }
+    } finally {
+      if (mounted) setState(() => _actionState = _AttendanceActionState.idle);
+    }
+  }
+
+  Future<void> _resetDeviceKey() async {
+    if (_recording) return;
+    final owner = widget.session.user?.id;
+    if (owner == null) return;
+    final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+                  title: const Text('Tạo lại khóa điện thoại?'),
+                  content: const Text(
+                      'Chỉ dùng khi khóa bị mất/vô hiệu hóa sau thay sinh trắc. Nhờ Admin thu hồi khóa hiện tại trước. Khóa cũ sẽ bị xóa khỏi máy, không khôi phục được; khóa mới phải được Admin duyệt lại, không tự cấp quyền chấm công.'),
+                  actions: <Widget>[
+                    TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Hủy')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Tạo khóa mới')),
+                  ],
+                )) ??
+        false;
+    if (!confirmed ||
+        !mounted ||
+        _recording ||
+        widget.session.user?.id != owner) {
+      return;
+    }
+    setState(() {
+      _deviceError = null;
+      _deviceNotice = null;
+      _actionState = _AttendanceActionState.preparing;
+    });
+    try {
+      await AttendanceDevice.resetKey(owner);
+      if (widget.session.user?.id != owner) return;
+      final binding = await widget.session.api
+          .registerAttendanceDevice(await AttendanceDevice.publicKey(owner));
+      if (mounted && widget.session.user?.id == owner) {
+        setState(() => _deviceNotice = binding['status'] == 'ACTIVE'
+            ? 'Đã gắn khóa thiết bị đầu tiên. Mỗi lượt chấm công vẫn cần sinh trắc. Mã khóa: ${binding['fingerprint']}.'
+            : 'Khóa mới đang chờ Admin xác nhận. Mã khóa: ${binding['fingerprint']}.');
+        await _load(clearFeedback: false);
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _deviceError = error is ApiException
+            ? error.message
+            : error is PlatformException
+                ? error.message
+                : 'Không tạo được khóa sinh trắc mới. Liên hệ Admin.');
+      }
+    } finally {
+      if (mounted) setState(() => _actionState = _AttendanceActionState.idle);
     }
   }
 
@@ -241,6 +455,12 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                     child: Image.asset('assets/brand/thien-minh-logo.png'),
                   ),
                   const Spacer(),
+                  ProfileAvatarButton(key: ValueKey<String>(user.id), session: widget.session, enabled: !_recording),
+                  IconButton(
+                    tooltip: 'Tạo lại khóa thiết bị (cần Admin duyệt)',
+                    onPressed: _recording ? null : _resetDeviceKey,
+                    icon: const Icon(Icons.phonelink_lock_rounded, size: 22),
+                  ),
                   IconButton(
                     tooltip: 'Thiết lập quyền ứng dụng',
                     onPressed: _recording
@@ -267,6 +487,21 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                       height: 1.25,
                       letterSpacing: -0.4)),
               const SizedBox(height: 16),
+              if (_deviceError != null) ...<Widget>[
+                AppErrorState(
+                  compact: true,
+                  title: 'Chưa thể khôi phục khóa điện thoại',
+                  message: _deviceError!,
+                  onRetry:
+                      _recording || _loading ? null : _retryDeviceRegistration,
+                  retryLabel: 'Thử kết nối lại',
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (_deviceNotice != null) ...<Widget>[
+                Text(_deviceNotice!),
+                const SizedBox(height: 16),
+              ],
               if (_success != null) ...<Widget>[
                 _SuccessBanner(
                   message: _success!,
@@ -311,6 +546,15 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                   dateLabel: _formatDate(_today!.date),
                   today: _today!,
                 ),
+              if (_today?.attendanceType != null)
+                Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(
+                        _today!.attendanceType == 'BUSINESS_TRIP'
+                            ? 'Hôm nay: Hiện trường công tác'
+                            : 'Hôm nay: Văn phòng',
+                        style: const TextStyle(
+                            color: brandPurple, fontWeight: FontWeight.w700))),
               if (_lastEvent != null) ...<Widget>[
                 const SizedBox(height: 12),
                 _GeofenceResultCard(event: _lastEvent!),
@@ -319,6 +563,24 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                 _GpsSampleNotice(accuracyMeters: _lastAccuracyMeters!),
               ],
               const SizedBox(height: 18),
+              ListenableBuilder(
+                  listenable: widget.session,
+                  builder: (context, child) =>
+                      widget.session.managementAccess?.canReviewOvertime == true
+                          ? Card(
+                              child: ListTile(
+                                  leading: const Icon(Icons.more_time_rounded,
+                                      color: brandPurple),
+                                  title: const Text('Xử lý tăng ca (OT)'),
+                                  subtitle: const Text(
+                                      'Leader xác nhận → Trưởng phòng duyệt'),
+                                  trailing:
+                                      const Icon(Icons.chevron_right_rounded),
+                                  onTap: () => Navigator.of(context).push<void>(
+                                      MaterialPageRoute<void>(
+                                          builder: (_) => ManagedOvertimeScreen(
+                                              session: widget.session)))))
+                          : const SizedBox.shrink()),
               _HomeShortcuts(
                 onOpenBusinessTrips: widget.onOpenBusinessTrips,
                 onOpenExplanations: widget.onOpenExplanations,
@@ -411,7 +673,7 @@ class _AttendanceHomeState extends State<AttendanceHome> {
                   childrenPadding: EdgeInsets.fromLTRB(16, 0, 16, 16),
                   children: <Widget>[
                     Text(
-                      'Ứng dụng chỉ lấy một mẫu GPS khi bạn bấm nút chấm công. Không theo dõi vị trí nền hoặc liên tục.',
+                      'Check-in cần ảnh chụp trực tiếp và một mẫu GPS. Check-out không cần ảnh, ứng dụng lấy một mẫu GPS tại lúc bạn bấm ra; chỉ Admin được xem vị trí check-out. Không theo dõi vị trí nền hoặc liên tục.',
                       style: TextStyle(
                           color: brandMuted, fontSize: 12, height: 1.5),
                     ),
@@ -560,6 +822,8 @@ class _AttendanceActionBar extends StatelessWidget {
     final bool checkedOut = today?.status == 'CHECKED_OUT';
     final bool checkingOut = today?.status == 'CHECKED_IN';
     final String label = switch (actionState) {
+      _AttendanceActionState.preparing => 'Chọn hình thức…',
+      _AttendanceActionState.capturing => 'Chụp và xác nhận ảnh…',
       _AttendanceActionState.locating => 'Đang lấy vị trí…',
       _AttendanceActionState.sending => 'Đang gửi chấm công…',
       _AttendanceActionState.idle => loading
@@ -573,6 +837,10 @@ class _AttendanceActionBar extends StatelessWidget {
                       : 'Chấm công vào',
     };
     final String hint = switch (actionState) {
+      _AttendanceActionState.preparing =>
+        'Văn phòng hoặc hiện trường dùng chung một lượt mỗi ngày.',
+      _AttendanceActionState.capturing =>
+        'Chụp ảnh mới, không chọn từ thư viện.',
       _AttendanceActionState.locating => 'Giữ ứng dụng mở trong khi lấy GPS.',
       _AttendanceActionState.sending => 'Vui lòng chờ kết quả từ Backend.',
       _AttendanceActionState.idle => loading
@@ -784,9 +1052,7 @@ class _AttendanceCard extends StatelessWidget {
                         Expanded(
                           child: _MetricCell(
                             label: 'TĂNG CA',
-                            value: today.status == 'CHECKED_OUT'
-                                ? _formatDuration(today.overtimeMinutes)
-                                : '—',
+                            value: _formatDuration(today.overtimeMinutes),
                           ),
                         ),
                       ],
@@ -1118,6 +1384,85 @@ class _GeofenceMetric extends StatelessWidget {
       );
 }
 
-enum _AttendanceActionState { idle, locating, sending }
+enum _AttendanceActionState { idle, preparing, locating, capturing, sending }
+
+class _CheckInChoiceDialog extends StatefulWidget {
+  const _CheckInChoiceDialog();
+  @override
+  State<_CheckInChoiceDialog> createState() => _CheckInChoiceDialogState();
+}
+
+class _CheckInChoiceDialogState extends State<_CheckInChoiceDialog> {
+  String _type = 'OFFICE';
+  final TextEditingController _content = TextEditingController();
+  final GlobalKey<FormState> _form = GlobalKey<FormState>();
+  @override
+  void dispose() {
+    _content.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Chấm công vào'),
+        content: SingleChildScrollView(
+            child: Form(
+                key: _form,
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      const Text(
+                          'Mỗi ngày một lần check-in, dùng chung cho hai hình thức. Check-in chụp ảnh mới; check-out lấy vị trí chỉ Admin xem.'),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                          initialValue: _type,
+                          decoration:
+                              const InputDecoration(labelText: 'Hình thức'),
+                          items: const <DropdownMenuItem<String>>[
+                            DropdownMenuItem(
+                                value: 'OFFICE', child: Text('Tại văn phòng')),
+                            DropdownMenuItem(
+                                value: 'BUSINESS_TRIP',
+                                child: Text('Tại hiện trường')),
+                          ],
+                          onChanged: (value) =>
+                              setState(() => _type = value ?? 'OFFICE')),
+                      if (_type == 'BUSINESS_TRIP') ...<Widget>[
+                        const SizedBox(height: 16),
+                        TextFormField(
+                            controller: _content,
+                            maxLength: 2000,
+                            minLines: 3,
+                            maxLines: 6,
+                            decoration: const InputDecoration(
+                                labelText: 'Nội dung công tác *',
+                                hintText: 'Địa điểm, công việc thực hiện…'),
+                            validator: (value) =>
+                                (value?.trim().length ?? 0) < 5
+                                    ? 'Nhập nội dung ít nhất 5 ký tự.'
+                                    : null),
+                        const Text(
+                            'Không cần phiếu công tác; giờ công được ghi nhận khi check-in/out hợp lệ.'),
+                      ],
+                    ]))),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Hủy')),
+          FilledButton(
+              onPressed: () {
+                if (_form.currentState!.validate()) {
+                  Navigator.pop(context, (
+                    type: _type,
+                    content:
+                        _type == 'BUSINESS_TRIP' ? _content.text.trim() : null
+                  ));
+                }
+              },
+              child: const Text('Tiếp tục chụp ảnh')),
+        ],
+      );
+}
 
 enum _LocationRecovery { locationSettings, appSettings }

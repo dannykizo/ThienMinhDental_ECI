@@ -57,9 +57,14 @@ export class TypeOrmAuthSessionRepository implements AuthSessionRepository {
     context: LoginContext,
     expiresAt: Date,
     refreshTokenHash: string,
+    verifiedPasswordHash?: string,
   ): Promise<AuthSessionRecord> {
     return this.dataSource.transaction(async (manager) => {
       if (!await this.lockAccount(manager, userId)) throw new UnauthorizedException({ code: 'SESSION_USER_UNAVAILABLE', message: 'Tài khoản không còn hoạt động.' });
+      if (verifiedPasswordHash !== undefined) {
+        const [current] = await manager.query<Array<{ password_hash: string }>>('SELECT password_hash FROM users WHERE id=$1', [userId]);
+        if (current?.password_hash !== verifiedPasswordHash) throw new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: 'Mật khẩu đã thay đổi. Vui lòng đăng nhập lại.' });
+      }
       const access = await this.accessFor(manager, userId);
       // Deny before replacing anything: an employee trying the Web login must
       // not lose their working Mobile session.

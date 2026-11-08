@@ -238,7 +238,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen>
                         ready: locationGranted &&
                             _accuracy == LocationAccuracyStatus.precise,
                         description:
-                            'Chỉ xin và lấy vị trí khi bạn bấm chấm công hoặc bắt đầu/kết thúc công tác. Chọn vị trí chính xác, khi dùng ứng dụng; không theo dõi nền.'
+                            'Vị trí chỉ lấy tại thao tác chấm công/công tác, không theo dõi nền. Check-in chụp ảnh; check-out không chụp, lấy một mẫu GPS chỉ Admin xem. Chọn vị trí chính xác, khi dùng ứng dụng.'
                             '${_locationServiceEnabled == false ? '\nDịch vụ vị trí đang tắt.' : ''}',
                         action: _locationPermission ==
                                     LocationPermission.deniedForever ||
@@ -269,7 +269,7 @@ class _PermissionSetupScreenState extends State<PermissionSetupScreen>
                         title: 'Camera',
                         status: 'Khi chụp ảnh',
                         description:
-                            'Mở camera hệ thống khi bạn chọn Chụp minh chứng. Không mở camera hay chụp ảnh trong bước thiết lập này.',
+                            'Check-in văn phòng/hiện trường cần ảnh chụp mới. Giải trình có thể chụp minh chứng. Không mở camera hay chụp ảnh trong bước thiết lập này.',
                       ),
                       const _PermissionCard(
                         icon: Icons.photo_library_outlined,

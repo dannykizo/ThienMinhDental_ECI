@@ -1,9 +1,17 @@
 'use client';
 
-import { CircleAlert, History } from 'lucide-react';
+import {
+  CircleAlert,
+  History,
+  Laptop,
+  MailCheck,
+  ShieldCheck,
+  Smartphone,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ToastNotice } from '@/components/admin-ui';
+import { AttendanceDevices } from '@/components/attendance-devices';
 import {
   ApiError,
   getLoginSessions,
@@ -109,9 +117,9 @@ export default function AccessPage() {
       <header className="module-header">
         <div>
           <p className="eyebrow">BẢO MẬT TÀI KHOẢN</p>
-          <h1>Tài khoản & thiết bị</h1>
+          <h1>Tài khoản & Thiết bị truy cập</h1>
           <p>
-            Theo dõi lịch sử đăng nhập, trạng thái cảnh báo email và thu hồi
+            Theo dõi phiên đăng nhập bảo mật, trạng thái cảnh báo email và thu hồi
             thiết bị khi nhân viên đổi hoặc mất máy.
           </p>
         </div>
@@ -125,21 +133,39 @@ export default function AccessPage() {
 
       {message && state !== 'error' && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
 
-      <div className="metric-grid">
-        <article className="metric-card">
-          <p>Phiên đang hoạt động</p>
-          <strong>{metrics.active}</strong>
-          <span>Được Backend xác thực theo từng request</span>
+      {/* KPI Security Metrics */}
+      <div className="cfg-metric-grid">
+        <article className="cfg-metric-tile">
+          <div className="cfg-metric-tile-header">
+            <span className="cfg-metric-tile-label">Phiên đang hoạt động</span>
+            <span className="cfg-metric-tile-icon cfg-icon-purple">
+              <ShieldCheck size={18} />
+            </span>
+          </div>
+          <p className="cfg-metric-tile-value tabular-nums">{metrics.active}</p>
+          <span className="cfg-metric-tile-sub">Xác thực token theo từng API request</span>
         </article>
-        <article className="metric-card">
-          <p>Lượt đăng nhập Mobile</p>
-          <strong>{metrics.mobile}</strong>
-          <span>Trong 200 bản ghi gần nhất</span>
+
+        <article className="cfg-metric-tile">
+          <div className="cfg-metric-tile-header">
+            <span className="cfg-metric-tile-label">Đăng nhập Mobile App</span>
+            <span className="cfg-metric-tile-icon cfg-icon-teal">
+              <Smartphone size={18} />
+            </span>
+          </div>
+          <p className="cfg-metric-tile-value tabular-nums">{metrics.mobile}</p>
+          <span className="cfg-metric-tile-sub">Trong 200 bản ghi phiên gần nhất</span>
         </article>
-        <article className="metric-card">
-          <p>Email cảnh báo đã gửi</p>
-          <strong>{metrics.alerts}</strong>
-          <span>SMTP phải được cấu hình trên Backend</span>
+
+        <article className="cfg-metric-tile">
+          <div className="cfg-metric-tile-header">
+            <span className="cfg-metric-tile-label">Email cảnh báo bảo mật</span>
+            <span className="cfg-metric-tile-icon cfg-icon-amber">
+              <MailCheck size={18} />
+            </span>
+          </div>
+          <p className="cfg-metric-tile-value tabular-nums">{metrics.alerts}</p>
+          <span className="cfg-metric-tile-sub">Đã gửi thông báo đến hòm thư nhân sự</span>
         </article>
       </div>
 
@@ -157,7 +183,7 @@ export default function AccessPage() {
           </span>
           <h3>Không thể tải dữ liệu</h3>
           <p>{message}</p>
-          <button className="secondary-button" onClick={() => void load()} type="button">
+          <button className="secondary-button btn-tactile" onClick={() => void load()} type="button">
             Thử lại
           </button>
         </div>
@@ -174,34 +200,48 @@ export default function AccessPage() {
       )}
 
       {state === 'ready' && sessions.length > 0 && (
-        <div className="table-wrap">
-          <table>
+        <div className="cfg-table-wrap">
+          <table className="cfg-table">
             <thead>
               <tr>
                 <th>Nhân sự</th>
-                <th>Thiết bị</th>
-                <th>Đăng nhập</th>
-                <th>Phiên</th>
-                <th>Cảnh báo</th>
+                <th>Thiết bị & Kênh</th>
+                <th>Thời điểm đăng nhập</th>
+                <th>Trạng thái phiên</th>
+                <th>Cảnh báo email</th>
                 <th>Thao tác</th>
               </tr>
             </thead>
             <tbody>
               {sessions.map((session) => (
-                <tr key={session.id}>
+                <tr
+                  key={session.id}
+                  className={session.isCurrent ? 'cfg-current-session-row' : ''}
+                >
                   <td>
                     <strong>{session.displayName}</strong>
                     <br />
-                    <small>{session.accountEmail}</small>
+                    <small style={{ color: 'var(--muted)' }}>{session.accountEmail}</small>
                   </td>
                   <td>
-                    {session.deviceName}
-                    <br />
-                    <small>
-                      {session.clientType} · {session.ipAddress ?? 'Không rõ IP'}
-                    </small>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {session.clientType === 'MOBILE' ? (
+                        <Smartphone size={16} color="var(--brand-primary)" />
+                      ) : (
+                        <Laptop size={16} color="var(--ink-secondary)" />
+                      )}
+                      <div>
+                        <strong>{session.deviceName}</strong>
+                        <br />
+                        <small style={{ color: 'var(--muted)' }}>
+                          {session.clientType} · {session.ipAddress ?? 'Không rõ IP'}
+                        </small>
+                      </div>
+                    </div>
                   </td>
-                  <td>{dateFormatter.format(new Date(session.signedInAt))}</td>
+                  <td className="tabular-nums">
+                    {dateFormatter.format(new Date(session.signedInAt))}
+                  </td>
                   <td>
                     <span
                       className={`status-badge ${
@@ -213,10 +253,12 @@ export default function AccessPage() {
                       {statusLabel[session.status]}
                     </span>
                     {session.isCurrent && (
-                      <>
-                        <br />
-                        <small>Phiên hiện tại</small>
-                      </>
+                      <div>
+                        <span className="cfg-current-badge">
+                          <span className="cfg-pulse-dot" />
+                          Phiên hiện tại
+                        </span>
+                      </div>
                     )}
                   </td>
                   <td>
@@ -235,7 +277,7 @@ export default function AccessPage() {
                   <td>
                     {session.status === 'ACTIVE' ? (
                       <button
-                        className="table-action danger-action"
+                        className="table-action danger-action btn-tactile"
                         disabled={revokingId === session.id}
                         onClick={() => void revoke(session)}
                         type="button"
@@ -245,7 +287,7 @@ export default function AccessPage() {
                           : 'Đăng xuất thiết bị'}
                       </button>
                     ) : (
-                      <span>—</span>
+                      <span style={{ color: 'var(--muted-light)' }}>—</span>
                     )}
                   </td>
                 </tr>
@@ -254,6 +296,10 @@ export default function AccessPage() {
           </table>
         </div>
       )}
+
+      {/* Danh sách thiết bị đăng ký điểm danh */}
+      <AttendanceDevices />
     </section>
   );
 }
+

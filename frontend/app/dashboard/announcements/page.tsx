@@ -8,7 +8,7 @@ import { useActionDialog } from '@/components/use-action-dialog';
 import { useClientPagination } from '@/lib/use-client-pagination';
 import { EmployeePicker, type EmployeePickerOption } from '@/components/employee-picker';
 
-interface Department { id: string; name: string; }
+interface Department { id: string; name: string; isActive: boolean; }
 type Employee = EmployeePickerOption;
 interface Announcement {
   id: string;
@@ -166,7 +166,7 @@ export default function AnnouncementsPage() {
       <form className="form-grid" key={editing?.id ?? 'new'} onSubmit={saveDraft}>
         <label className="span-2">Tiêu đề<input defaultValue={editing?.title ?? ''} maxLength={200} minLength={3} name="title" required /></label>
         <label>Đối tượng<select name="audienceType" value={audienceType} onChange={(event) => { const next = event.target.value as AudienceType; setAudienceType(next); if (next !== 'EMPLOYEE') setSelectedEmployeeId(''); }}><option value="ALL">Toàn công ty</option><option value="DEPARTMENT">Theo phòng ban</option><option value="EMPLOYEE">Theo cá nhân</option></select></label>
-        {audienceType === 'DEPARTMENT' ? <label>Phòng ban<select defaultValue={editing?.departmentId ?? ''} name="departmentId" required><option value="">Chọn phòng ban</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label> : audienceType === 'EMPLOYEE' ? <EmployeePicker employees={employees.filter((employee) => employee.isActive !== false || employee.id === selectedEmployeeId)} onChange={setSelectedEmployeeId} value={selectedEmployeeId} /> : <div className="span-1"><Notice kind="info">Danh sách người nhận được chốt từ toàn bộ nhân viên đang hoạt động khi xuất bản.</Notice></div>}
+        {audienceType === 'DEPARTMENT' ? <label>Phòng ban<select defaultValue={editing?.departmentId ?? ''} name="departmentId" required><option value="">Chọn phòng ban</option>{departments.filter(item=>item.isActive || item.id===editing?.departmentId).map((item) => <option disabled={!item.isActive} key={item.id} value={item.id}>{item.name}{!item.isActive ? ' (ngừng sử dụng)' : ''}</option>)}</select></label> : audienceType === 'EMPLOYEE' ? <EmployeePicker employees={employees.filter((employee) => employee.isActive !== false || employee.id === selectedEmployeeId)} onChange={setSelectedEmployeeId} value={selectedEmployeeId} /> : <div className="span-1"><Notice kind="info">Danh sách người nhận được chốt từ toàn bộ nhân viên đang hoạt động khi xuất bản.</Notice></div>}
         <label className="span-2">Nội dung<textarea defaultValue={editing?.body ?? ''} maxLength={10000} minLength={3} name="body" required rows={5} /></label>
         <label className="check-inline span-2"><input defaultChecked={editing?.requiresAcknowledgement ?? false} name="requiresAcknowledgement" type="checkbox" /> Tin quan trọng — bắt buộc nhân viên xác nhận đã đọc</label>
         <button className="primary-button form-action" disabled={saving}>{saving ? 'Đang lưu…' : editing ? 'Cập nhật bản nháp' : 'Lưu bản nháp'}</button>

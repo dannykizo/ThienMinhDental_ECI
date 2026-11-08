@@ -9,6 +9,7 @@ import { BusinessTripsModule } from './modules/business-trips/business-trips.mod
 import { EmployeesModule } from './modules/employees/employees.module.js';
 import { KpiModule } from './modules/kpi/kpi.module.js';
 import { LeaveModule } from './modules/leave/leave.module.js';
+import { OvertimeModule } from './modules/overtime/overtime.module.js';
 import { OfficeLocationsModule } from './modules/office-locations/office-locations.module.js';
 import { ReportingModule } from './modules/reporting/reporting.module.js';
 import { WorkSchedulesModule } from './modules/work-schedules/work-schedules.module.js';
@@ -30,6 +31,7 @@ import { OrganizationAccessModule } from './modules/organization-access/organiza
     AttendanceModule,
     BusinessTripsModule,
     LeaveModule,
+    OvertimeModule,
     AnnouncementsModule,
     DisciplinaryActionsModule,
     ReportingModule,

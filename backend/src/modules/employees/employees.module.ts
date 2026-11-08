@@ -7,6 +7,11 @@ import { BranchEntity, EmployeeOrganizationAssignmentEntity, UserBranchScopeEnti
 import { AuthModule } from '../auth/auth.module.js';
 import { EmployeesController } from './employees.controller.js';
 import { EmployeesService } from './employees.service.js';
+import { CatalogService } from '../organization-access/application/catalog.service.js';
+import { EmployeeAdminService } from './employee-admin.service.js';
+import { EmployeeFileCleanup } from './infrastructure/employee-file-cleanup.js';
+import { EmployeePortraitsController, EmployeeOwnPortraitController } from './employee-portraits.controller.js';
+import { EmployeePortraitsService } from './employee-portraits.service.js';
 
-@Module({ imports: [AuthModule, TypeOrmModule.forFeature([EmployeeEntity, DepartmentEntity, PositionEntity, BranchEntity, EmployeeOrganizationAssignmentEntity, UserBranchScopeEntity])], controllers: [EmployeesController], providers: [EmployeesService] })
+@Module({ imports: [AuthModule, TypeOrmModule.forFeature([EmployeeEntity, DepartmentEntity, PositionEntity, BranchEntity, EmployeeOrganizationAssignmentEntity, UserBranchScopeEntity])], controllers: [EmployeePortraitsController, EmployeeOwnPortraitController, EmployeesController], providers: [EmployeesService,CatalogService,EmployeeAdminService,EmployeeFileCleanup,EmployeePortraitsService] })
 export class EmployeesModule {}

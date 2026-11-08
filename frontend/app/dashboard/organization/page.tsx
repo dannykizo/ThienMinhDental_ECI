@@ -1,6 +1,6 @@
 'use client';
 
-import { History, Network, Pencil, Plus, ShieldCheck, UsersRound } from 'lucide-react';
+import { Building2, History, Network, Pencil, Plus, Search, ShieldCheck, Trash2, UsersRound } from 'lucide-react';
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { EmptyState, LoadingState, Notice, PageHeader, Pagination, StatusBadge, ToastNotice, formatDate } from '@/components/admin-ui';
 import { EmployeePicker, type EmployeePickerOption } from '@/components/employee-picker';
@@ -8,6 +8,8 @@ import { useActionDialog } from '@/components/use-action-dialog';
 import { apiRequest } from '@/lib/auth-api';
 import { useClientPagination } from '@/lib/use-client-pagination';
 import type { ManagementGrant, OrganizationAudit, OrganizationMember, OrganizationTeam } from '@/lib/organization-api';
+import { describeCatalogImpact, type CatalogImpact } from '@/lib/organization-api';
+import { OrganizationCatalog } from '@/components/organization-catalog';
 
 interface Department { id: string; name: string; isActive: boolean }
 interface Employee extends EmployeePickerOption { userId: string | null; isActive: boolean }
@@ -17,7 +19,7 @@ type ScopedEmployee = EmployeePickerOption & { branches: string[] };
 
 const roleLabels = { DEPARTMENT_HEAD: 'Trưởng phòng', TEAM_LEADER: 'Leader team' };
 const grantLabels = { ACTIVE: 'Đang hiệu lực', SCHEDULED: 'Chưa đến hạn', EXPIRED: 'Hết hạn', REVOKED: 'Đã thu hồi', INACTIVE: 'Tạm không hiệu lực' };
-const auditLabels: Record<string, string> = { CREATE: 'Tạo team', UPDATE: 'Sửa team', ADD: 'Thêm thành viên', END: 'Rút thành viên', GRANT: 'Cấp quyền', REVOKE: 'Thu hồi quyền' };
+const auditLabels: Record<string, string> = { CREATE: 'Tạo mới', UPDATE: 'Chỉnh sửa', DEACTIVATE: 'Ngừng sử dụng', REACTIVATE: 'Khôi phục', DELETE: 'Xóa bản ghi chưa sử dụng', ADD: 'Thêm thành viên', END: 'Rút thành viên', GRANT: 'Cấp quyền', REVOKE: 'Thu hồi quyền' };
 
 function localNow(): string {
   const now = new Date();
@@ -40,7 +42,13 @@ export default function OrganizationPage() {
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const busy = useRef(false);
-  const [tab, setTab] = useState<'teams' | 'grants' | 'history'>('teams');
+  const [tab, setTab] = useState<'catalog' | 'teams' | 'grants' | 'history'>('catalog');
+  const [teamSearch, setTeamSearch] = useState('');
+  const [teamStatus, setTeamStatus] = useState('ACTIVE');
+  const [grantSearch, setGrantSearch] = useState('');
+  const [grantFilter, setGrantFilter] = useState('CURRENT');
+  const [previewing, setPreviewing] = useState(false);
+  const previewBusy = useRef(false);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [memberVersion, setMemberVersion] = useState(0);
   const [history, setHistory] = useState<OrganizationAudit[] | null>(null);
@@ -99,75 +107,468 @@ export default function OrganizationPage() {
   }
 
   const selectedTeam = data?.teams.find((team) => team.id === selectedTeamId);
-  const grantsPagination = useClientPagination(data?.grants ?? [], 15);
-  const teamsPagination = useClientPagination(data?.teams ?? [], 15);
+  const displayedTeams = (data?.teams ?? []).filter(team => (teamStatus==='ALL' || (team.isActive && team.departmentActive)===(teamStatus==='ACTIVE')) && `${team.code} ${team.name} ${team.departmentName}`.toLocaleLowerCase('vi').includes(teamSearch.trim().toLocaleLowerCase('vi')));
+  const displayedGrants = (data?.grants ?? []).filter(grant => (grantFilter==='ALL' || (grantFilter==='CURRENT' ? grant.status==='ACTIVE' || grant.status==='SCHEDULED' : grant.status===grantFilter)) && `${grant.employeeName} ${grant.employeeCode} ${grant.departmentName} ${grant.teamName ?? ''}`.toLocaleLowerCase('vi').includes(grantSearch.trim().toLocaleLowerCase('vi')));
+  const grantsPagination = useClientPagination(displayedGrants, 15);
+  const teamsPagination = useClientPagination(displayedTeams, 15);
   const historyPagination = useClientPagination(history ?? [], 15);
 
-  return <section className="module-page">
+  async function removeTeam(team: OrganizationTeam) {
+    if (previewBusy.current || saving) return;
+    previewBusy.current=true; setPreviewing(true); setError('');
+    try {
+      const impact = await apiRequest<CatalogImpact>(`/organization/catalog/teams/${team.id}/impact`);
+      if (!impact.canDelete) { setError('Team đã từng được sử dụng. Hãy ngừng hoạt động để giữ lịch sử.'); return; }
+      const reason = await request({ title: 'Xóa team chưa sử dụng',description: `${team.name}. ${describeCatalogImpact(impact)} Xóa không thể khôi phục team; audit vẫn giữ.`,confirmLabel: 'Xóa team',fieldLabel: 'Lý do',required: true,minLength: 5,danger: true });
+      if (reason===null) return;
+      if (await perform(()=>apiRequest(`/organization/catalog/teams/${team.id}`, { method: 'DELETE',body: JSON.stringify({ reason,confirmationToken: impact.confirmationToken }) }), 'Đã xóa team chưa sử dụng.')) setSelectedTeamId('');
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể kiểm tra team.'); }
+    finally { previewBusy.current=false; setPreviewing(false); }
+  }
+
+  return <section className="module-page organization-workspace">
     <PageHeader eyebrow="CƠ CẤU & QUYỀN QUẢN LÝ" title="Tổ chức & phân quyền" description="Team thuộc một phòng ban, có thể xuyên chi nhánh. Admin cấp quyền quản lý riêng theo từng phạm vi và thời hạn." />
-    <Notice>Thành viên không tự có quyền quản lý. PQ1 chỉ cấp quyền đọc danh sách tổ chức cơ bản; tuyến duyệt đơn và phiên Web + App đồng thời chưa triển khai.</Notice>
+    <Notice>Thành viên và quyền quản lý độc lập. Backend kiểm tra phạm vi/thời hạn ở mỗi yêu cầu; tuyến giải trình và nghỉ phép được cấu hình riêng.</Notice>
     {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
     {error && <Notice kind="error">{error} <button className="table-action" type="button" disabled={saving} onClick={() => void reload()}>Tải lại</button></Notice>}
     {!data && !error && <LoadingState />}
     {data && <>
-      <div className="organization-tabs" role="group" aria-label="Nội dung tổ chức">
-        <button type="button" className={tab === 'teams' ? 'primary-button' : 'secondary-button'} onClick={() => setTab('teams')}><Network size={16} /> Team & thành viên</button>
-        <button type="button" className={tab === 'grants' ? 'primary-button' : 'secondary-button'} onClick={() => setTab('grants')}><ShieldCheck size={16} /> Quyền quản lý</button>
-        <button type="button" className={tab === 'history' ? 'primary-button' : 'secondary-button'} disabled={saving || historyLoading} onClick={() => { setTab('history'); if (!history) void loadHistory(); }}><History size={16} /> Lịch sử</button>
+      <div className="cfg-org-tabs" role="group" aria-label="Nội dung tổ chức">
+        <button
+          type="button"
+          className={`cfg-org-tab-btn btn-tactile ${tab === 'catalog' ? 'is-active' : ''}`}
+          disabled={saving || previewing}
+          onClick={() => setTab('catalog')}
+        >
+          <Building2 size={16} /> Danh mục tổ chức
+        </button>
+        <button
+          type="button"
+          className={`cfg-org-tab-btn btn-tactile ${tab === 'teams' ? 'is-active' : ''}`}
+          disabled={saving || previewing}
+          onClick={() => setTab('teams')}
+        >
+          <Network size={16} /> Team & thành viên
+        </button>
+        <button
+          type="button"
+          className={`cfg-org-tab-btn btn-tactile ${tab === 'grants' ? 'is-active' : ''}`}
+          disabled={saving || previewing}
+          onClick={() => setTab('grants')}
+        >
+          <ShieldCheck size={16} /> Quyền quản lý
+        </button>
+        <button
+          type="button"
+          className={`cfg-org-tab-btn btn-tactile ${tab === 'history' ? 'is-active' : ''}`}
+          disabled={saving || previewing || historyLoading}
+          onClick={() => {
+            setTab('history');
+            if (!history) void loadHistory();
+          }}
+        >
+          <History size={16} /> Lịch sử kiểm toán
+        </button>
       </div>
+
+      {tab === 'catalog' && (
+        <OrganizationCatalog
+          saving={saving}
+          version={memberVersion}
+          perform={perform}
+          onPreparingChange={setPreviewing}
+        />
+      )}
+
       {tab === 'teams' && <>
-        <details className="editor-panel">
-          <summary><Plus size={16} /> Tạo team</summary>
+        <div className="organization-list-filters">
+          <label>
+            <Search size={16} /> Tìm kiếm team
+            <input
+              value={teamSearch}
+              onChange={(event) => setTeamSearch(event.target.value)}
+              placeholder="Mã, tên hoặc phòng ban…"
+            />
+          </label>
+          <label>
+            Trạng thái
+            <select value={teamStatus} onChange={(event) => setTeamStatus(event.target.value)}>
+              <option value="ACTIVE">Đang hoạt động</option>
+              <option value="INACTIVE">Ngừng/không còn hiệu lực</option>
+              <option value="ALL">Tất cả trạng thái</option>
+            </select>
+          </label>
+        </div>
+
+        <details className="cfg-panel">
+          <summary>
+            <span className="summary-label">
+              <Plus size={16} /> Tạo team phòng ban mới
+            </span>
+          </summary>
           <form className="form-grid" onSubmit={(event) => void createTeam(event)}>
             <fieldset className="organization-fields" disabled={saving}>
-              <label>Phòng ban<select name="departmentId" required defaultValue=""><option value="">Chọn phòng ban</option>{data.departments.filter((department) => department.isActive).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
-              <label>Mã team<input name="code" required maxLength={30} pattern="[A-Za-z0-9_-]+" placeholder="VD: KYTHUAT_01" /><small>Mã duy nhất trong phòng ban; không đổi sau khi tạo.</small></label>
-              <label>Tên team<input name="name" required maxLength={150} /></label>
-              <button className="primary-button" type="submit">{saving ? 'Đang lưu…' : 'Tạo team'}</button>
+              <label>
+                Phòng ban
+                <select name="departmentId" required defaultValue="">
+                  <option value="">Chọn phòng ban</option>
+                  {data.departments
+                    .filter((department) => department.isActive)
+                    .map((department) => (
+                      <option key={department.id} value={department.id}>
+                        {department.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Mã team
+                <input
+                  name="code"
+                  required
+                  maxLength={30}
+                  pattern="[A-Za-z0-9_-]+"
+                  placeholder="VD: KYTHUAT_01"
+                />
+                <small>Mã duy nhất trong phòng ban; không đổi sau khi tạo.</small>
+              </label>
+              <label>
+                Tên team
+                <input name="name" required maxLength={150} />
+              </label>
+              <button className="primary-button btn-tactile" type="submit">
+                {saving ? 'Đang lưu…' : 'Tạo team'}
+              </button>
             </fieldset>
           </form>
         </details>
-        {data.teams.length === 0 ? <EmptyState title="Chưa có team" description="Tạo team trong một phòng ban, sau đó bổ sung thành viên và chỉ định quản lý." /> : <>
-          <div className="table-wrap"><table><thead><tr><th>Team</th><th>Phòng ban</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{teamsPagination.items.map((team) => <tr key={team.id}><td><strong>{team.name}</strong><br /><small>{team.code}</small></td><td>{team.departmentName}</td><td><StatusBadge value={team.isActive && team.departmentActive ? 'ACTIVE' : 'INACTIVE'} /></td><td><button className="table-action" disabled={saving} type="button" onClick={() => setSelectedTeamId(team.id)}><UsersRound size={14} /> Thành viên & cấu hình</button></td></tr>)}</tbody></table></div>
-          <Pagination page={teamsPagination.page} pageSize={teamsPagination.pageSize} total={data.teams.length} onPageChange={teamsPagination.setPage} />
-        </>}
-        {selectedTeam && <TeamEditor key={selectedTeam.id} team={selectedTeam} saving={saving} version={memberVersion} perform={perform} request={request} />}
+
+        {displayedTeams.length === 0 ? (
+          <EmptyState
+            title="Không có team phù hợp"
+            description="Tạo team mới hoặc đổi bộ lọc để xem team ngừng hoạt động."
+          />
+        ) : (
+          <>
+            <div className="cfg-table-wrap">
+              <table className="cfg-table">
+                <thead>
+                  <tr>
+                    <th>Team</th>
+                    <th>Phòng ban</th>
+                    <th>Trạng thái</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamsPagination.items.map((team) => (
+                    <tr key={team.id}>
+                      <td>
+                        <strong>{team.name}</strong>
+                        <br />
+                        <span className="emp-code-chip">{team.code}</span>
+                      </td>
+                      <td>{team.departmentName}</td>
+                      <td>
+                        <StatusBadge
+                          value={team.isActive && team.departmentActive ? 'ACTIVE' : 'INACTIVE'}
+                        />
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <button
+                            className="table-action btn-tactile"
+                            disabled={saving || previewing}
+                            type="button"
+                            onClick={() => setSelectedTeamId(team.id)}
+                          >
+                            <UsersRound size={14} /> Thành viên & cấu hình
+                          </button>
+                          <button
+                            className="table-action danger-action btn-tactile"
+                            disabled={saving || previewing || team.everUsed}
+                            title={
+                              team.everUsed
+                                ? 'Team đã sử dụng: chỉ được ngừng hoạt động'
+                                : 'Backend kiểm tra lại trước khi xóa'
+                            }
+                            type="button"
+                            onClick={() => void removeTeam(team)}
+                          >
+                            <Trash2 size={14} /> Xóa nếu chưa dùng
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={teamsPagination.page}
+              pageSize={teamsPagination.pageSize}
+              total={displayedTeams.length}
+              onPageChange={teamsPagination.setPage}
+            />
+          </>
+        )}
+        {selectedTeam && (
+          <TeamEditor
+            key={selectedTeam.id}
+            team={selectedTeam}
+            saving={saving}
+            version={memberVersion}
+            perform={perform}
+            request={request}
+            onPreparingChange={setPreviewing}
+          />
+        )}
       </>}
+
       {tab === 'grants' && <>
-        <GrantForm departments={data.departments.filter((department) => department.isActive)} teams={data.teams.filter((team) => team.isActive && team.departmentActive)} employees={data.employees.filter((employee) => employee.isActive && employee.userId)} saving={saving} perform={perform} />
-        <p className="scope-note">Trưởng phòng đọc phạm vi phòng được cấp, Leader đọc team được cấp. Không kế thừa quyền Admin. Muốn đổi phạm vi/thời hạn: thu hồi quyền cũ rồi cấp lại để giữ lịch sử.</p>
-        {data.grants.length === 0 ? <EmptyState title="Chưa cấp quyền quản lý" description="Chọn người có tài khoản đang hoạt động và cấp quyền theo phòng ban hoặc team." /> : <>
-          <div className="table-wrap"><table><thead><tr><th>Nhân sự</th><th>Vai trò & phạm vi</th><th>Thời hạn</th><th>Hiệu lực</th><th>Quyết định</th><th>Thao tác</th></tr></thead><tbody>{grantsPagination.items.map((grant) => <tr key={grant.id}>
-            <td><strong>{grant.employeeName}</strong><br /><small>{grant.employeeCode}</small></td>
-            <td>{roleLabels[grant.roleCode]}<br /><small>{grant.departmentName}{grant.teamName ? ` / ${grant.teamName}` : ''}</small><br /><small>{grant.appointmentType === 'TEMPORARY' ? 'Tạm thời' : 'Chính thức'}</small></td>
-            <td>{formatDate(grant.validFrom)}<br /><small>Đến: {grant.validUntil ? formatDate(grant.validUntil) : 'Vô thời hạn'}</small></td>
-            <td><span className={`status-badge status-${grant.status === 'ACTIVE' ? 'success' : grant.status === 'REVOKED' ? 'danger' : 'warning'}`}>{grantLabels[grant.status]}</span></td>
-            <td>{grant.reason}<br /><small>Cấp bởi: {grant.createdByName}</small>{grant.revokedAt && <><br /><small>Thu hồi: {formatDate(grant.revokedAt)} · {grant.revokedByName}<br />{grant.revocationReason}</small></>}</td>
-            <td>{!grant.revokedAt && <button className="table-action danger-action" disabled={saving} type="button" onClick={() => void revokeGrant(grant)}>Thu hồi</button>}</td>
-          </tr>)}</tbody></table></div><Pagination page={grantsPagination.page} pageSize={grantsPagination.pageSize} total={data.grants.length} onPageChange={grantsPagination.setPage} />
-        </>}
+        <div className="organization-list-filters">
+          <label>
+            <Search size={16} /> Tìm quyền quản lý
+            <input
+              value={grantSearch}
+              onChange={(event) => setGrantSearch(event.target.value)}
+              placeholder="Nhân sự hoặc phạm vi…"
+            />
+          </label>
+          <label>
+            Hiệu lực
+            <select value={grantFilter} onChange={(event) => setGrantFilter(event.target.value)}>
+              <option value="CURRENT">Hiện hành / sắp hiệu lực</option>
+              <option value="ACTIVE">Đang hiệu lực</option>
+              <option value="SCHEDULED">Chưa đến hạn</option>
+              <option value="INACTIVE">Tạm không hiệu lực</option>
+              <option value="EXPIRED">Hết hạn</option>
+              <option value="REVOKED">Đã thu hồi</option>
+              <option value="ALL">Tất cả</option>
+            </select>
+          </label>
+        </div>
+
+        <GrantForm
+          departments={data.departments.filter((department) => department.isActive)}
+          teams={data.teams.filter((team) => team.isActive && team.departmentActive)}
+          employees={data.employees.filter((employee) => employee.isActive && employee.userId)}
+          saving={saving}
+          perform={perform}
+        />
+        <p className="scope-note">
+          Trưởng phòng đọc phạm vi phòng được cấp, Leader đọc team được cấp. Không kế thừa quyền Admin. Muốn đổi phạm vi/thời hạn: thu hồi quyền cũ rồi cấp lại để giữ lịch sử.
+        </p>
+
+        {displayedGrants.length === 0 ? (
+          <EmptyState
+            title="Không có quyền phù hợp"
+            description="Cấp quyền mới hoặc đổi bộ lọc để xem quyền hết hạn/đã thu hồi."
+          />
+        ) : (
+          <>
+            <div className="cfg-table-wrap">
+              <table className="cfg-table">
+                <thead>
+                  <tr>
+                    <th>Nhân sự</th>
+                    <th>Vai trò & phạm vi</th>
+                    <th>Thời hạn</th>
+                    <th>Hiệu lực</th>
+                    <th>Quyết định</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grantsPagination.items.map((grant) => (
+                    <tr key={grant.id}>
+                      <td>
+                        <strong>{grant.employeeName}</strong>
+                        <br />
+                        <span className="emp-code-chip">{grant.employeeCode}</span>
+                      </td>
+                      <td>
+                        <strong>{roleLabels[grant.roleCode]}</strong>
+                        <br />
+                        <small style={{ color: 'var(--muted)' }}>
+                          {grant.departmentName}
+                          {grant.teamName ? ` / ${grant.teamName}` : ''}
+                        </small>
+                        <br />
+                        <span className="cfg-card-chip" style={{ marginTop: 2 }}>
+                          {grant.appointmentType === 'TEMPORARY' ? 'Tạm thời' : 'Chính thức'}
+                        </span>
+                      </td>
+                      <td className="tabular-nums">
+                        {formatDate(grant.validFrom)}
+                        <br />
+                        <small style={{ color: 'var(--muted)' }}>
+                          Đến: {grant.validUntil ? formatDate(grant.validUntil) : 'Vô thời hạn'}
+                        </small>
+                      </td>
+                      <td>
+                        <span
+                          className={`status-badge status-${
+                            grant.status === 'ACTIVE'
+                              ? 'success'
+                              : grant.status === 'REVOKED'
+                                ? 'danger'
+                                : 'warning'
+                          }`}
+                        >
+                          {grantLabels[grant.status]}
+                        </span>
+                      </td>
+                      <td>
+                        {grant.reason}
+                        <br />
+                        <small style={{ color: 'var(--muted)' }}>Cấp bởi: {grant.createdByName}</small>
+                        {grant.revokedAt && (
+                          <>
+                            <br />
+                            <small style={{ color: 'var(--rose)' }}>
+                              Thu hồi: {formatDate(grant.revokedAt)} · {grant.revokedByName}
+                              <br />
+                              Lý do: {grant.revocationReason}
+                            </small>
+                          </>
+                        )}
+                      </td>
+                      <td>
+                        {!grant.revokedAt && (
+                          <button
+                            className="table-action danger-action btn-tactile"
+                            disabled={saving}
+                            type="button"
+                            onClick={() => void revokeGrant(grant)}
+                          >
+                            Thu hồi
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={grantsPagination.page}
+              pageSize={grantsPagination.pageSize}
+              total={displayedGrants.length}
+              onPageChange={grantsPagination.setPage}
+            />
+          </>
+        )}
       </>}
+
       {tab === 'history' && <>
-        <p className="scope-note">200 thao tác tổ chức/phân quyền gần nhất. Lịch sử gốc không bị sửa khi đổi team hoặc thu hồi quyền.</p>
-        <button className="secondary-button" disabled={historyLoading} onClick={() => void loadHistory()} type="button">Tải lại lịch sử</button>
+        <p className="scope-note">
+          200 thao tác tổ chức/phân quyền gần nhất. Lịch sử gốc không bị sửa khi đổi team hoặc thu hồi quyền.
+        </p>
+        <button
+          className="secondary-button btn-tactile"
+          disabled={historyLoading}
+          onClick={() => void loadHistory()}
+          type="button"
+          style={{ marginBottom: 14 }}
+        >
+          Tải lại lịch sử
+        </button>
         {historyError && <Notice kind="error">{historyError}</Notice>}
         {historyLoading && <LoadingState />}
-        {!historyLoading && history?.length === 0 && <EmptyState title="Chưa có lịch sử" description="Các lần thay đổi sẽ được Backend ghi lại cùng người thao tác." />}
-        {!historyLoading && !!history?.length && <><div className="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Người thao tác</th><th>Thay đổi</th><th>Chi tiết</th></tr></thead><tbody>{historyPagination.items.map((item) => <tr key={item.id}><td>{formatDate(item.createdAt)}</td><td>{item.actorName}</td><td>{auditLabels[item.action] ?? item.action}</td><td><button className="table-action" onClick={() => setHistoryDetail(item)} type="button">Xem trước/sau</button></td></tr>)}</tbody></table></div><Pagination page={historyPagination.page} pageSize={historyPagination.pageSize} total={history?.length ?? 0} onPageChange={historyPagination.setPage} /></>}
-        {historyDetail && <details className="editor-panel" open><summary>Chi tiết · {auditLabels[historyDetail.action] ?? historyDetail.action}</summary><div className="organization-audit"><p>{historyDetail.resourceType} · {historyDetail.resourceId}</p><h3>Trước</h3><pre>{JSON.stringify(historyDetail.oldValue, null, 2)}</pre><h3>Sau</h3><pre>{JSON.stringify(historyDetail.newValue, null, 2)}</pre><button className="secondary-button" type="button" onClick={() => setHistoryDetail(null)}>Đóng chi tiết</button></div></details>}
+        {!historyLoading && history?.length === 0 && (
+          <EmptyState
+            title="Chưa có lịch sử"
+            description="Các lần thay đổi sẽ được Backend ghi lại cùng người thao tác."
+          />
+        )}
+        {!historyLoading && !!history?.length && (
+          <>
+            <div className="cfg-table-wrap">
+              <table className="cfg-table">
+                <thead>
+                  <tr>
+                    <th>Thời điểm</th>
+                    <th>Người thao tác</th>
+                    <th>Thay đổi</th>
+                    <th>Chi tiết</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyPagination.items.map((item) => (
+                    <tr key={item.id}>
+                      <td className="tabular-nums">{formatDate(item.createdAt)}</td>
+                      <td>
+                        <strong>{item.actorName}</strong>
+                      </td>
+                      <td>
+                        <span className="cfg-card-chip cfg-card-chip-purple">
+                          {auditLabels[item.action] ?? item.action}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="table-action btn-tactile"
+                          onClick={() => setHistoryDetail(item)}
+                          type="button"
+                        >
+                          Xem trước/sau
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={historyPagination.page}
+              pageSize={historyPagination.pageSize}
+              total={history?.length ?? 0}
+              onPageChange={historyPagination.setPage}
+            />
+          </>
+        )}
+        {historyDetail && (
+          <details className="cfg-panel" open style={{ marginTop: 16 }}>
+            <summary>
+              <span className="summary-label">
+                Chi tiết · {auditLabels[historyDetail.action] ?? historyDetail.action}
+              </span>
+            </summary>
+            <div className="organization-audit">
+              <p style={{ margin: '0 0 10px', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                Tài nguyên: <strong>{historyDetail.resourceType}</strong> · Mã: {historyDetail.resourceId}
+              </p>
+              <h3 style={{ fontSize: '0.86rem', color: 'var(--ink)' }}>Dữ liệu trước thay đổi</h3>
+              <pre>{JSON.stringify(historyDetail.oldValue, null, 2)}</pre>
+              <h3 style={{ fontSize: '0.86rem', color: 'var(--ink)' }}>Dữ liệu sau thay đổi</h3>
+              <pre>{JSON.stringify(historyDetail.newValue, null, 2)}</pre>
+              <button
+                className="secondary-button btn-tactile"
+                type="button"
+                onClick={() => setHistoryDetail(null)}
+                style={{ marginTop: 12 }}
+              >
+                Đóng chi tiết
+              </button>
+            </div>
+          </details>
+        )}
       </>}
     </>}
     {dialog}
   </section>;
 }
 
-function TeamEditor({ team, saving, version, perform, request }: { team: OrganizationTeam; saving: boolean; version: number; perform: Perform; request: ReturnType<typeof useActionDialog>['request'] }) {
+function TeamEditor({ team, saving, version, perform, request, onPreparingChange }: { team: OrganizationTeam; saving: boolean; version: number; perform: Perform; request: ReturnType<typeof useActionDialog>['request']; onPreparingChange: (value: boolean)=>void }) {
   const [state, setState] = useState<{ members: OrganizationMember[]; candidates: ScopedEmployee[] } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [employeeId, setEmployeeId] = useState('');
   const [showEnded, setShowEnded] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  const preparingRef = useRef(false);
   useEffect(() => {
     let active = true;
     Promise.all([apiRequest<OrganizationMember[]>(`/organization/teams/${team.id}/members`),apiRequest<ScopedEmployee[]>(`/organization/departments/${team.departmentId}/employees`)])
@@ -189,19 +590,23 @@ function TeamEditor({ team, saving, version, perform, request }: { team: Organiz
   }
   async function update(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    if (preparingRef.current || saving) return;
     const fields = new FormData(event.currentTarget);
     const isActive = fields.get('isActive') === 'true';
-    if (isActive !== team.isActive) {
-      const confirm = await request({ title: isActive ? 'Khôi phục team' : 'Ngừng hoạt động team',description: isActive ? 'Quyền chưa hết hạn/chưa thu hồi sẽ có hiệu lực lại nếu phòng ban còn hoạt động.' : 'Quyền quản lý team tạm mất hiệu lực. Thành viên, quyền và lịch sử vẫn được giữ.',confirmLabel: isActive ? 'Khôi phục' : 'Ngừng hoạt động',danger: !isActive });
-      if (confirm === null) return;
-    }
-    await perform(() => apiRequest(`/organization/teams/${team.id}`, { method: 'PATCH',body: JSON.stringify({ name: fields.get('name'),isActive }) }), 'Đã cập nhật team.');
+    preparingRef.current=true; setPreparing(true); onPreparingChange(true);
+    try {
+      const impact = await apiRequest<CatalogImpact>(`/organization/catalog/teams/${team.id}/impact`);
+      const reason = await request({ title: isActive===team.isActive ? 'Sửa team' : isActive ? 'Khôi phục team' : 'Ngừng hoạt động team',description: describeCatalogImpact(impact),confirmLabel: 'Lưu và áp dụng',fieldLabel: 'Lý do',required: true,minLength: 5,danger: !isActive });
+      if (reason===null) return;
+      await perform(() => apiRequest(`/organization/teams/${team.id}`, { method: 'PATCH',body: JSON.stringify({ name: fields.get('name'),isActive,reason,confirmationToken: impact.confirmationToken }) }), 'Đã cập nhật team và lưu lịch sử.');
+    } catch (caught) { setError(caught instanceof Error ? caught.message : 'Không thể kiểm tra ảnh hưởng.'); }
+    finally { preparingRef.current=false; setPreparing(false); onPreparingChange(false); }
   }
   const displayed = showEnded ? state?.members ?? [] : currentMembers;
   const pagination = useClientPagination(displayed,15);
   return <section className="editor-panel employee-detail-panel">
     <div className="panel-heading"><div><h2>{team.name}</h2><p>{team.departmentName} · {team.code}</p></div><Pencil size={18} /></div>
-    <form className="form-grid" key={`${team.name}-${team.isActive}`} onSubmit={(event) => void update(event)}><fieldset className="organization-fields" disabled={saving}>
+    <form className="form-grid" key={`${team.name}-${team.isActive}`} onSubmit={(event) => void update(event)}><fieldset className="organization-fields" disabled={saving || preparing}>
       <label>Tên team<input name="name" defaultValue={team.name} required maxLength={150} /></label>
       <label>Trạng thái<select name="isActive" defaultValue={String(team.isActive)}><option value="true">Hoạt động</option><option value="false">Ngừng hoạt động</option></select></label>
       <button className="secondary-button" type="submit">Lưu cấu hình</button>

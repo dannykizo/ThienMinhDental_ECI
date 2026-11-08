@@ -19,6 +19,7 @@ class MainActivity : FlutterActivity() {
     private var bridge: MethodChannel? = null
     private val notificationPermissionCode = 6107
     private var permissionResult: MethodChannel.Result? = null
+    private var attendanceSigning: AttendanceSigningBridge? = null
 
     private fun notificationStatus(manager: NotificationManager): Map<String, Any> {
         val runtimeRequired = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
@@ -37,6 +38,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        attendanceSigning = AttendanceSigningBridge(this,
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "vn.thienminh/attendance-proof"))
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(NotificationChannel(
@@ -120,6 +123,12 @@ class MainActivity : FlutterActivity() {
             permissionResult?.success(notificationStatus(getSystemService(NotificationManager::class.java)))
             permissionResult = null
         }
+    }
+
+    override fun onDestroy() {
+        attendanceSigning?.dispose()
+        attendanceSigning = null
+        super.onDestroy()
     }
 
     private fun consumeTap(source: Intent?): Map<String, String>? {

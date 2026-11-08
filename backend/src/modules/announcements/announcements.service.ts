@@ -40,7 +40,7 @@ export class AnnouncementsService {
   async managed(user: AuthenticatedUserView): Promise<unknown[]> {
     if (user.roles.includes(RoleCode.Admin)) return this.list();
     if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
-    return this.dataSource.query(`SELECT a.id,a.title,a.body,a.status,a.audience_type AS "audienceType",a.requires_acknowledgement AS "requiresAcknowledgement",a.published_at AS "publishedAt",COUNT(DISTINCT ar.employee_id)::int AS "recipientCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.read_at IS NOT NULL)::int AS "readCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.acknowledged_at IS NOT NULL)::int AS "acknowledgedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='SENT')::int AS "pushSentCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='SKIPPED')::int AS "pushSkippedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='FAILED')::int AS "pushFailedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='PENDING')::int AS "pushPendingCount" FROM announcements a JOIN announcement_recipients ar ON ar.announcement_id=a.id JOIN employee_organization_assignments oa ON oa.employee_id=ar.employee_id AND oa.effective_to IS NULL AND oa.manager_employee_id=$1 WHERE a.status IN ('PUBLISHED','WITHDRAWN') GROUP BY a.id ORDER BY a.published_at DESC`, [user.employeeId]);
+    return this.dataSource.query(`SELECT a.id,a.title,a.body,a.status,a.audience_type AS "audienceType",a.requires_acknowledgement AS "requiresAcknowledgement",a.published_at AS "publishedAt",COUNT(DISTINCT ar.employee_id)::int AS "recipientCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.read_at IS NOT NULL)::int AS "readCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.acknowledged_at IS NOT NULL)::int AS "acknowledgedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='SENT')::int AS "pushSentCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='SKIPPED')::int AS "pushSkippedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='FAILED')::int AS "pushFailedCount",COUNT(DISTINCT ar.employee_id) FILTER (WHERE ar.push_status='PENDING')::int AS "pushPendingCount" FROM announcements a JOIN announcement_recipients ar ON ar.announcement_id=a.id JOIN employee_organization_assignments oa ON oa.employee_id=ar.employee_id AND oa.effective_to IS NULL AND oa.manager_employee_id=$1 WHERE a.status IN ('PUBLISHED','WITHDRAWN') AND NOT EXISTS (SELECT 1 FROM employee_disciplinary_actions da WHERE da.announcement_id=a.id OR da.revocation_announcement_id=a.id) GROUP BY a.id ORDER BY a.published_at DESC`, [user.employeeId]);
   }
 
   async pushStatus(): Promise<{
@@ -78,6 +78,7 @@ export class AnnouncementsService {
   async registerPushDevice(
     user: AuthenticatedUserView,
     input: RegisterPushDeviceDto,
+    sessionId: string,
   ): Promise<{ pushConfigured: boolean; registered: true }> {
     if (!user.employeeId) {
       throw new BadRequestException({
@@ -87,6 +88,7 @@ export class AnnouncementsService {
     }
     const employeeId = user.employeeId;
     await this.dataSource.transaction(async (manager) => {
+      await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [input.token]);
       // Serialize registration with login/session replacement; do not revive
       // an old phone merely because its FCM token refresh arrives late.
       await manager.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [user.id]);
@@ -94,7 +96,7 @@ export class AnnouncementsService {
         JOIN users u ON u.id=s.user_id JOIN employees e ON e.user_id=u.id
         WHERE s.user_id=$1 AND s.device_id=$2 AND s.client_type='MOBILE'
           AND s.revoked_at IS NULL AND s.expires_at>now()
-          AND u.is_active=true AND e.is_active=true AND e.id=$3`, [user.id, input.deviceId, employeeId]);
+          AND u.is_active=true AND e.is_active=true AND e.id=$3 AND s.id=$4`, [user.id, input.deviceId, employeeId, sessionId]);
       if (!session) throw new ForbiddenException({ code: 'PUSH_DEVICE_SESSION_REQUIRED',
         message: 'Thiết bị cần có phiên app nhân viên còn hiệu lực để nhận thông báo.' });
       const repository = manager.getRepository(PushDeviceTokenEntity);
@@ -150,7 +152,7 @@ export class AnnouncementsService {
     if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
     const employeeId = user.employeeId;
     return this.dataSource.transaction(async (manager) => {
-      const announcement = await manager.getRepository(AnnouncementEntity).findOne({ where: { id: announcementId } });
+      const announcement = await manager.getRepository(AnnouncementEntity).findOne({ where: { id: announcementId }, lock: { mode: 'pessimistic_read' } });
       if (!announcement || announcement.status !== 'PUBLISHED') throw new NotFoundException({ code: 'ANNOUNCEMENT_NOT_AVAILABLE', message: 'Thông báo không còn khả dụng.' });
       const repository = manager.getRepository(AnnouncementRecipientEntity);
       const recipient = await repository.findOne({ where: { announcementId, employeeId }, lock: { mode: 'pessimistic_write' } });
@@ -164,7 +166,7 @@ export class AnnouncementsService {
     if (!user.employeeId) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Tài khoản chưa liên kết nhân viên.' });
     const employeeId = user.employeeId;
     return this.dataSource.transaction(async (manager) => {
-      const announcement = await manager.getRepository(AnnouncementEntity).findOne({ where: { id: announcementId } });
+      const announcement = await manager.getRepository(AnnouncementEntity).findOne({ where: { id: announcementId }, lock: { mode: 'pessimistic_read' } });
       if (!announcement) throw new NotFoundException({ code: 'ANNOUNCEMENT_NOT_FOUND', message: 'Không tìm thấy thông báo.' });
       if (!canAcknowledgeAnnouncement(announcement.status, announcement.requiresAcknowledgement)) throw new ConflictException({ code: 'ANNOUNCEMENT_ACKNOWLEDGEMENT_NOT_REQUIRED', message: 'Thông báo này không yêu cầu xác nhận hoặc đã được thu hồi.' });
       const repository = manager.getRepository(AnnouncementRecipientEntity);
@@ -178,6 +180,7 @@ export class AnnouncementsService {
   }
 
   async create(user: AuthenticatedUserView, input: CreateAnnouncementDto): Promise<AnnouncementEntity> {
+    this.assertContent(input);
     return this.dataSource.transaction(async (manager) => {
       const target = this.target(input.audienceType, input.departmentId, input.employeeId);
       await this.assertTarget(manager, input.audienceType, target.departmentId, target.employeeId);
@@ -189,6 +192,7 @@ export class AnnouncementsService {
   }
 
   async update(user: AuthenticatedUserView, id: string, input: UpdateAnnouncementDto): Promise<AnnouncementEntity> {
+    this.assertContent(input);
     return this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(AnnouncementEntity);
       const announcement = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
@@ -213,8 +217,11 @@ export class AnnouncementsService {
       const announcement = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!announcement) throw new NotFoundException({ code: 'ANNOUNCEMENT_NOT_FOUND', message: 'Không tìm thấy thông báo.' });
       if (!canTransitionAnnouncement(announcement.status, input.status)) throw new ConflictException({ code: 'INVALID_ANNOUNCEMENT_TRANSITION', message: `Không thể chuyển thông báo từ ${announcement.status} sang ${input.status}.` });
+      await this.assertNotDisciplinary(manager, id);
       const oldValue = this.summary(announcement);
       if (input.status === 'PUBLISHED') {
+        this.assertContent(announcement);
+        await this.assertTarget(manager, announcement.audienceType as AnnouncementAudienceType, announcement.departmentId ?? null, announcement.employeeId ?? null);
         const recipientRows = await this.resolveRecipients(manager, announcement);
         if (recipientRows.length === 0) throw new ConflictException({ code: 'ANNOUNCEMENT_HAS_NO_RECIPIENTS', message: 'Không có nhân viên đang hoạt động phù hợp với đối tượng nhận.' });
         const recipientRepository = manager.getRepository(AnnouncementRecipientEntity);
@@ -323,6 +330,8 @@ export class AnnouncementsService {
     if (user.roles.includes(RoleCode.Admin)) {
       return this.dataSource.query(`SELECT e.id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",ar.delivered_at AS "deliveredAt",ar.read_at AS "readAt",ar.acknowledged_at AS "acknowledgedAt",ar.push_status AS "pushStatus",ar.push_attempt_count AS "pushAttemptCount",ar.push_last_attempt_at AS "pushLastAttemptAt",ar.push_sent_at AS "pushSentAt",ar.push_failure_code AS "pushFailureCode" FROM announcement_recipients ar JOIN employees e ON e.id=ar.employee_id LEFT JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.is_primary=true AND oa.effective_to IS NULL LEFT JOIN departments d ON d.id=oa.department_id WHERE ar.announcement_id=$1 ORDER BY e.full_name`, [id]);
     }
+    const disciplinary = await this.dataSource.query<Array<{ id: string }>>('SELECT id FROM employee_disciplinary_actions WHERE announcement_id=$1 OR revocation_announcement_id=$1', [id]);
+    if (disciplinary.length) throw new ForbiddenException({ code: 'DISCIPLINARY_ADMIN_REQUIRED', message: 'Chỉ Admin được theo dõi quyết định kỷ luật.' });
     if (!user.employeeId) throw new ForbiddenException({ code: 'ANNOUNCEMENT_TRACKING_FORBIDDEN', message: 'Bạn không có phạm vi nhân viên để theo dõi.' });
     return this.dataSource.query(`SELECT DISTINCT e.id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",ar.delivered_at AS "deliveredAt",ar.read_at AS "readAt",ar.acknowledged_at AS "acknowledgedAt",ar.push_status AS "pushStatus",ar.push_attempt_count AS "pushAttemptCount",ar.push_last_attempt_at AS "pushLastAttemptAt",ar.push_sent_at AS "pushSentAt",ar.push_failure_code AS "pushFailureCode" FROM announcement_recipients ar JOIN employees e ON e.id=ar.employee_id JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.effective_to IS NULL AND oa.manager_employee_id=$2 JOIN departments d ON d.id=oa.department_id WHERE ar.announcement_id=$1 ORDER BY e.full_name`, [id, user.employeeId]);
   }
@@ -342,20 +351,25 @@ export class AnnouncementsService {
     });
   }
 
+  private async assertNotDisciplinary(manager: EntityManager, id: string): Promise<void> {
+    const linked = await manager.query<Array<{ id: string }>>('SELECT id FROM employee_disciplinary_actions WHERE announcement_id=$1 OR revocation_announcement_id=$1', [id]);
+    if (linked.length) throw new ConflictException({ code: 'DISCIPLINARY_NOTICE_IMMUTABLE', message: 'Thông báo này gắn với hồ sơ kỷ luật. Hãy thu hồi quyết định tại Kỷ luật nhân sự; lịch sử thông báo được giữ nguyên.' });
+  }
+
   private async assertTarget(manager: EntityManager, audienceType: AnnouncementAudienceType, departmentId: string | null, employeeId: string | null): Promise<void> {
     if (audienceType === 'ALL') return;
     if (audienceType === 'DEPARTMENT') {
-      const [department] = await manager.query<Array<{ id: string }>>('SELECT id FROM departments WHERE id=$1 AND is_active=true', [departmentId]);
+      const [department] = await manager.query<Array<{ id: string }>>('SELECT id FROM departments WHERE id=$1 AND is_active=true FOR SHARE', [departmentId]);
       if (!department) throw new BadRequestException({ code: 'ANNOUNCEMENT_DEPARTMENT_INVALID', message: 'Phòng ban không tồn tại hoặc đã bị khóa.' });
       return;
     }
-    const [employee] = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND is_active=true', [employeeId]);
+      const [employee] = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND is_active=true FOR SHARE', [employeeId]);
     if (!employee) throw new BadRequestException({ code: 'ANNOUNCEMENT_EMPLOYEE_INVALID', message: 'Nhân viên không tồn tại hoặc đã bị khóa.' });
   }
 
   private resolveRecipients(manager: EntityManager, announcement: AnnouncementEntity): Promise<Array<{ id: string }>> {
     if (announcement.audienceType === 'DEPARTMENT') {
-      return manager.query(`SELECT DISTINCT e.id FROM employees e JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.effective_to IS NULL WHERE e.is_active=true AND oa.department_id=$1`, [announcement.departmentId]);
+      return manager.query(`SELECT DISTINCT e.id FROM employees e JOIN employee_organization_assignments oa ON oa.employee_id=e.id JOIN branches b ON b.id=oa.branch_id WHERE e.is_active=true AND b.is_active=true AND oa.department_id=$1 AND oa.effective_from<=(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AND (oa.effective_to IS NULL OR oa.effective_to>=(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)`, [announcement.departmentId]);
     }
     if (announcement.audienceType === 'EMPLOYEE') {
       return manager.query('SELECT id FROM employees WHERE id=$1 AND is_active=true', [announcement.employeeId]);
@@ -404,7 +418,7 @@ export class AnnouncementsService {
         await Promise.all(
           result.recipients.map((recipient) =>
             manager.query(
-              `UPDATE announcement_recipients SET push_status=$3,push_attempt_count=push_attempt_count+1,push_last_attempt_at=$4,push_sent_at=CASE WHEN $3='SENT' THEN $4 ELSE push_sent_at END,push_failure_code=$5 WHERE announcement_id=$1 AND employee_id=$2`,
+              `UPDATE announcement_recipients SET push_status=$3::varchar,push_attempt_count=push_attempt_count+1,push_last_attempt_at=$4::timestamptz,push_sent_at=CASE WHEN $3::varchar='SENT' THEN $4::timestamptz ELSE push_sent_at END,push_failure_code=$5 WHERE announcement_id=$1 AND employee_id=$2`,
               [
                 announcement.id,
                 recipient.employeeId,
@@ -426,5 +440,12 @@ export class AnnouncementsService {
 
   private audit(manager: EntityManager, userId: string, resourceId: string, action: string, oldValue: unknown, newValue: unknown): Promise<ConfigurationAuditLogEntity> {
     return manager.save(ConfigurationAuditLogEntity, manager.create(ConfigurationAuditLogEntity, { resourceType: 'ANNOUNCEMENT', resourceId, action, oldValue, newValue, createdBy: userId }));
+  }
+
+  private assertContent(input: { title?: string; body?: string }): void {
+    for (const [key, max] of [['title', 200], ['body', 10000]] as const) {
+      const value = input[key];
+      if (value !== undefined && (typeof value !== 'string' || value.trim().length < 3 || value.trim().length > max)) throw new BadRequestException({ code: 'ANNOUNCEMENT_CONTENT_INVALID', message: 'Tiêu đề và nội dung phải có ít nhất 3 ký tự, không chỉ chứa khoảng trắng.' });
+    }
   }
 }

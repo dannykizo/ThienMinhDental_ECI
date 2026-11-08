@@ -5,6 +5,7 @@ import { PositionEntity } from './entities/position.entity.js';
 import { RoleEntity } from './entities/role.entity.js';
 import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserEntity } from './entities/user.entity.js';
+import { OvertimeRequestEntity } from './entities/overtime.entity.js';
 import { AuthSessionEntity } from './entities/auth-session.entity.js';
 import { PushDeviceTokenEntity } from './entities/push-device-token.entity.js';
 import { DisciplinaryActionEntity } from './entities/disciplinary-action.entity.js';
@@ -33,6 +34,7 @@ import {
 } from './entities/workforce.entity.js';
 
 export const databaseEntities = [
+  OvertimeRequestEntity,
   UserEntity,
   AuthSessionEntity,
   EmployeeEntity,

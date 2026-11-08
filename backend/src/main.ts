@@ -1,8 +1,10 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module.js';
+import { OperationalExceptionFilter } from './common/security/operational-exception.filter.js';
 import {
   FixedWindowRateLimiter,
   isTrustedCookieOrigin,
@@ -11,9 +13,10 @@ import {
 } from './common/security/request-security.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const port = Number(process.env.PORT ?? 3001);
   const isProduction = process.env.NODE_ENV === 'production';
+  if (isProduction) app.useGlobalFilters(new OperationalExceptionFilter(app.getHttpAdapter()));
   const express = app.getHttpAdapter().getInstance() as {
     disable(name: string): void;
     set(name: string, value: unknown): void;
@@ -38,6 +41,11 @@ async function bootstrap(): Promise<void> {
   if (isProduction || process.env.TRUST_PROXY === 'true') {
     express.set('trust proxy', 1);
   }
+  app.enableCors({ origin: allowedOrigins, credentials: true });
+  // The auth limiter and Web-login origin check need the parsed account/client.
+  // Nest otherwise registers its default parser only during app initialization.
+  app.useBodyParser('json');
+  app.useBodyParser('urlencoded', { extended: true });
   app.use(cookieParser());
   app.use((request: Request, response: Response, next: NextFunction) => {
     const id = requestId(request.get('x-request-id'));
@@ -64,10 +72,16 @@ async function bootstrap(): Promise<void> {
     const hasSessionCookie = Boolean(
       request.cookies?.access_token || request.cookies?.refresh_token,
     );
+    // Express accepts casing/trailing-slash variants of these routes. Their
+    // authentication protections must match the same endpoint aliases.
+    const requestPath = request.originalUrl.split('?')[0].replace(/\/+$/, '').toLowerCase();
+    const isLogin = request.method === 'POST' && requestPath === '/api/auth/login';
+    const body = request.body as Record<string, unknown> | undefined;
+    const createsWebCookie = isLogin && body?.clientType === 'WEB';
     if (
       isProduction &&
       unsafeMethod &&
-      hasSessionCookie &&
+      (hasSessionCookie || createsWebCookie) &&
       !isTrustedCookieOrigin(request.get('origin'), allowedOrigins)
     ) {
       response.status(403).json({
@@ -78,8 +92,6 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    const requestPath = request.originalUrl.split('?')[0];
-    const isLogin = request.method === 'POST' && requestPath === '/api/auth/login';
     const isRefresh = request.method === 'POST' && requestPath === '/api/auth/refresh';
     if (isLogin || isRefresh) {
       const account = isLogin && request.body && typeof request.body === 'object'
@@ -101,10 +113,6 @@ async function bootstrap(): Promise<void> {
       }
     }
     next();
-  });
-  app.enableCors({
-    origin: allowedOrigins,
-    credentials: true,
   });
   app.useGlobalPipes(
     new ValidationPipe({

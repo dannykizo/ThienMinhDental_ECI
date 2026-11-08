@@ -5,7 +5,7 @@ import { RoleEntity } from './entities/role.entity.js';
 import { UserRoleEntity } from './entities/user-role.entity.js';
 import { UserEntity } from './entities/user.entity.js';
 import { RoleCode } from '../modules/auth/domain/role-code.js';
-import { validateStrongPassword } from '../modules/auth/domain/password-policy.js';
+import { validatePassword as validatePasswordPolicy } from '../modules/auth/domain/password-policy.js';
 
 function requiredEnvironment(key: string): string {
   const value = process.env[key]?.trim();
@@ -14,7 +14,7 @@ function requiredEnvironment(key: string): string {
 }
 
 function validatePassword(password: string): void {
-  const error = validateStrongPassword(password);
+  const error = validatePasswordPolicy(password);
   if (error) throw new Error(`BOOTSTRAP_ADMIN_PASSWORD: ${error}`);
 }
 

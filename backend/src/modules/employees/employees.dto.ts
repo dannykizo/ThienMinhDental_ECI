@@ -17,6 +17,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../auth/domain/password-policy.js';
 
 export class CreateLookupDto {
   @IsString() @MaxLength(30) code!: string;
@@ -50,7 +51,7 @@ export class CreateEmployeeDto {
   @Type(() => OrganizationAssignmentDto)
   organizationAssignments!: OrganizationAssignmentDto[];
   @IsOptional() @IsEmail() email?: string;
-  @IsOptional() @IsString() @MinLength(12) @MaxLength(128) temporaryPassword?: string;
+  @IsOptional() @IsString() @MinLength(PASSWORD_MIN_LENGTH) @MaxLength(PASSWORD_MAX_LENGTH) temporaryPassword?: string;
   @IsOptional() @IsIn(['ADMIN', 'CHIEF_ACCOUNTANT', 'AREA_MANAGER', 'MANAGER', 'EMPLOYEE']) role?: string;
   @IsOptional() @IsArray() @ArrayMaxSize(20) @IsUUID(undefined, { each: true }) scopeBranchIds?: string[];
 }
@@ -73,5 +74,16 @@ export class UpdateEmployeeDto {
 export class ChangeEmployeeStatusDto {
   @IsBoolean() isActive!: boolean;
   @IsDateString() effectiveDate!: string;
+  @IsString() @MinLength(5) @MaxLength(500) reason!: string;
+}
+
+export class ResetEmployeePasswordDto {
+  @IsString() @MinLength(PASSWORD_MIN_LENGTH) @MaxLength(PASSWORD_MAX_LENGTH) newPassword!: string;
+  @IsString() @MinLength(5) @MaxLength(500) reason!: string;
+}
+
+export class DeleteEmployeeDto {
+  @IsString() @MinLength(1) @MaxLength(30) employeeCode!: string;
+  @IsString() @MinLength(64) @MaxLength(64) confirmationToken!: string;
   @IsString() @MinLength(5) @MaxLength(500) reason!: string;
 }

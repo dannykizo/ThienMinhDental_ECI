@@ -19,9 +19,13 @@ export function isValidDisciplinaryPeriod(
   effectiveFrom: string,
   effectiveTo?: string | null,
 ): boolean {
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-  if (!datePattern.test(effectiveFrom)) return false;
+  const validDate = (value: string): boolean => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000-')) return false;
+    const date = new Date(`${value}T00:00:00Z`);
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
+  if (!['WARNING', 'SUSPENSION', 'DISCIPLINARY_ACTION'].includes(actionType) || !validDate(effectiveFrom)) return false;
   if (actionType === 'SUSPENSION' && !effectiveTo) return false;
   if (!effectiveTo) return true;
-  return datePattern.test(effectiveTo) && effectiveTo >= effectiveFrom;
+  return validDate(effectiveTo) && effectiveTo >= effectiveFrom;
 }

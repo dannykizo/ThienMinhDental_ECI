@@ -3,6 +3,7 @@ import type { DataSource } from 'typeorm';
 import { RoleCode } from '../src/modules/auth/domain/role-code.js';
 import type { AuthenticatedUserView } from '../src/modules/auth/application/auth.service.js';
 import { OrganizationAccessService } from '../src/modules/organization-access/application/organization-access.service.js';
+import { CatalogService } from '../src/modules/organization-access/application/catalog.service.js';
 import { grantCoversTeam, grantStatus, validGrantWindow, type ManagementGrant } from '../src/modules/organization-access/domain/management-access.js';
 
 const now = new Date('2026-10-06T03:00:00Z');
@@ -60,7 +61,8 @@ describe('PQ1 grant policy', () => {
 describe('PQ1 authorization boundary', () => {
   it('denies organization writes and grant/history inspection to ordinary employees', async () => {
     const transaction = vi.fn();
-    const service = new OrganizationAccessService({ transaction } as unknown as DataSource);
+    const db = { transaction } as unknown as DataSource;
+    const service = new OrganizationAccessService(db,new CatalogService(db));
     await expect(service.createTeam(employee,{ departmentId: 'department',code: 'DEV',name: 'Development only' })).rejects.toMatchObject({ status: 403 });
     await expect(service.createGrant(employee,{ employeeId: 'employee',roleCode: 'TEAM_LEADER',teamId: 'team',appointmentType: 'OFFICIAL',validFrom: now.toISOString(),reason: 'Development only' })).rejects.toMatchObject({ status: 403 });
     await expect(service.revokeGrant(employee,'grant','Development only')).rejects.toMatchObject({ status: 403 });
@@ -71,7 +73,8 @@ describe('PQ1 authorization boundary', () => {
 
   it('does not turn organization membership or a legacy Manager role into management access', async () => {
     const query = vi.fn().mockResolvedValue([]);
-    const service = new OrganizationAccessService({ query } as unknown as DataSource);
+    const db = { query } as unknown as DataSource;
+    const service = new OrganizationAccessService(db,new CatalogService(db));
     await expect(service.departmentEmployees(employee,'department')).rejects.toMatchObject({ status: 403 });
     await expect(service.departmentEmployees({ ...employee,roles: [RoleCode.Manager] },'department')).rejects.toMatchObject({ status: 403 });
     expect(query).toHaveBeenCalledTimes(2);
@@ -79,7 +82,8 @@ describe('PQ1 authorization boundary', () => {
 
   it('keeps Leader department-wide access denied even if its team is in that department', async () => {
     const query = vi.fn().mockResolvedValue([{ ...grant,userId: employee.id,validFrom: new Date('2020-01-01T00:00:00Z'),validUntil: null,createdAt: now,revokedAt: null }]);
-    const service = new OrganizationAccessService({ query } as unknown as DataSource);
+    const db = { query } as unknown as DataSource;
+    const service = new OrganizationAccessService(db,new CatalogService(db));
     await expect(service.departmentEmployees(employee,'department-a')).rejects.toMatchObject({ status: 403 });
     expect(query).toHaveBeenCalledTimes(1);
   });

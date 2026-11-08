@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -13,6 +14,7 @@ import {
 } from '../../database/entities/workforce.entity.js';
 import { AnnouncementsService } from '../announcements/announcements.service.js';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
+import { RoleCode } from '../auth/domain/role-code.js';
 import type {
   CreateDisciplinaryActionDto,
   RevokeDisciplinaryActionDto,
@@ -37,14 +39,30 @@ export class DisciplinaryActionsService {
     private readonly announcements: AnnouncementsService,
   ) {}
 
-  list(): Promise<unknown[]> {
-    return this.dataSource.query(`SELECT da.id,da.employee_id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",da.action_type AS "actionType",da.status,da.title,da.reason,da.decision,da.effective_from AS "effectiveFrom",da.effective_to AS "effectiveTo",da.issued_at AS "issuedAt",da.revoked_at AS "revokedAt",da.revocation_reason AS "revocationReason",da.announcement_id AS "announcementId",da.created_at AS "createdAt",COALESCE(creator_employee.full_name,creator.email) AS "createdByName",COALESCE(issuer_employee.full_name,issuer.email) AS "issuedByName" FROM employee_disciplinary_actions da JOIN employees e ON e.id=da.employee_id LEFT JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.is_primary=true AND oa.effective_to IS NULL LEFT JOIN departments d ON d.id=oa.department_id JOIN users creator ON creator.id=da.created_by LEFT JOIN employees creator_employee ON creator_employee.user_id=creator.id LEFT JOIN users issuer ON issuer.id=da.issued_by LEFT JOIN employees issuer_employee ON issuer_employee.user_id=issuer.id ORDER BY da.created_at DESC`);
+  async list(user: AuthenticatedUserView): Promise<unknown[]> {
+    this.assertAdmin(user);
+    return this.dataSource.query(`SELECT da.id,da.group_id AS "groupId",da.employee_id AS "employeeId",
+      e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",
+      da.action_type AS "actionType",da.status,da.title,da.reason,da.decision,
+      da.effective_from::text AS "effectiveFrom",da.effective_to::text AS "effectiveTo",
+      da.issued_at AS "issuedAt",da.revoked_at AS "revokedAt",da.revocation_reason AS "revocationReason",
+      da.announcement_id AS "announcementId",da.created_at AS "createdAt",
+      COALESCE(creator_employee.full_name,creator.email) AS "createdByName",
+      COALESCE(issuer_employee.full_name,issuer.email) AS "issuedByName"
+      FROM employee_disciplinary_actions da JOIN employees e ON e.id=da.employee_id
+      LEFT JOIN employee_organization_assignments oa ON oa.employee_id=e.id AND oa.is_primary=true AND oa.effective_to IS NULL
+      LEFT JOIN departments d ON d.id=oa.department_id JOIN users creator ON creator.id=da.created_by
+      LEFT JOIN employees creator_employee ON creator_employee.user_id=creator.id
+      LEFT JOIN users issuer ON issuer.id=da.issued_by LEFT JOIN employees issuer_employee ON issuer_employee.user_id=issuer.id
+      ORDER BY da.created_at DESC`);
   }
 
   async create(
     user: AuthenticatedUserView,
     input: CreateDisciplinaryActionDto,
   ): Promise<DisciplinaryActionEntity> {
+    this.assertAdmin(user);
+    this.assertContent(input);
     this.assertPeriod(input.actionType, input.effectiveFrom, input.effectiveTo);
     return this.dataSource.transaction(async (manager) => {
       await this.assertEmployee(manager, input.employeeId, false);
@@ -72,6 +90,8 @@ export class DisciplinaryActionsService {
     id: string,
     input: UpdateDisciplinaryActionDto,
   ): Promise<DisciplinaryActionEntity> {
+    this.assertAdmin(user);
+    this.assertContent(input);
     return this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(DisciplinaryActionEntity);
       const action = await repository.findOne({
@@ -79,6 +99,7 @@ export class DisciplinaryActionsService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!action) this.notFound();
+      this.assertIndividual(action);
       if (action.status !== 'DRAFT') {
         throw new ConflictException({
           code: 'DISCIPLINARY_ACTION_NOT_DRAFT',
@@ -87,7 +108,7 @@ export class DisciplinaryActionsService {
       }
       const actionType = input.actionType ?? action.actionType as DisciplinaryActionType;
       const effectiveFrom = input.effectiveFrom ?? action.effectiveFrom;
-      const effectiveTo = input.effectiveTo ?? action.effectiveTo;
+      const effectiveTo = input.effectiveTo === undefined ? action.effectiveTo : input.effectiveTo;
       this.assertPeriod(actionType, effectiveFrom, effectiveTo);
       const employeeId = input.employeeId ?? action.employeeId;
       await this.assertEmployee(manager, employeeId, false);
@@ -111,13 +132,21 @@ export class DisciplinaryActionsService {
     user: AuthenticatedUserView,
     id: string,
   ): Promise<DisciplinaryActionEntity> {
-    const result = await this.dataSource.transaction(async (manager) => {
+    this.assertAdmin(user);
+    const result = await this.dataSource.transaction((manager) => this.issueWithinTransaction(manager, user, id));
+    await this.announcements.deliverPublishedAnnouncementPush(result.announcement, [result.action.employeeId]);
+    return result.action;
+  }
+
+  async issueWithinTransaction(manager: EntityManager, user: AuthenticatedUserView, id: string, groupId?: string): Promise<{ action: DisciplinaryActionEntity; announcement: AnnouncementEntity }> {
+      this.assertAdmin(user);
       const repository = manager.getRepository(DisciplinaryActionEntity);
       const action = await repository.findOne({
         where: { id },
         lock: { mode: 'pessimistic_write' },
       });
       if (!action) this.notFound();
+      this.assertIndividual(action, groupId);
       if (!canTransitionDisciplinaryAction(action.status, 'ISSUED')) {
         throw new ConflictException({
           code: 'DISCIPLINARY_ACTION_CANNOT_BE_ISSUED',
@@ -129,6 +158,7 @@ export class DisciplinaryActionsService {
         action.effectiveFrom,
         action.effectiveTo,
       );
+      this.assertContent(action);
       await this.assertEmployee(manager, action.employeeId, true);
       const oldValue = this.summary(action);
       const announcement = await this.announcements.createPublishedIndividualWithinTransaction(
@@ -147,12 +177,6 @@ export class DisciplinaryActionsService {
       const saved = await repository.save(action);
       await this.audit(manager, user.id, id, 'ISSUE', oldValue, this.summary(saved));
       return { action: saved, announcement };
-    });
-    await this.announcements.deliverPublishedAnnouncementPush(
-      result.announcement,
-      [result.action.employeeId],
-    );
-    return result.action;
   }
 
   async revoke(
@@ -160,13 +184,23 @@ export class DisciplinaryActionsService {
     id: string,
     input: RevokeDisciplinaryActionDto,
   ): Promise<DisciplinaryActionEntity> {
-    const result = await this.dataSource.transaction(async (manager) => {
+    this.assertAdmin(user);
+    if (input.reason.trim().length < 5) throw new BadRequestException({ code: 'DISCIPLINARY_REVOCATION_REASON_REQUIRED', message: 'Lý do thu hồi cần ít nhất 5 ký tự.' });
+    const result = await this.dataSource.transaction((manager) => this.revokeWithinTransaction(manager, user, id, input));
+    if (result.announcement) await this.announcements.deliverPublishedAnnouncementPush(result.announcement, [result.action.employeeId]);
+    return result.action;
+  }
+
+  async revokeWithinTransaction(manager: EntityManager, user: AuthenticatedUserView, id: string, input: RevokeDisciplinaryActionDto, groupId?: string): Promise<{ action: DisciplinaryActionEntity; announcement: AnnouncementEntity | null }> {
+      this.assertAdmin(user);
+      if (input.reason.trim().length < 5) throw new BadRequestException({ code: 'DISCIPLINARY_REVOCATION_REASON_REQUIRED', message: 'Lý do thu hồi cần ít nhất 5 ký tự.' });
       const repository = manager.getRepository(DisciplinaryActionEntity);
       const action = await repository.findOne({
         where: { id },
         lock: { mode: 'pessimistic_write' },
       });
       if (!action) this.notFound();
+      this.assertIndividual(action, groupId);
       if (!canTransitionDisciplinaryAction(action.status, 'REVOKED')) {
         throw new ConflictException({
           code: 'DISCIPLINARY_ACTION_CANNOT_BE_REVOKED',
@@ -196,17 +230,10 @@ export class DisciplinaryActionsService {
       const saved = await repository.save(action);
       await this.audit(manager, user.id, id, 'REVOKE', oldValue, this.summary(saved));
       return { action: saved, announcement };
-    });
-    if (result.announcement) {
-      await this.announcements.deliverPublishedAnnouncementPush(
-        result.announcement,
-        [result.action.employeeId],
-      );
-    }
-    return result.action;
   }
 
-  async history(id: string): Promise<unknown[]> {
+  async history(user: AuthenticatedUserView, id: string): Promise<unknown[]> {
+    this.assertAdmin(user);
     const exists = await this.dataSource
       .getRepository(DisciplinaryActionEntity)
       .exists({ where: { id } });
@@ -217,7 +244,7 @@ export class DisciplinaryActionsService {
     );
   }
 
-  private assertPeriod(
+  assertPeriod(
     actionType: DisciplinaryActionType,
     effectiveFrom: string,
     effectiveTo?: string | null,
@@ -238,6 +265,8 @@ export class DisciplinaryActionsService {
     employeeId: string,
     requireActiveAccount: boolean,
   ): Promise<void> {
+    await manager.query('SELECT id FROM employees WHERE id=$1 FOR SHARE', [employeeId]);
+    if (requireActiveAccount) await manager.query('SELECT id FROM users WHERE id=(SELECT user_id FROM employees WHERE id=$1) FOR SHARE', [employeeId]);
     const [employee] = await manager.query<Array<{ accountActive: boolean | null; id: string; isActive: boolean; userId: string | null }>>(
       `SELECT e.id,e.is_active AS "isActive",e.user_id AS "userId",u.is_active AS "accountActive" FROM employees e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=$1`,
       [employeeId],
@@ -260,6 +289,8 @@ export class DisciplinaryActionsService {
     manager: EntityManager,
     employeeId: string,
   ): Promise<boolean> {
+    await manager.query('SELECT id FROM employees WHERE id=$1 FOR SHARE', [employeeId]);
+    await manager.query('SELECT id FROM users WHERE id=(SELECT user_id FROM employees WHERE id=$1) FOR SHARE', [employeeId]);
     const [employee] = await manager.query<Array<{ canReceive: boolean }>>(
       `SELECT (e.is_active=true AND e.user_id IS NOT NULL AND u.is_active=true) AS "canReceive" FROM employees e LEFT JOIN users u ON u.id=e.user_id WHERE e.id=$1`,
       [employeeId],
@@ -281,15 +312,19 @@ export class DisciplinaryActionsService {
   private summary(action: DisciplinaryActionEntity): Record<string, unknown> {
     return {
       actionType: action.actionType,
+      groupId: action.groupId ?? null,
       announcementId: action.announcementId ?? null,
       decision: action.decision,
       effectiveFrom: action.effectiveFrom,
       effectiveTo: action.effectiveTo ?? null,
       employeeId: action.employeeId,
       issuedAt: action.issuedAt ?? null,
+      issuedBy: action.issuedBy ?? null,
       reason: action.reason,
       revocationReason: action.revocationReason ?? null,
       revokedAt: action.revokedAt ?? null,
+      revokedBy: action.revokedBy ?? null,
+      revocationAnnouncementId: action.revocationAnnouncementId ?? null,
       status: action.status,
       title: action.title,
     };
@@ -308,6 +343,7 @@ export class DisciplinaryActionsService {
       manager.create(ConfigurationAuditLogEntity, {
         action,
         createdBy: userId,
+        createdAt: new Date(),
         newValue,
         oldValue,
         resourceId,
@@ -321,5 +357,20 @@ export class DisciplinaryActionsService {
       code: 'DISCIPLINARY_ACTION_NOT_FOUND',
       message: 'Không tìm thấy quyết định xử lý.',
     });
+  }
+
+  private assertAdmin(user: AuthenticatedUserView): void {
+    if (!user.roles.includes(RoleCode.Admin)) throw new ForbiddenException({ code: 'DISCIPLINARY_ADMIN_REQUIRED', message: 'Chỉ Admin được quản trị quyết định kỷ luật.' });
+  }
+
+  assertContent(input: { title?: string; reason?: string; decision?: string }): void {
+    for (const [key, min, max] of [['title', 3, 200], ['reason', 5, 5000], ['decision', 3, 5000]] as const) {
+      const value = input[key];
+      if (value !== undefined && (typeof value !== 'string' || value.trim().length < min || value.trim().length > max)) throw new BadRequestException({ code: 'DISCIPLINARY_CONTENT_INVALID', message: 'Tiêu đề, lý do và nội dung xử lý phải có độ dài hợp lệ, không chỉ chứa khoảng trắng.' });
+    }
+  }
+
+  private assertIndividual(action: DisciplinaryActionEntity, groupId?: string): void {
+    if (action.groupId && action.groupId !== groupId) throw new ConflictException({ code: 'DISCIPLINARY_GROUP_OPERATION_REQUIRED', message: 'Quyết định tập thể phải được thu hồi cả nhóm tại hồ sơ tập thể.' });
   }
 }

@@ -2,6 +2,7 @@
 
 import type { LayerGroup, Map as LeafletMap } from 'leaflet';
 import { useEffect, useRef, useState } from 'react';
+import { Notice } from '@/components/admin-ui';
 
 export interface MapLocation {
   id: string;
@@ -45,6 +46,8 @@ export function OfficeLocationMap({
   const onLocationOpenRef = useRef(onLocationOpen);
   const fittedRef = useRef(false);
   const [readyVersion, setReadyVersion] = useState(0);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const [mapStatus, setMapStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
   useEffect(() => {
     onPointSelectRef.current = onPointSelect;
@@ -54,6 +57,9 @@ export function OfficeLocationMap({
   useEffect(() => {
     let disposed = false;
     let map: LeafletMap | null = null;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let observer: ResizeObserver | undefined;
+    fittedRef.current = false;
 
     void import('leaflet').then((leaflet) => {
       if (disposed || !containerRef.current) return;
@@ -65,7 +71,7 @@ export function OfficeLocationMap({
       mapRef.current = map;
       layersRef.current = leaflet.layerGroup().addTo(map);
 
-      leaflet.tileLayer(
+      const tiles = leaflet.tileLayer(
         process.env.NEXT_PUBLIC_MAP_TILE_URL ??
           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         {
@@ -74,22 +80,45 @@ export function OfficeLocationMap({
             process.env.NEXT_PUBLIC_MAP_TILE_ATTRIBUTION ??
             '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         },
-      ).addTo(map);
+      );
+      let failed = false;
+      const finishLoading = () => {
+        if (disposed) return;
+        clearTimeout(timeout);
+        const loaded = containerRef.current?.querySelector('.leaflet-tile-loaded');
+        setMapStatus(failed || !loaded ? 'error' : 'ready');
+      };
+      tiles.on('loading', () => {
+        failed = false;
+        if (!disposed) setMapStatus('loading');
+        clearTimeout(timeout);
+        timeout = setTimeout(() => { if (!disposed) setMapStatus('error'); }, 15000);
+      });
+      tiles.on('tileerror', () => {
+        failed = true;
+        if (!disposed) setMapStatus('error');
+      });
+      tiles.on('load', finishLoading);
+      tiles.addTo(map);
+      observer = new ResizeObserver(() => map?.invalidateSize({ pan: false }));
+      observer.observe(containerRef.current);
 
       map.on('click', (event) => {
         onPointSelectRef.current(event.latlng.lat, event.latlng.lng);
       });
       setReadyVersion((version) => version + 1);
-    });
+    }).catch(() => { if (!disposed) setMapStatus('error'); });
 
     return () => {
       disposed = true;
+      clearTimeout(timeout);
+      observer?.disconnect();
       map?.remove();
       mapRef.current = null;
       layersRef.current = null;
       leafletRef.current = null;
     };
-  }, []);
+  }, [retryVersion]);
 
   useEffect(() => {
     const leaflet = leafletRef.current;
@@ -173,11 +202,21 @@ export function OfficeLocationMap({
   }, [locations, readyVersion, selectedPoint, selectedRadiusMeters]);
 
   return (
+    <>
+    {mapStatus === 'loading' && <p role="status">Đang tải ảnh nền bản đồ…</p>}
+    {mapStatus === 'error' && (
+      <Notice kind="error">
+        Không tải được ảnh nền bản đồ. Tọa độ và cấu hình đã lưu vẫn được giữ nguyên;
+        bạn vẫn có thể nhập tọa độ hoặc lấy vị trí thiết bị.
+        {' '}<button className="secondary-button" type="button" onClick={() => { setMapStatus('loading'); setRetryVersion(version => version + 1); }}>Thử tải lại bản đồ</button>
+      </Notice>
+    )}
     <div
       aria-label="Bản đồ các vị trí làm việc. Bấm bản đồ để chọn tọa độ hoặc kéo điểm màu cam để điều chỉnh."
       className="office-location-map"
       ref={containerRef}
       role="application"
     />
+    </>
   );
 }

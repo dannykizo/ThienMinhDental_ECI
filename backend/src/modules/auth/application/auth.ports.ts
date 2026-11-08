@@ -47,6 +47,7 @@ export interface AuthSessionRepository {
     context: LoginContext,
     expiresAt: Date,
     refreshTokenHash: string,
+    verifiedPasswordHash?: string,
   ): Promise<AuthSessionRecord>;
   findActive(
     sessionId: string,

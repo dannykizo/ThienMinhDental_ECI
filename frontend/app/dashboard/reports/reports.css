@@ -1,0 +1,864 @@
+/* ==========================================================================
+   Thien Minh Dental - Reports & Export Management Design System
+   Step 6: Quản trị Báo cáo, Thống kê & Xuất Excel
+   - Pure White Porcelain Cards with Crisp Thin Borders
+   - Visual Progress & Attendance Distribution Bars
+   - Instant Feedback Export Cards (Excel/PDF)
+   - High-Density Compact Data Matrix Table with In-Table Filter
+   ========================================================================== */
+
+.report-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
+}
+
+/* -------------------------------------------------------------
+   1. Filter Toolbar (White Porcelain Bar)
+------------------------------------------------------------- */
+.rpt-toolbar-card {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  border-radius: var(--radius-xl, 18px);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-elevation-low, 0 1px 3px rgba(15, 23, 42, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rpt-toolbar-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rpt-toolbar-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.rpt-toolbar-field label {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--muted, #64748b);
+  letter-spacing: 0.01em;
+}
+
+.rpt-toolbar-field input,
+.rpt-toolbar-field select {
+  min-height: 42px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--line, #e2e8f0);
+  background: var(--surface, #ffffff);
+  color: var(--ink, #0f172a);
+  font-size: 0.88rem;
+  font-weight: 500;
+  transition: all 180ms ease;
+  width: 100%;
+}
+
+.rpt-toolbar-field input:focus,
+.rpt-toolbar-field select:focus {
+  outline: none;
+  border-color: var(--brand-primary, #5e2d91);
+  box-shadow: 0 0 0 3px rgba(94, 45, 145, 0.12);
+}
+
+.rpt-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.rpt-btn-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 22px;
+  border-radius: var(--radius-md, 10px);
+  background: linear-gradient(135deg, #5e2d91 0%, #7c3aed 100%);
+  color: #ffffff;
+  border: none;
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(94, 45, 145, 0.22);
+  transition: all 180ms ease;
+}
+
+.rpt-btn-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(94, 45, 145, 0.32);
+}
+
+.rpt-btn-print {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 18px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--line, #e2e8f0);
+  background: var(--surface, #ffffff);
+  color: var(--ink-secondary, #334155);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.rpt-btn-print:hover:not(:disabled) {
+  background: var(--canvas-subtle, #f1f5f9);
+  color: var(--ink, #0f172a);
+}
+
+/* Version selector row */
+.rpt-version-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line, #e2e8f0);
+  font-size: 0.82rem;
+  color: var(--muted, #64748b);
+  flex-wrap: wrap;
+}
+
+.rpt-version-row select {
+  min-height: 36px;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm, 6px);
+  border: 1px solid var(--line, #e2e8f0);
+  background: var(--surface, #ffffff);
+  font-size: 0.82rem;
+  color: var(--ink, #0f172a);
+}
+
+/* -------------------------------------------------------------
+   2. KPI Metric Cards (White Porcelain Tiles)
+------------------------------------------------------------- */
+.rpt-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.rpt-metric-tile {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  border-left: 4px solid var(--brand-primary, #5e2d91);
+  border-radius: var(--radius-xl, 18px);
+  padding: 22px 24px;
+  box-shadow: var(--shadow-elevation-low, 0 1px 3px rgba(15, 23, 42, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  transition: transform 200ms var(--ease-spring, cubic-bezier(0.16, 1, 0.3, 1)),
+              box-shadow 200ms ease,
+              border-color 200ms ease;
+}
+
+.rpt-metric-tile.tone-teal {
+  border-left-color: #0d9488;
+}
+
+.rpt-metric-tile.tone-orange {
+  border-left-color: var(--brand-accent, #f97316);
+}
+
+.rpt-metric-tile.tone-amber {
+  border-left-color: var(--brand-gold, #f59e0b);
+}
+
+.rpt-metric-tile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(94, 45, 145, 0.28);
+  border-left-color: inherit;
+  box-shadow: 0 10px 24px -2px rgba(94, 45, 145, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+.rpt-metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rpt-metric-label {
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--muted, #64748b);
+  margin: 0;
+}
+
+.rpt-metric-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--brand-primary-light, #f7f2fc);
+  color: var(--brand-primary, #5e2d91);
+  flex-shrink: 0;
+}
+
+.rpt-metric-tile.tone-teal .rpt-metric-icon {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+
+.rpt-metric-tile.tone-orange .rpt-metric-icon {
+  background: var(--brand-accent-light, #fff7ed);
+  color: var(--brand-accent, #f97316);
+}
+
+.rpt-metric-tile.tone-amber .rpt-metric-icon {
+  background: var(--brand-gold-light, #fef3c7);
+  color: var(--brand-gold, #f59e0b);
+}
+
+.rpt-metric-value {
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink, #0f172a);
+  font-variant-numeric: tabular-nums;
+  margin: 4px 0 0;
+}
+
+.rpt-metric-sub {
+  font-size: 0.78rem;
+  color: var(--ink-secondary, #334155);
+  font-weight: 500;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* -------------------------------------------------------------
+   3. Visual Attendance Progress & Analytics Bar
+------------------------------------------------------------- */
+.rpt-progress-card {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  border-radius: var(--radius-xl, 18px);
+  padding: 22px 26px;
+  box-shadow: var(--shadow-elevation-low, 0 1px 3px rgba(15, 23, 42, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rpt-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.rpt-progress-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rpt-progress-title h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: var(--ink, #0f172a);
+}
+
+.rpt-rate-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--emerald-light, #ecfdf5);
+  color: var(--emerald-dark, #059669);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  font-size: 0.8rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.rpt-progress-bar-wrap {
+  width: 100%;
+  height: 14px;
+  background: #f1f5f9;
+  border-radius: var(--radius-full, 9999px);
+  overflow: hidden;
+  display: flex;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.rpt-progress-segment {
+  height: 100%;
+  transition: width 600ms cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.rpt-seg-office {
+  background: linear-gradient(90deg, #5e2d91 0%, #7c3aed 100%);
+}
+
+.rpt-seg-field {
+  background: linear-gradient(90deg, #0d9488 0%, #14b8a6 100%);
+}
+
+.rpt-seg-leave {
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.rpt-seg-incomplete {
+  background: linear-gradient(90deg, #ef4444 0%, #f87171 100%);
+}
+
+.rpt-progress-legend {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--ink-secondary, #334155);
+}
+
+.rpt-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rpt-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.rpt-legend-dot.dot-office { background: #5e2d91; }
+.rpt-legend-dot.dot-field { background: #0d9488; }
+.rpt-legend-dot.dot-leave { background: #f59e0b; }
+.rpt-legend-dot.dot-incomplete { background: #ef4444; }
+
+.rpt-legend-count {
+  font-weight: 750;
+  color: var(--ink, #0f172a);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+/* -------------------------------------------------------------
+   4. Instant Feedback Excel Export Cards (.rpt-export-*)
+------------------------------------------------------------- */
+.rpt-export-section {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  border-radius: var(--radius-xl, 18px);
+  padding: 24px 28px;
+  box-shadow: var(--shadow-elevation-low, 0 1px 3px rgba(15, 23, 42, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.rpt-export-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rpt-export-top-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(94, 45, 145, 0.1) 0%, rgba(94, 45, 145, 0.2) 100%);
+  color: var(--brand-primary, #5e2d91);
+  border: 1px solid rgba(94, 45, 145, 0.18);
+  flex-shrink: 0;
+}
+
+.rpt-export-top h2 {
+  margin: 0 0 3px;
+  font-size: 1.25rem;
+  font-weight: 750;
+  color: var(--ink, #0f172a);
+}
+
+.rpt-export-top p {
+  margin: 0;
+  color: var(--muted, #64748b);
+  font-size: 0.84rem;
+}
+
+.rpt-export-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rpt-export-card {
+  background: var(--surface-subtle, #fafbfd);
+  border: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  border-radius: var(--radius-lg, 14px);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  transition: transform 200ms var(--ease-spring, cubic-bezier(0.16, 1, 0.3, 1)),
+              box-shadow 200ms ease,
+              border-color 200ms ease,
+              background-color 200ms ease;
+}
+
+.rpt-export-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--brand-primary, #5e2d91);
+  transition: opacity 200ms ease;
+}
+
+.rpt-export-card.theme-teal::before { background: #0d9488; }
+.rpt-export-card.theme-orange::before { background: var(--brand-accent, #f97316); }
+.rpt-export-card.theme-indigo::before { background: #6366f1; }
+
+.rpt-export-card:hover {
+  transform: translateY(-2px);
+  background: var(--surface, #ffffff);
+  border-color: rgba(94, 45, 145, 0.25);
+  box-shadow: 0 10px 22px -3px rgba(94, 45, 145, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+}
+
+.rpt-export-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rpt-export-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rpt-export-badge-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--brand-primary-light, #f7f2fc);
+  color: var(--brand-primary, #5e2d91);
+  flex-shrink: 0;
+}
+
+.rpt-export-card.theme-teal .rpt-export-badge-icon {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+
+.rpt-export-card.theme-orange .rpt-export-badge-icon {
+  background: var(--brand-accent-light, #fff7ed);
+  color: var(--brand-accent, #f97316);
+}
+
+.rpt-export-card.theme-indigo .rpt-export-badge-icon {
+  background: #eef2ff;
+  color: #6366f1;
+}
+
+.rpt-export-card h3 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+}
+
+.rpt-export-card p {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--muted, #64748b);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+/* Instant Feedback Button */
+.rpt-btn-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--line, #e2e8f0);
+  background: var(--surface, #ffffff);
+  color: var(--brand-primary, #5e2d91);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 180ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.rpt-btn-download:hover:not(:disabled) {
+  background: var(--brand-primary, #5e2d91);
+  border-color: var(--brand-primary, #5e2d91);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(94, 45, 145, 0.25);
+}
+
+.rpt-btn-download.is-success {
+  background: var(--emerald, #10b981) !important;
+  border-color: var(--emerald, #10b981) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+}
+
+.rpt-btn-download:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* -------------------------------------------------------------
+   5. Period Lock & Reopen Accordion Card
+------------------------------------------------------------- */
+.rpt-lock-panel {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  border-radius: var(--radius-lg, 14px);
+  padding: 18px 24px;
+  box-shadow: var(--shadow-elevation-low, 0 1px 3px rgba(15, 23, 42, 0.04));
+}
+
+.rpt-lock-panel summary {
+  cursor: pointer;
+  font-size: 0.94rem;
+  font-weight: 750;
+  color: var(--ink, #0f172a);
+  outline: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rpt-lock-panel summary:hover {
+  color: var(--brand-primary, #5e2d91);
+}
+
+.rpt-lock-form {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--line, #e2e8f0);
+}
+
+/* -------------------------------------------------------------
+   6. Data Matrix Table (High Density Porcelain Matrix)
+------------------------------------------------------------- */
+.rpt-matrix-container {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  border-radius: var(--radius-xl, 18px);
+  box-shadow: var(--shadow-elevation-low, 0 1px 3px rgba(15, 23, 42, 0.04));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rpt-matrix-header {
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  flex-wrap: wrap;
+}
+
+.rpt-matrix-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rpt-matrix-title h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 750;
+  color: var(--ink, #0f172a);
+}
+
+.rpt-matrix-count {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--muted, #64748b);
+  background: var(--canvas-subtle, #f1f5f9);
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 9999px);
+  font-variant-numeric: tabular-nums;
+}
+
+.rpt-matrix-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: var(--radius-md, 10px);
+  background: var(--surface, #ffffff);
+  padding: 0 14px;
+  min-width: 260px;
+  color: var(--muted, #64748b);
+  transition: all 180ms ease;
+}
+
+.rpt-matrix-search:focus-within {
+  border-color: var(--brand-primary, #5e2d91);
+  box-shadow: 0 0 0 3px rgba(94, 45, 145, 0.12);
+}
+
+.rpt-matrix-search input {
+  border: none;
+  outline: none;
+  background: transparent;
+  min-height: 38px;
+  font-size: 0.84rem;
+  color: var(--ink, #0f172a);
+  width: 100%;
+}
+
+.rpt-matrix-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  max-height: 640px;
+  scrollbar-width: thin;
+}
+
+.rpt-matrix-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.84rem;
+  text-align: left;
+}
+
+.rpt-matrix-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f8fafc;
+  color: var(--muted, #64748b);
+  font-weight: 700;
+  font-size: 0.74rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+  white-space: nowrap;
+}
+
+.rpt-matrix-table tbody tr {
+  transition: background-color 140ms ease;
+}
+
+.rpt-matrix-table tbody tr:hover {
+  background: rgba(94, 45, 145, 0.02);
+}
+
+.rpt-matrix-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line-crisp, rgba(226, 232, 240, 0.85));
+  color: var(--ink-secondary, #334155);
+  vertical-align: middle;
+}
+
+.rpt-matrix-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rpt-td-date {
+  font-weight: 650;
+  color: var(--ink, #0f172a);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rpt-td-emp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rpt-emp-code {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--brand-primary, #5e2d91);
+  font-variant-numeric: tabular-nums;
+}
+
+.rpt-emp-name {
+  font-weight: 700;
+  color: var(--ink, #0f172a);
+}
+
+.rpt-td-dept {
+  font-size: 0.8rem;
+  color: var(--muted, #64748b);
+}
+
+.rpt-td-type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full, 9999px);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.rpt-type-field {
+  background: #f0fdfa;
+  color: #0d9488;
+  border: 1px solid rgba(13, 148, 136, 0.25);
+}
+
+.rpt-type-office {
+  background: var(--brand-primary-light, #f7f2fc);
+  color: var(--brand-primary, #5e2d91);
+  border: 1px solid rgba(94, 45, 145, 0.2);
+}
+
+.rpt-td-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.rpt-td-hours {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--ink, #0f172a);
+}
+
+.rpt-td-ot {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--brand-accent, #f97316);
+}
+
+.rpt-td-risk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.rpt-risk-pill {
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--danger-light, #fef2f2);
+  color: var(--danger-dark, #dc2626);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.rpt-adjust-pill {
+  font-size: 0.72rem;
+  font-weight: 650;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--brand-primary-light, #f7f2fc);
+  color: var(--brand-primary, #5e2d91);
+  border: 1px solid rgba(94, 45, 145, 0.2);
+}
+
+/* -------------------------------------------------------------
+   7. Responsive & Print Styles
+------------------------------------------------------------- */
+@media (max-width: 1200px) {
+  .rpt-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rpt-export-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .rpt-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  .rpt-export-grid {
+    grid-template-columns: 1fr;
+  }
+  .rpt-toolbar-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .rpt-toolbar-field {
+    width: 100%;
+  }
+  .rpt-toolbar-actions {
+    flex-direction: column;
+  }
+  .rpt-toolbar-actions button {
+    width: 100%;
+  }
+  .rpt-matrix-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .rpt-matrix-search {
+    width: 100%;
+  }
+}
+
+/* Professional Audit Print Layout */
+@media print {
+  .admin-shell, .sidebar, .topbar-strip, .rpt-toolbar-card, .rpt-export-section, .pagination, .report-page .toolbar {
+    display: none !important;
+  }
+  body, .report-workspace, .rpt-matrix-container {
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+  .rpt-matrix-table-wrap {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .rpt-matrix-table thead th {
+    position: static !important;
+    background: #f1f5f9 !important;
+    color: #000000 !important;
+  }
+}

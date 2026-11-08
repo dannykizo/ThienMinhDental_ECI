@@ -16,13 +16,14 @@ describe('push registration requires the current Mobile device', () => {
     } as AnnouncementPushSender);
     await expect(service.registerPushDevice({ id: 'user', employeeId: 'employee',
       email: 'development-only@example.invalid', displayName: 'Development only', roles: [RoleCode.Employee] },
-      { deviceId: 'old-device', platform: 'ANDROID', token: 'development-only-fake-token' }))
+      { deviceId: 'old-device', platform: 'ANDROID', token: 'development-only-fake-token' }, 'current-session'))
       .rejects.toBeInstanceOf(ForbiddenException);
     expect(getRepository).not.toHaveBeenCalled();
-    const sessionQuery = query.mock.calls[1][0] as string;
+    const sessionQuery = query.mock.calls.find(call => (call[0] as string).includes("s.client_type='MOBILE'"))?.[0] as string;
     expect(sessionQuery).toContain("s.client_type='MOBILE'");
     expect(sessionQuery).toContain('s.revoked_at IS NULL');
     expect(sessionQuery).toContain('s.expires_at>now()');
     expect(sessionQuery).toContain('s.device_id=$2');
+    expect(sessionQuery).toContain('s.id=$4');
   });
 });

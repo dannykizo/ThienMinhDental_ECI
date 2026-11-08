@@ -11,4 +11,5 @@ import { ReportingService } from '../reporting/reporting.service.js';
 export class KpiController {
   constructor(private readonly reporting: ReportingService) {}
   @Get('monthly') monthly(@Query('month') month: string): Promise<unknown> { return this.reporting.kpi(month); }
+  @Get('monthly/document') document(@Query('month') month: string, @Query('revision') revision?: string): Promise<unknown> { return this.reporting.kpiDocument(month, revision); }
 }

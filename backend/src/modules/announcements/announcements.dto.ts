@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
 
 export class CreateAnnouncementDto {
   @IsString() @MinLength(3) @MaxLength(200) title!: string;
@@ -10,12 +10,12 @@ export class CreateAnnouncementDto {
 }
 
 export class UpdateAnnouncementDto {
-  @IsOptional() @IsString() @MinLength(3) @MaxLength(200) title?: string;
-  @IsOptional() @IsString() @MinLength(3) @MaxLength(10000) body?: string;
-  @IsOptional() @IsIn(['ALL', 'DEPARTMENT', 'EMPLOYEE']) audienceType?: 'ALL' | 'DEPARTMENT' | 'EMPLOYEE';
+  @ValidateIf((_, value) => value !== undefined) @IsString() @MinLength(3) @MaxLength(200) title?: string;
+  @ValidateIf((_, value) => value !== undefined) @IsString() @MinLength(3) @MaxLength(10000) body?: string;
+  @ValidateIf((_, value) => value !== undefined) @IsIn(['ALL', 'DEPARTMENT', 'EMPLOYEE']) audienceType?: 'ALL' | 'DEPARTMENT' | 'EMPLOYEE';
   @IsOptional() @IsUUID() departmentId?: string;
   @IsOptional() @IsUUID() employeeId?: string;
-  @IsOptional() @IsBoolean() requiresAcknowledgement?: boolean;
+  @ValidateIf((_, value) => value !== undefined) @IsBoolean() requiresAcknowledgement?: boolean;
 }
 
 export class TransitionAnnouncementDto {

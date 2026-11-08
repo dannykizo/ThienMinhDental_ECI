@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { AuthenticatedUserView } from '../../auth/application/auth.service.js';
@@ -85,10 +85,15 @@ export class AttendanceEvidenceStorage {
     await mkdir(this.root, { recursive: true });
     const filename = `${evidenceId}.${extension}`;
     await this.dataSource.transaction(async (manager) => {
+      const [active] = await manager.query<Array<{ id: string }>>(`SELECT u.id FROM users u JOIN employees e ON e.user_id=u.id
+        WHERE u.id=$1 AND e.id=$2 AND u.is_active AND e.is_active FOR SHARE OF u,e`, [user.id,user.employeeId]);
+      if (!active) throw new BadRequestException({ code: 'EMPLOYEE_PROFILE_REQUIRED', message: 'Hồ sơ không còn hoạt động để tải ảnh.' });
+      const [capture] = await manager.query<Array<{ user_id: string; expires_at: Date }>>('SELECT user_id,expires_at FROM attendance_checkin_captures WHERE id=$1 FOR UPDATE', [evidenceId]);
+      if (capture && (capture.user_id !== user.id || capture.expires_at <= new Date())) throw new BadRequestException({ code: 'CHECK_IN_CAPTURE_EXPIRED', message: 'Lượt chụp không còn hợp lệ. Chụp lại để check-in.' });
       await manager.query(`INSERT INTO attendance_evidence_uploads(evidence_id,filename,uploaded_by) VALUES($1,$2,$3) ON CONFLICT(evidence_id) DO NOTHING`, [evidenceId, filename, user.id]);
       const [owner] = await manager.query<Array<{ filename: string; uploaded_by: string }>>('SELECT filename,uploaded_by FROM attendance_evidence_uploads WHERE evidence_id=$1 FOR UPDATE', [evidenceId]);
       if (owner.uploaded_by !== user.id) throw new BadRequestException({ code: 'EVIDENCE_OWNER_MISMATCH', message: 'Ảnh không thuộc tài khoản này.' });
-      const [linked] = await manager.query<Array<{ id: string }>>('SELECT id FROM attendance_explanation_requests WHERE evidence_image_reference=$1 LIMIT 1', [`/api/attendance/evidence/${owner.filename}`]);
+      const [linked] = await manager.query<Array<{ id: string }>>('SELECT id FROM attendance_explanation_requests WHERE evidence_image_reference=$1 UNION ALL SELECT id FROM attendance_events WHERE evidence_image_reference=$1 LIMIT 1', [`/api/attendance/evidence/${owner.filename}`]);
       if (linked) {
         const current = await readFile(join(this.root, owner.filename));
         if (owner.filename !== filename || !current.equals(file.buffer)) throw new BadRequestException({ code: 'EVIDENCE_ALREADY_ATTACHED', message: 'Ảnh đã gắn với đơn giải trình không được ghi đè.' });
@@ -100,14 +105,14 @@ export class AttendanceEvidenceStorage {
     return { reference: `/api/attendance/evidence/${filename}` };
   }
 
-  async assertOwnedReference(user: AuthenticatedUserView, reference: string): Promise<void> {
+  async assertOwnedReference(user: AuthenticatedUserView, reference: string, reader: Pick<EntityManager, 'query'> = this.dataSource): Promise<void> {
     if (!/^\/api\/attendance\/evidence\/[0-9a-f-]{36}\.(jpg|png|webp)$/i.test(reference)) throw new BadRequestException({ code: 'INVALID_EVIDENCE_REFERENCE', message: 'Ảnh phải được tải lên hệ thống trước khi gửi đơn.' });
-    const [owner] = await this.dataSource.query<Array<{ uploaded_by: string }>>('SELECT uploaded_by FROM attendance_evidence_uploads WHERE filename=$1', [reference.split('/').at(-1)]);
+    const [owner] = await reader.query<Array<{ uploaded_by: string }>>('SELECT uploaded_by FROM attendance_evidence_uploads WHERE filename=$1', [reference.split('/').at(-1)]);
     if (owner?.uploaded_by !== user.id) throw new BadRequestException({ code: 'EVIDENCE_OWNER_MISMATCH', message: 'Không tìm thấy ảnh của tài khoản này.' });
-    await this.read(reference.split('/').at(-1)!, user);
+    await this.read(reference.split('/').at(-1)!, user, reader);
   }
 
-  async read(filename: string, user: AuthenticatedUserView): Promise<AttendanceEvidenceFile> {
+  async read(filename: string, user: AuthenticatedUserView, reader: Pick<EntityManager, 'query'> = this.dataSource): Promise<AttendanceEvidenceFile> {
     const match = /^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.(jpg|png|webp)$/i.exec(
       filename,
     );
@@ -117,7 +122,9 @@ export class AttendanceEvidenceStorage {
         message: 'Không tìm thấy ảnh bằng chứng.',
       });
     }
-    const [owner] = await this.dataSource.query<Array<{ uploaded_by: string }>>('SELECT uploaded_by FROM attendance_evidence_uploads WHERE filename=$1', [filename]);
+    const [owner] = await reader.query<Array<{ uploaded_by: string }>>('SELECT uploaded_by FROM attendance_evidence_uploads WHERE filename=$1', [filename]);
+    const [pendingDelete] = await reader.query<Array<{ filename: string }>>("SELECT filename FROM employee_file_cleanup WHERE storage_kind='ATTENDANCE' AND filename=$1", [filename]);
+    if (pendingDelete) throw new NotFoundException({ code: 'EVIDENCE_FILE_NOT_FOUND', message: 'Không tìm thấy ảnh bằng chứng.' });
     if (!user.roles.includes(RoleCode.Admin) && owner?.uploaded_by !== user.id && !await this.workflow.canReadEvidence(user, filename)) throw new NotFoundException({ code: 'EVIDENCE_FILE_NOT_FOUND', message: 'Không tìm thấy ảnh bằng chứng.' });
     try {
       return {

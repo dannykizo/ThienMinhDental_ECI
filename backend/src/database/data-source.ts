@@ -1,30 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { databaseEntities } from './database.config.js';
-import { InitialFoundation1726358400000 } from './migrations/1726358400000-initial-foundation.js';
-import { WebMvp1726444800000 } from './migrations/1726444800000-web-mvp.js';
-import { CustomerOrganizationRbac1790035200000 } from './migrations/1790035200000-customer-organization-rbac.js';
-import { AuthSessions1790121600000 } from './migrations/1790121600000-auth-sessions.js';
-import { ScheduleLocationAlignment1790208000000 } from './migrations/1790208000000-schedule-location-alignment.js';
-import { AttendanceReconciliation1790294400000 } from './migrations/1790294400000-attendance-reconciliation.js';
-import { BusinessTripOperations1790380800000 } from './migrations/1790380800000-business-trip-operations.js';
-import { LeaveOperations1790467200000 } from './migrations/1790467200000-leave-operations.js';
-import { AnnouncementAlignment1790553600000 } from './migrations/1790553600000-announcement-alignment.js';
-import { RefreshTokenSessions1790640000000 } from './migrations/1790640000000-refresh-token-sessions.js';
-import { PushNotificationDevices1790726400000 } from './migrations/1790726400000-push-notification-devices.js';
-import { CanonicalRoles1790812800000 } from './migrations/1790812800000-canonical-roles.js';
-import { EmployeeLifecycle1790899200000 } from './migrations/1790899200000-employee-lifecycle.js';
-import { GeofenceRadiusAlignment1790985600000 } from './migrations/1790985600000-geofence-radius-alignment.js';
-import { BusinessTripCustomerManagement1791072000000 } from './migrations/1791072000000-business-trip-customer-management.js';
-import { AnnouncementCompanyPushDelivery1791158400000 } from './migrations/1791158400000-announcement-company-push-delivery.js';
-import { EmployeeDisciplinaryActions1791244800000 } from './migrations/1791244800000-employee-disciplinary-actions.js';
-import { LeavePoliciesBalances1791331200000 } from './migrations/1791331200000-leave-policies-balances.js';
-import { EmployeeExplanations1791417600000 } from './migrations/1791417600000-employee-explanations.js';
-import { OrganizationManagementAccess1791504000000 } from './migrations/1791504000000-organization-management-access.js';
-import { ManagerChannelSessions1791590400000 } from './migrations/1791590400000-manager-channel-sessions.js';
-import { ExplanationTwoStepWorkflow1791676800000 } from './migrations/1791676800000-explanation-two-step-workflow.js';
-import { LeaveTwoStepWorkflow1791763200000 } from './migrations/1791763200000-leave-two-step-workflow.js';
-import { AdminFallbackReview1791849600000 } from './migrations/1791849600000-admin-fallback-review.js';
+import { databaseMigrations } from './migration-registry.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -36,31 +13,6 @@ export const applicationDataSource = new DataSource({
   type: 'postgres',
   url: databaseUrl,
   entities: databaseEntities,
-  migrations: [
-    InitialFoundation1726358400000,
-    WebMvp1726444800000,
-    CustomerOrganizationRbac1790035200000,
-    AuthSessions1790121600000,
-    ScheduleLocationAlignment1790208000000,
-    AttendanceReconciliation1790294400000,
-    BusinessTripOperations1790380800000,
-    LeaveOperations1790467200000,
-    AnnouncementAlignment1790553600000,
-    RefreshTokenSessions1790640000000,
-    PushNotificationDevices1790726400000,
-    CanonicalRoles1790812800000,
-    EmployeeLifecycle1790899200000,
-    GeofenceRadiusAlignment1790985600000,
-    BusinessTripCustomerManagement1791072000000,
-    AnnouncementCompanyPushDelivery1791158400000,
-    EmployeeDisciplinaryActions1791244800000,
-    LeavePoliciesBalances1791331200000,
-    EmployeeExplanations1791417600000,
-    OrganizationManagementAccess1791504000000,
-    ManagerChannelSessions1791590400000,
-    ExplanationTwoStepWorkflow1791676800000,
-    LeaveTwoStepWorkflow1791763200000,
-    AdminFallbackReview1791849600000,
-  ],
+  migrations: databaseMigrations,
   migrationsTableName: 'schema_migrations',
 });

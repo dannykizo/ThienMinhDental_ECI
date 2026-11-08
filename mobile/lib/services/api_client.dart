@@ -40,15 +40,29 @@ class ApiException implements Exception {
 
 enum ApiAvailability { available, offline, backendUnavailable }
 
+class EmployeePortraitInfo {
+  const EmployeePortraitInfo({required this.employeeId, required this.employeeCode, required this.fullName, this.version});
+  factory EmployeePortraitInfo.fromJson(Map<String, dynamic> json) => EmployeePortraitInfo(
+    employeeId: json['employeeId'] as String, employeeCode: json['employeeCode'] as String,
+    fullName: json['fullName'] as String, version: json['version'] as String?,
+  );
+  final String employeeId, employeeCode, fullName;
+  final String? version;
+}
+
 class ManagementAccess {
   const ManagementAccess(
       {required this.canReviewExplanations,
       required this.grants,
       this.canReviewLeave = false,
+      this.canReviewOvertime = false,
       this.canReadManagedModules = false});
 
   factory ManagementAccess.fromJson(Map<String, dynamic> json) =>
       ManagementAccess(
+        canReviewOvertime: (json['capabilities']
+                as Map<String, dynamic>?)?['overtimeWorkflow'] ==
+            'OVERTIME_TWO_STEP',
         canReviewExplanations: (json['capabilities']
                 as Map<String, dynamic>?)?['reviewWorkflow'] ==
             'EXPLANATION_TWO_STEP',
@@ -66,6 +80,7 @@ class ManagementAccess {
 
   final bool canReviewExplanations;
   final bool canReviewLeave;
+  final bool canReviewOvertime;
   final bool canReadManagedModules;
   final List<ManagementGrantView> grants;
 }
@@ -134,6 +149,7 @@ class TodayAttendance {
     required this.riskFlags,
     required this.status,
     required this.workedMinutes,
+    this.attendanceType,
   });
 
   factory TodayAttendance.fromJson(Map<String, dynamic> json) =>
@@ -152,6 +168,7 @@ class TodayAttendance {
         riskFlags: (json['riskFlags'] as List<dynamic>).cast<String>(),
         status: json['status'] as String,
         workedMinutes: (json['workedMinutes'] as num?)?.toInt() ?? 0,
+        attendanceType: json['attendanceType'] as String?,
       );
 
   final DateTime? checkedInAt;
@@ -163,6 +180,27 @@ class TodayAttendance {
   final List<String> riskFlags;
   final String status;
   final int workedMinutes;
+  final String? attendanceType;
+}
+
+class CheckInCapture {
+  const CheckInCapture(
+      {required this.id,
+      required this.serverTime,
+      required this.attendanceType,
+      required this.latitude,
+      required this.longitude});
+  factory CheckInCapture.fromJson(Map<String, dynamic> json) => CheckInCapture(
+      id: json['id'] as String,
+      serverTime: DateTime.parse(json['serverTime'] as String),
+      attendanceType: json['attendanceType'] as String,
+      latitude: (json['latitude'] as num).toDouble(),
+      longitude: (json['longitude'] as num).toDouble());
+  final String id;
+  final DateTime serverTime;
+  final String attendanceType;
+  final double latitude;
+  final double longitude;
 }
 
 class RecordedAttendanceEvent {
@@ -399,6 +437,54 @@ class BusinessTripAssignment {
   final String status;
 }
 
+class OvertimeRequest {
+  OvertimeRequest.fromJson(Map<String, dynamic> json)
+      : id = json['id'] as String,
+        workDate = json['workDate'] as String,
+        requestedMinutes = (json['requestedMinutes'] as num).toInt(),
+        reason = json['reason'] as String,
+        workContent = json['workContent'] as String,
+        status = json['status'] as String,
+        departmentName = json['departmentName'] as String?,
+        reviewedByName = json['reviewedByName'] as String?,
+        reviewNote = json['reviewNote'] as String?,
+        reviewedAt =
+            DateTime.tryParse(json['reviewedAt'] as String? ?? '')?.toLocal();
+  final String id, workDate, reason, workContent, status;
+  final int requestedMinutes;
+  final String? departmentName, reviewedByName, reviewNote;
+  final DateTime? reviewedAt;
+}
+
+class ManagedOvertimeRequest {
+  ManagedOvertimeRequest.fromJson(Map<String, dynamic> json)
+      : request = OvertimeRequest.fromJson(json),
+        employeeCode = json['employeeCode'] as String?,
+        fullName = json['fullName'] as String?,
+        approvalStage = json['approvalStage'] as String?,
+        routeVersion = (json['routeVersion'] as num?)?.toInt(),
+        canConfirm = json['canConfirm'] == true,
+        canReview = json['canReview'] == true,
+        teamName = json['teamName'] as String?,
+        leaderName = json['leaderName'] as String?,
+        headName = json['headName'] as String?,
+        confirmedByName = json['confirmedByName'] as String?,
+        confirmedAt = json['confirmedAt'] as String?,
+        confirmationNote = json['confirmationNote'] as String?;
+  final OvertimeRequest request;
+  final String? employeeCode,
+      fullName,
+      approvalStage,
+      teamName,
+      leaderName,
+      headName,
+      confirmedByName,
+      confirmedAt,
+      confirmationNote;
+  final int? routeVersion;
+  final bool canConfirm, canReview;
+}
+
 class ManagedLeaveRequest {
   ManagedLeaveRequest.fromJson(Map<String, dynamic> json)
       : request = EmployeeLeaveRequest.fromJson(json),
@@ -558,6 +644,7 @@ class LeaveBalance {
     required this.pendingMinutes,
     required this.policyId,
     required this.policyName,
+    this.initialized,
   });
 
   factory LeaveBalance.fromJson(Map<String, dynamic> json) => LeaveBalance(
@@ -566,6 +653,7 @@ class LeaveBalance {
         pendingMinutes: (json['pendingMinutes'] as num).toInt(),
         policyId: json['policyId'] as String,
         policyName: json['policyName'] as String,
+        initialized: json['initialized'] as bool?,
       );
 
   final int availableMinutes;
@@ -573,6 +661,7 @@ class LeaveBalance {
   final int pendingMinutes;
   final String policyId;
   final String policyName;
+  final bool? initialized;
 }
 
 class EmployeeAnnouncement {
@@ -715,6 +804,55 @@ class ApiClient {
               ManagedLeaveRequest.fromJson(row as Map<String, dynamic>))
           .toList();
 
+  Future<List<ManagedOvertimeRequest>> overtimeRequests(
+          {bool mine = true}) async =>
+      (await _requestList(
+              mine ? '/overtime-requests/mine' : '/overtime-requests'))
+          .map((dynamic row) =>
+              ManagedOvertimeRequest.fromJson(row as Map<String, dynamic>))
+          .toList();
+
+  Future<void> createOvertime(
+      {required String submissionId,
+      required String workDate,
+      required int requestedMinutes,
+      required String reason,
+      required String workContent}) async {
+    await _request('/overtime-requests/mine',
+        method: 'POST',
+        body: <String, dynamic>{
+          'submissionId': submissionId,
+          'workDate': workDate,
+          'requestedMinutes': requestedMinutes,
+          'reason': reason.trim(),
+          'workContent': workContent.trim()
+        });
+  }
+
+  Future<List<ExplanationHistoryEntry>> overtimeHistory(String id) async =>
+      (await _requestList(
+              '/overtime-requests/${Uri.encodeComponent(id)}/history'))
+          .map((dynamic row) =>
+              ExplanationHistoryEntry.fromJson(row as Map<String, dynamic>))
+          .toList();
+
+  Future<void> processOvertime(ManagedOvertimeRequest item,
+      {required String action, required String note}) async {
+    if (item.routeVersion == null ||
+        !<String>['CONFIRM', 'APPROVED', 'REJECTED'].contains(action)) {
+      throw const ApiException('Tải lại đơn trước khi xử lý.');
+    }
+    await _request(
+        '/overtime-requests/${Uri.encodeComponent(item.request.id)}/${action == 'CONFIRM' ? 'confirm' : 'review'}',
+        method: 'PATCH',
+        body: <String, dynamic>{
+          'expectedVersion': item.routeVersion,
+          if (action == 'CONFIRM')
+            'confirmationNote': note.trim()
+          else ...<String, dynamic>{'status': action, 'reviewNote': note.trim()}
+        });
+  }
+
   Future<List<ExplanationHistoryEntry>> leaveHistory(String id) async =>
       (await _requestList('/leave-requests/${Uri.encodeComponent(id)}/history'))
           .map((dynamic row) =>
@@ -850,6 +988,43 @@ class ApiClient {
     return SessionUser.fromJson(json['user'] as Map<String, dynamic>);
   }
 
+  Future<EmployeePortraitInfo> myPortraitInfo() async => EmployeePortraitInfo.fromJson(await _request('/profile/portrait/info'));
+
+  Future<Uint8List> myPortraitImage({bool thumbnail = false}) async {
+    final String path = '/profile/portrait?size=${thumbnail ? 'thumbnail' : 'full'}';
+    http.Response response = await _sendRequest(path, method: 'GET');
+    if (response.statusCode == 401 && refreshToken != null) {
+      await _refreshAccessToken(); response = await _sendRequest(path, method: 'GET');
+    }
+    if (response.statusCode == 401) { final ApiException error = _sessionErrorFrom(response); await _endSession(error); throw error; }
+    if (response.statusCode < 200 || response.statusCode >= 300) _decodeResponse(response);
+    if (!(response.headers['content-type'] ?? '').startsWith('image/jpeg') || response.bodyBytes.length > 768 * 1024) throw const ApiException('Ảnh hồ sơ trả về không hợp lệ.', code: 'PORTRAIT_INVALID');
+    return response.bodyBytes;
+  }
+
+  Future<void> updateMyPortrait({required String? expectedVersion, required Uint8List portrait, required Uint8List thumbnail}) async {
+    Future<http.Response> send() async {
+      try {
+        final http.MultipartRequest request = http.MultipartRequest('POST', Uri.parse('$baseUrl/profile/portrait'))
+          ..headers['Accept'] = 'application/json'
+          ..fields['expectedVersion'] = expectedVersion ?? 'none'
+          ..files.add(http.MultipartFile.fromBytes('portrait', portrait, filename: 'portrait.jpg', contentType: http.MediaType('image','jpeg')))
+          ..files.add(http.MultipartFile.fromBytes('thumbnail', thumbnail, filename: 'thumbnail.jpg', contentType: http.MediaType('image','jpeg')));
+        if (accessToken != null) request.headers['Authorization'] = 'Bearer $accessToken';
+        final http.StreamedResponse streamed = await request.send().timeout(const Duration(seconds:20));
+        final http.Response response = await http.Response.fromStream(streamed).timeout(const Duration(seconds:20));
+        _setAvailability(_isBackendUnavailableStatus(response.statusCode) ? ApiAvailability.backendUnavailable : ApiAvailability.available);
+        return response;
+      } on ApiException { rethrow; }
+      on TimeoutException catch(error) { throw await _connectionException(error, timedOut:true); }
+      on Object catch(error) { throw await _connectionException(error); }
+    }
+    http.Response response = await send();
+    if (response.statusCode == 401 && refreshToken != null) { await _refreshAccessToken(); response = await send(); }
+    if (response.statusCode == 401) { final ApiException error = _sessionErrorFrom(response); await _endSession(error); throw error; }
+    _parseResponse(response);
+  }
+
   Future<void> checkAvailability() async {
     final http.Response response = await _sendRequest(
       '/health',
@@ -870,12 +1045,19 @@ class ApiClient {
     required bool mockLocationSignal,
     required double latitude,
     required double longitude,
+    String attendanceType = 'OFFICE',
+    String? checkinCaptureId,
+    String? challengeId,
+    String? signature,
   }) async {
     final Map<String, dynamic> json = await _request(
       '/attendance/events',
       body: <String, dynamic>{
         'accuracyMeters': accuracyMeters,
-        'attendanceType': 'OFFICE',
+        'attendanceType': attendanceType,
+        if (checkinCaptureId != null) 'checkinCaptureId': checkinCaptureId,
+        if (challengeId != null) 'challengeId': challengeId,
+        if (signature != null) 'signature': signature,
         'deviceTime': DateTime.now().toUtc().toIso8601String(),
         'eventType': eventType,
         'latitude': latitude,
@@ -886,6 +1068,49 @@ class ApiClient {
     );
     return RecordedAttendanceEvent.fromJson(json);
   }
+
+  Future<Map<String, dynamic>> registerAttendanceDevice(String publicKey) =>
+      _request('/attendance/devices/register',
+          method: 'POST', body: <String, dynamic>{'publicKey': publicKey});
+
+  Future<Map<String, dynamic>> attendanceChallenge({
+    required String eventType,
+    required String attendanceType,
+    required double latitude,
+    required double longitude,
+    required double accuracyMeters,
+    required bool mockLocationSignal,
+    String? checkinCaptureId,
+  }) =>
+      _request('/attendance/device-challenges',
+          method: 'POST',
+          body: <String, dynamic>{
+            'eventType': eventType,
+            'attendanceType': attendanceType,
+            'latitude': latitude,
+            'longitude': longitude,
+            'accuracyMeters': accuracyMeters,
+            'mockLocationSignal': mockLocationSignal,
+            if (checkinCaptureId != null) 'checkinCaptureId': checkinCaptureId,
+          });
+
+  Future<CheckInCapture> prepareCheckIn(
+          {required String attendanceType,
+          required double latitude,
+          required double longitude,
+          required double accuracyMeters,
+          required bool mockLocationSignal,
+          String? fieldWorkContent}) async =>
+      CheckInCapture.fromJson(await _request('/attendance/check-in-captures',
+          method: 'POST',
+          body: <String, dynamic>{
+            'attendanceType': attendanceType,
+            'latitude': latitude,
+            'longitude': longitude,
+            'accuracyMeters': accuracyMeters,
+            'mockLocationSignal': mockLocationSignal,
+            if (fieldWorkContent != null) 'fieldWorkContent': fieldWorkContent,
+          }));
 
   Future<List<AttendanceExplanation>> myAttendanceExplanations() async {
     final List<dynamic> json =
@@ -1246,6 +1471,15 @@ class ApiClient {
       includeAccessToken: false,
       method: 'POST',
     );
+    // Logout or a new login may finish while this request is in flight. An old
+    // refresh response must neither restore cleared tokens nor end a new SID.
+    if (refreshToken != currentRefreshToken) {
+      throw const ApiException(
+        'Phiên trên thiết bị đã thay đổi. Vui lòng tải lại dữ liệu.',
+        code: 'SESSION_CHANGED',
+        status: 409,
+      );
+    }
     if (response.statusCode == 401 || response.statusCode == 403) {
       final ApiException error = _sessionErrorFrom(response);
       await _endSession(error);

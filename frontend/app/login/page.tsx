@@ -91,7 +91,7 @@ export default function LoginPage() {
             <input
               autoComplete="current-password"
               disabled={state === 'loading' || state === 'success'}
-              minLength={8}
+              minLength={6}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="••••••••"
               required

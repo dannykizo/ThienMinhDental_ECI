@@ -1,11 +1,15 @@
 'use client';
 
 import {
+  Activity,
   Crosshair,
   LocateFixed,
+  MapPin,
   MapPinned,
   Pencil,
   Plus,
+  Radar,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   type FormEvent,
@@ -37,6 +41,7 @@ interface Branch {
   id: string;
   name: string;
   code: string;
+  isActive: boolean;
 }
 
 interface AuditLog {
@@ -271,52 +276,93 @@ export default function LocationsPage() {
       <PageHeader
         description="Lấy tọa độ từ thiết bị, chọn trực tiếp trên bản đồ và quản lý vùng chấm công của từng chi nhánh."
         eyebrow="VỊ TRÍ & GEOFENCE"
-        title="Vị trí làm việc"
+        title="Vị trí làm việc & Geofence"
       />
       {message && <ToastNotice onDismiss={() => setMessage('')}>{message}</ToastNotice>}
       {error && <Notice kind="error">{error}</Notice>}
 
-      <section className="location-metric-grid" aria-label="Quy tắc vị trí">
-        <article className="metric-card">
-          <p>Vị trí đã cấu hình</p>
-          <strong>{items?.length ?? 0}</strong>
-          <span>Văn phòng và địa điểm bên ngoài</span>
+      {/* KPI Metrics */}
+      <section className="cfg-metric-grid" aria-label="Quy tắc vị trí">
+        <article className="cfg-metric-tile">
+          <div className="cfg-metric-tile-header">
+            <span className="cfg-metric-tile-label">Vị trí cấu hình</span>
+            <span className="cfg-metric-tile-icon cfg-icon-purple">
+              <MapPin size={18} />
+            </span>
+          </div>
+          <p className="cfg-metric-tile-value tabular-nums">{items?.length ?? 0}</p>
+          <span className="cfg-metric-tile-sub">Văn phòng và địa điểm bên ngoài</span>
         </article>
-        <article className="metric-card">
-          <p>Đang hoạt động</p>
-          <strong>{items?.filter((row) => row.isActive).length ?? 0}</strong>
-          <span>Dùng khi chấm công</span>
+
+        <article className="cfg-metric-tile">
+          <div className="cfg-metric-tile-header">
+            <span className="cfg-metric-tile-label">Đang hoạt động</span>
+            <span className="cfg-metric-tile-icon cfg-icon-teal">
+              <Activity size={18} />
+            </span>
+          </div>
+          <p className="cfg-metric-tile-value tabular-nums">
+            {items?.filter((row) => row.isActive).length ?? 0}
+          </p>
+          <span className="cfg-metric-tile-sub">Khu vực khả dụng khi chấm công</span>
         </article>
-        <article className="metric-card">
-          <p>Bán kính check-in</p>
-          <strong>100 m</strong>
-          <span>Tối đa theo phản hồi khách hàng</span>
+
+        <article className="cfg-metric-tile">
+          <div className="cfg-metric-tile-header">
+            <span className="cfg-metric-tile-label">Bán kính Geofence</span>
+            <span className="cfg-metric-tile-icon cfg-icon-amber">
+              <Radar size={18} />
+            </span>
+          </div>
+          <p className="cfg-metric-tile-value tabular-nums">100 m</p>
+          <span className="cfg-metric-tile-sub">Vùng hợp lệ check-in</span>
         </article>
-        <article className="metric-card">
-          <p>Chất lượng GPS</p>
-          <strong>≤ 50 m</strong>
-          <span>Không bị trộn với bán kính check-in</span>
+
+        <article className="cfg-metric-tile">
+          <div className="cfg-metric-tile-header">
+            <span className="cfg-metric-tile-label">Chất lượng GPS</span>
+            <span className="cfg-metric-tile-icon cfg-icon-blue">
+              <Crosshair size={18} />
+            </span>
+          </div>
+          <p className="cfg-metric-tile-value tabular-nums">≤ 50 m</p>
+          <span className="cfg-metric-tile-sub">Ngưỡng chống giả lập vị trí</span>
         </article>
       </section>
 
+      {/* Map Panel Porcelain Container */}
       <section className="map-panel">
         <div className="map-panel-heading">
-          <div>
-            <span className="summary-label">
-              <MapPinned aria-hidden="true" size={17} /> Bản đồ chi nhánh
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="summary-label" style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--brand-primary)' }}>
+              <MapPinned aria-hidden="true" size={18} /> Bản đồ số hóa chi nhánh
             </span>
-            <p>Bấm marker để sửa vị trí; bấm chỗ trống để lấy tọa độ mới.</p>
+            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+              (Bấm marker để xem chi tiết hoặc bấm vào vị trí bất kỳ để lấy tọa độ)
+            </span>
           </div>
-          <div className="map-filters">
-            <label>
-              Chi nhánh
-              <select value={mapBranchId} onChange={(event) => setMapBranchId(event.target.value)}>
-                <option value="">Tất cả</option>
-                {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+          <div className="map-filters" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', fontWeight: 650, color: 'var(--ink)' }}>
+              Chi nhánh:
+              <select
+                value={mapBranchId}
+                onChange={(event) => setMapBranchId(event.target.value)}
+                style={{ minHeight: 34, padding: '4px 10px', fontSize: '0.8rem' }}
+              >
+                <option value="">Tất cả chi nhánh</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
               </select>
             </label>
-            <label className="check-inline">
-              <input checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} type="checkbox" />
+            <label className="check-inline" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', cursor: 'pointer' }}>
+              <input
+                checked={showInactive}
+                onChange={(event) => setShowInactive(event.target.checked)}
+                type="checkbox"
+              />
               Hiện vị trí tạm ngưng
             </label>
           </div>
@@ -329,13 +375,20 @@ export default function LocationsPage() {
           selectedRadiusMeters={radiusMeters}
         />
         <div className="map-legend">
-          <span><i className="legend-dot active-location" />Đang hoạt động</span>
-          <span><i className="legend-dot inactive-location" />Tạm ngưng</span>
-          <span><i className="legend-dot selected-location" />Tọa độ đang chọn</span>
+          <span>
+            <i className="legend-dot active-location" /> Đang hoạt động
+          </span>
+          <span>
+            <i className="legend-dot inactive-location" /> Tạm ngưng
+          </span>
+          <span>
+            <i className="legend-dot selected-location" /> Tọa độ đang chọn
+          </span>
         </div>
       </section>
 
-      <details className="editor-panel" id="location-editor" open>
+      {/* Form Soạn thảo / Thêm vị trí */}
+      <details className="cfg-panel" id="location-editor" open>
         <summary>
           <span className="summary-label">
             {editing ? <Pencil aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}
@@ -345,68 +398,152 @@ export default function LocationsPage() {
         <form className="form-grid" key={editing?.id ?? 'new'} onSubmit={save}>
           <label>
             Tên địa điểm
-            <input defaultValue={editing?.name ?? ''} name="name" placeholder="VD: Văn phòng TP.HCM" required />
+            <input
+              defaultValue={editing?.name ?? ''}
+              name="name"
+              placeholder="VD: Văn phòng TP.HCM"
+              required
+            />
           </label>
           <label>
             Loại vị trí
-            <select defaultValue={editing?.locationType ?? 'OFFICE'} name="locationType" onChange={(event) => setLocationType(event.target.value as Location['locationType'])}>
-              <option value="OFFICE">Văn phòng</option>
+            <select
+              defaultValue={editing?.locationType ?? 'OFFICE'}
+              name="locationType"
+              onChange={(event) =>
+                setLocationType(event.target.value as Location['locationType'])
+              }
+            >
+              <option value="OFFICE">Văn phòng chính thức</option>
               <option value="EXTERNAL_WORKPLACE">Địa điểm làm việc bên ngoài</option>
             </select>
           </label>
           <label>
             Chi nhánh
-            <select defaultValue={editing?.branchId ?? ''} name="branchId" required={locationType === 'OFFICE'}>
+            <select
+              defaultValue={editing?.branchId ?? ''}
+              name="branchId"
+              required={locationType === 'OFFICE'}
+            >
               <option value="">{locationType === 'OFFICE' ? 'Chọn chi nhánh' : 'Không gắn chi nhánh'}</option>
-              {branches.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+              {branches
+                .filter((row) => row.isActive || row.id === editing?.branchId)
+                .map((row) => (
+                  <option disabled={!row.isActive} key={row.id} value={row.id}>
+                    {row.name}
+                    {!row.isActive ? ' (ngừng sử dụng)' : ''}
+                  </option>
+                ))}
             </select>
           </label>
           <label className="span-2">
-            Địa chỉ
-            <input defaultValue={editing?.address ?? ''} name="address" placeholder="Nhập địa chỉ đã được khách hàng xác nhận" required />
+            Địa chỉ thực tế
+            <input
+              defaultValue={editing?.address ?? ''}
+              name="address"
+              placeholder="Nhập địa chỉ đã được xác nhận chính xác"
+              required
+            />
           </label>
 
-          <div className="coordinate-actions span-2">
-            <button className="secondary-button" disabled={locating} onClick={getCurrentPosition} type="button">
+          <div className="coordinate-actions span-2" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <button
+              className="secondary-button btn-tactile"
+              disabled={locating}
+              onClick={getCurrentPosition}
+              type="button"
+            >
               <LocateFixed aria-hidden="true" size={17} />
-              {locating ? 'Đang lấy vị trí…' : 'Lấy vị trí thiết bị này'}
+              {locating ? 'Đang định vị…' : 'Lấy vị trí thiết bị này'}
             </button>
-            <span>
-              <Crosshair aria-hidden="true" size={15} />
+            <span style={{ fontSize: '0.8rem', color: coordinateMessage ? 'var(--brand-primary)' : 'var(--muted)' }}>
+              <Crosshair aria-hidden="true" size={15} style={{ verticalAlign: 'middle', marginRight: 4 }} />
               {coordinateMessage || 'Chỉ lấy một mẫu vị trí khi bạn bấm nút; không theo dõi liên tục.'}
             </span>
           </div>
 
           <label>
-            Vĩ độ
-            <input max="90" min="-90" name="latitude" onChange={(event) => { setLatitude(event.target.value); setCurrentAccuracy(null); }} placeholder="10.803..." required step="any" type="number" value={latitude} />
+            Vĩ độ (Latitude)
+            <input
+              className="tabular-nums"
+              max="90"
+              min="-90"
+              name="latitude"
+              onChange={(event) => {
+                setLatitude(event.target.value);
+                setCurrentAccuracy(null);
+              }}
+              placeholder="10.803..."
+              required
+              step="any"
+              type="number"
+              value={latitude}
+            />
           </label>
           <label>
-            Kinh độ
-            <input max="180" min="-180" name="longitude" onChange={(event) => { setLongitude(event.target.value); setCurrentAccuracy(null); }} placeholder="106.664..." required step="any" type="number" value={longitude} />
+            Kinh độ (Longitude)
+            <input
+              className="tabular-nums"
+              max="180"
+              min="-180"
+              name="longitude"
+              onChange={(event) => {
+                setLongitude(event.target.value);
+                setCurrentAccuracy(null);
+              }}
+              placeholder="106.664..."
+              required
+              step="any"
+              type="number"
+              value={longitude}
+            />
           </label>
           <label>
             Bán kính Geofence (m)
-            <input max="100" min="1" name="radiusMeters" onChange={(event) => setRadiusMeters(Number(event.target.value))} required type="number" value={radiusMeters} />
+            <input
+              className="tabular-nums"
+              max="100"
+              min="1"
+              name="radiusMeters"
+              onChange={(event) => setRadiusMeters(Number(event.target.value))}
+              required
+              type="number"
+              value={radiusMeters}
+            />
           </label>
           <label>
             Ngưỡng sai số GPS (m)
-            <input defaultValue={editing?.accuracyThresholdMeters ?? 50} max="50" min="1" name="accuracyThresholdMeters" required type="number" />
+            <input
+              className="tabular-nums"
+              defaultValue={editing?.accuracyThresholdMeters ?? 50}
+              max="50"
+              min="1"
+              name="accuracyThresholdMeters"
+              required
+              type="number"
+            />
           </label>
           {currentAccuracy !== null && currentAccuracy > 50 && (
             <div className="span-2">
-              <Notice kind="info">Mẫu hiện tại có sai số khoảng {currentAccuracy} m, lớn hơn ngưỡng khuyến nghị 50 m. Có thể thử lại ở gần cửa sổ hoặc ngoài trời.</Notice>
+              <Notice kind="info">
+                Mẫu hiện tại có sai số khoảng {currentAccuracy} m, lớn hơn ngưỡng khuyến nghị 50 m. Có thể thử lại ở gần cửa sổ hoặc ngoài trời.
+              </Notice>
             </div>
           )}
-          <div className="form-actions span-2">
-            {editing && <button className="secondary-button" onClick={resetEditor} type="button">Hủy chỉnh sửa</button>}
-            <button className="primary-button" disabled={saving}>
+          <div className="form-actions span-2" style={{ display: 'flex', gap: 10 }}>
+            {editing && (
+              <button className="secondary-button btn-tactile" onClick={resetEditor} type="button">
+                Hủy chỉnh sửa
+              </button>
+            )}
+            <button className="primary-button btn-tactile" disabled={saving}>
               {saving ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Lưu vị trí'}
             </button>
           </div>
         </form>
       </details>
 
+      {/* Danh sách địa điểm */}
       {items === null ? (
         <LoadingState />
       ) : items.length === 0 ? (
@@ -415,25 +552,56 @@ export default function LocationsPage() {
           title="Chưa có tọa độ chính thức"
         />
       ) : (
-        <div className="card-list">
+        <div className="cfg-cards-grid">
           {items.map((item) => (
-            <article className="list-card" key={item.id}>
-              <div>
-                <h3>{item.name}</h3>
-                <p>{item.address}</p>
-                <small>
-                  {item.locationType === 'OFFICE'
-                    ? `Văn phòng · ${item.branchName ?? 'Chưa gắn chi nhánh'}`
-                    : 'Địa điểm bên ngoài'}{' '}
-                  · {item.latitude}, {item.longitude}
-                </small>
+            <article className="cfg-card" key={item.id}>
+              <div
+                className={`cfg-card-status-strip ${
+                  item.isActive ? 'cfg-card-strip-active' : 'cfg-card-strip-inactive'
+                }`}
+              />
+              <div className="cfg-card-main">
+                <div className="cfg-card-title-row">
+                  <h3 className="cfg-card-title">{item.name}</h3>
+                  <span className="cfg-card-chip cfg-card-chip-purple">
+                    {item.locationType === 'OFFICE' ? 'Văn phòng' : 'Hiện trường / Ngoài công ty'}
+                  </span>
+                  {item.branchName && (
+                    <span className="cfg-card-chip cfg-card-chip-teal">
+                      Chi nhánh {item.branchName}
+                    </span>
+                  )}
+                </div>
+                <p className="cfg-card-desc">{item.address}</p>
+                <div className="cfg-card-meta">
+                  <span className="emp-code-chip tabular-nums">
+                    Lat: {item.latitude.toFixed(6)}, Lng: {item.longitude.toFixed(6)}
+                  </span>
+                  <span>
+                    Bán kính: <strong className="tabular-nums">{item.radiusMeters}m</strong>
+                  </span>
+                  <span>
+                    Sai số GPS: <strong className="tabular-nums">≤ {item.accuracyThresholdMeters}m</strong>
+                  </span>
+                </div>
               </div>
-              <div>
+              <div className="cfg-card-actions">
                 <StatusBadge value={item.isActive ? 'ACTIVE' : 'INACTIVE'} />
-                <small>Bán kính {item.radiusMeters} m · Sai số ≤ {item.accuracyThresholdMeters} m</small>
-                <div className="action-group">
-                  <button className="table-action" onClick={() => beginEdit(item)} type="button">Sửa</button>
-                  <button className="table-action" onClick={() => void toggle(item)} type="button">{item.isActive ? 'Tạm ngưng' : 'Kích hoạt'}</button>
+                <div className="cfg-card-action-row">
+                  <button
+                    className="table-action btn-tactile"
+                    onClick={() => beginEdit(item)}
+                    type="button"
+                  >
+                    <Pencil size={13} /> Sửa
+                  </button>
+                  <button
+                    className="table-action btn-tactile"
+                    onClick={() => void toggle(item)}
+                    type="button"
+                  >
+                    {item.isActive ? 'Tạm ngưng' : 'Kích hoạt'}
+                  </button>
                 </div>
               </div>
             </article>
@@ -441,21 +609,46 @@ export default function LocationsPage() {
         </div>
       )}
 
-      <details className="editor-panel" style={{ marginTop: 24 }}>
-        <summary>Lịch sử cấu hình (chỉ Admin)</summary>
-        {history.length === 0 ? (
-          <p className="panel-empty-copy">Chưa có thao tác cấu hình.</p>
-        ) : (
-          <div className="card-list">
-            {history.slice(0, 12).map((row) => (
-              <article className="list-card" key={row.id}>
-                <div><h3>{row.action}</h3><p>Vị trí làm việc</p></div>
-                <small>{row.actorName} · {formatDate(row.createdAt)}</small>
-              </article>
-            ))}
-          </div>
-        )}
+      {/* Lịch sử cấu hình Admin */}
+      <details className="cfg-panel" style={{ marginTop: 24 }}>
+        <summary>
+          <span className="summary-label">
+            <ShieldCheck aria-hidden="true" size={16} />
+            Lịch sử cấu hình vị trí (Admin Audit Log)
+          </span>
+        </summary>
+        <div className="cfg-panel-body" style={{ padding: 18 }}>
+          {history.length === 0 ? (
+            <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--muted)' }}>Chưa có thao tác cấu hình.</p>
+          ) : (
+            <div className="cfg-cards-grid">
+              {history.slice(0, 12).map((row) => (
+                <article
+                  key={row.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    background: '#f8fafc',
+                    border: '1px solid var(--line-crisp)',
+                  }}
+                >
+                  <div>
+                    <strong style={{ fontSize: '0.82rem', color: 'var(--ink)' }}>{row.action}</strong>
+                    <p style={{ margin: 0, fontSize: '0.74rem', color: 'var(--muted)' }}>Vị trí làm việc</p>
+                  </div>
+                  <small style={{ fontSize: '0.72rem', color: 'var(--muted-light)' }}>
+                    {row.actorName} · {formatDate(row.createdAt)}
+                  </small>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
       </details>
     </div>
   );
 }
+

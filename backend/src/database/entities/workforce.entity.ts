@@ -118,6 +118,10 @@ export class AttendanceEventEntity {
   @Column({ type: 'text', array: true, name: 'risk_flags', default: '{}' }) riskFlags!: string[];
   @Column({ type: 'uuid', name: 'business_trip_id', nullable: true }) businessTripId?: string | null;
   @Column({ type: 'uuid', name: 'office_location_id', nullable: true }) officeLocationId?: string | null;
+  @Column({ type: 'uuid', name: 'checkin_capture_id', nullable: true }) checkinCaptureId?: string | null;
+  @Column({ type: 'varchar', length: 500, name: 'evidence_image_reference', nullable: true }) evidenceImageReference?: string | null;
+  @Column({ type: 'varchar', length: 2000, name: 'field_work_content', nullable: true }) fieldWorkContent?: string | null;
+  @Column({ type: 'boolean', name: 'daily_policy', default: false }) dailyPolicy!: boolean;
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' }) createdAt!: Date;
 }
 

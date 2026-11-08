@@ -10,6 +10,7 @@ import { availableLeaveMinutes, canCancelLeave, isValidLeaveDurationInput, type 
 import { hasValidLeaveReviewNote, isValidLeaveDateRange } from './domain/leave-status.js';
 import { LeaveWorkflowService } from './application/leave-workflow.service.js';
 import { AnnouncementEntity } from '../../database/entities/workforce.entity.js';
+import { readLeaveBalances, remainingBalanceSql } from './infrastructure/leave-balance-reader.js';
 
 interface LeaveDurationResult {
   durationType: LeaveDurationType;
@@ -39,6 +40,7 @@ export class LeaveService {
     return this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(LeavePolicyEntity);
       const code = input.code.trim().toUpperCase();
+      await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`leave-policy-code:${code}`]);
       const duplicate = await repository.findOne({ where: { code } });
       if (duplicate) throw new ConflictException({ code: 'LEAVE_POLICY_CODE_EXISTS', message: 'Mã chính sách nghỉ đã tồn tại.' });
       const policy = await repository.save(repository.create({ ...input, code, name: input.name.trim(), createdBy: user.id, isActive: true }));
@@ -81,19 +83,22 @@ export class LeaveService {
 
   async initializeBalances(user: AuthenticatedUserView, input: InitializeLeaveBalancesDto): Promise<{ created: number }> {
     return this.dataSource.transaction(async (manager) => {
+      const employees = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE is_active=true ORDER BY id');
+      // Same order as per-employee submission/cancel/decision. Acquire all employee
+      // locks before policy reads so bulk initialization cannot invert that order.
+      for (const employee of employees) await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`leave-route:${employee.id}`]);
       const policies = await manager.getRepository(LeavePolicyEntity).createQueryBuilder('policy')
         .where('policy.is_active=true AND policy.balance_tracking_enabled=true')
         .andWhere(input.policyId ? 'policy.id=:policyId' : 'TRUE', { policyId: input.policyId })
+        .orderBy('policy.id').setLock('pessimistic_read')
         .getMany();
       if (input.policyId && policies.length === 0) this.policyNotFound();
-      const employees = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE is_active=true ORDER BY id');
       let created = 0;
       for (const policy of policies) {
         for (const employee of employees) {
-          const result = await this.ensureBalance(manager, employee.id, policy, input.year);
+          const result = await this.ensureBalance(manager, employee.id, policy, input.year, user.id);
           if (result.created) {
             created += 1;
-            await this.audit(manager, user.id, 'LEAVE_BALANCE', result.balance.id, 'INITIALIZE', null, this.balanceSummary(result.balance));
           }
         }
       }
@@ -102,13 +107,15 @@ export class LeaveService {
   }
 
   async adjustBalance(user: AuthenticatedUserView, input: AdjustLeaveBalanceDto): Promise<{ adjusted: true }> {
+    if (input.reason.trim().length < 5) throw new BadRequestException({ code: 'LEAVE_BALANCE_REASON_REQUIRED', message: 'Lý do điều chỉnh cần ít nhất 5 ký tự.' });
     if (input.deltaMinutes === 0) throw new BadRequestException({ code: 'LEAVE_BALANCE_ADJUSTMENT_ZERO', message: 'Số phút điều chỉnh phải khác 0.' });
     return this.dataSource.transaction(async (manager) => {
-      const [employee] = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND is_active=true', [input.employeeId]);
+      await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`leave-route:${input.employeeId}`]);
+      const [employee] = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND is_active=true FOR SHARE', [input.employeeId]);
       if (!employee) throw new BadRequestException({ code: 'LEAVE_EMPLOYEE_INVALID', message: 'Nhân viên không tồn tại hoặc đã bị khóa.' });
-      const policy = await manager.getRepository(LeavePolicyEntity).findOne({ where: { id: input.policyId, isActive: true } });
+      const policy = await manager.getRepository(LeavePolicyEntity).findOne({ where: { id: input.policyId, isActive: true }, lock: { mode: 'pessimistic_read' } });
       if (!policy || !policy.balanceTrackingEnabled) throw new BadRequestException({ code: 'LEAVE_POLICY_BALANCE_DISABLED', message: 'Chính sách không tồn tại hoặc chưa bật theo dõi số dư.' });
-      const { balance } = await this.ensureBalance(manager, input.employeeId, policy, input.year);
+      const { balance } = await this.ensureBalance(manager, input.employeeId, policy, input.year, user.id);
       const usage = await this.balanceUsage(manager, balance);
       const before = availableLeaveMinutes({ entitlement: balance.entitlementMinutes, carryOver: balance.carryOverMinutes, adjustments: usage.adjustments, approved: usage.approved, pending: usage.pending });
       if (before + input.deltaMinutes < 0) throw new ConflictException({ code: 'LEAVE_BALANCE_ADJUSTMENT_EXCEEDS_AVAILABLE', message: 'Điều chỉnh sẽ làm số dư khả dụng âm.' });
@@ -127,22 +134,24 @@ export class LeaveService {
 
   async review(id: string, user: AuthenticatedUserView, input: ReviewLeaveRequestDto): Promise<LeaveRequestEntity> {
     if (!hasValidLeaveReviewNote(input.status, input.reviewNote)) throw new BadRequestException({ code: 'LEAVE_REJECTION_REASON_REQUIRED', message: 'Lý do từ chối phải có ít nhất 5 ký tự.' });
-    return this.workflow.process(user, id, input, false, (manager, request) => this.assertBalanceAvailableForRequest(manager, request));
+    return this.workflow.process(user, id, input, false, (manager, request) => this.assertBalanceAvailableForRequest(manager, request, user.id));
   }
 
   async cancel(id: string, user: AuthenticatedUserView, input: CancelLeaveRequestDto): Promise<LeaveRequestEntity> {
+    if (input.reason.trim().length < 5) throw new BadRequestException({ code: 'LEAVE_CANCEL_REASON_REQUIRED', message: 'Lý do hủy cần ít nhất 5 ký tự.' });
     return this.dataSource.transaction(async (manager) => {
       const initial = await manager.getRepository(LeaveRequestEntity).findOneBy({ id });
       if (!initial) this.requestNotFound();
       await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`leave-route:${initial.employeeId}`]);
+      const canManage = user.roles.includes(RoleCode.Admin);
+      if (!canManage && initial.employeeId !== user.employeeId) throw new ForbiddenException({ code: 'LEAVE_CANCEL_FORBIDDEN', message: 'Bạn chỉ có thể hủy đơn nghỉ của chính mình.' });
+      await this.assertOpenPeriod(manager, initial.startDate, initial.endDate);
       const request = await manager.getRepository(LeaveRequestEntity).findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!request) this.requestNotFound();
-      const canManage = user.roles.includes(RoleCode.Admin);
       if (!canManage && request.employeeId !== user.employeeId) throw new ForbiddenException({ code: 'LEAVE_CANCEL_FORBIDDEN', message: 'Bạn chỉ có thể hủy đơn nghỉ của chính mình.' });
-      const policy = await manager.getRepository(LeavePolicyEntity).findOne({ where: { id: request.policyId } });
+      const policy = await manager.getRepository(LeavePolicyEntity).findOne({ where: { id: request.policyId }, lock: { mode: 'pessimistic_read' } });
       if (!policy) this.policyNotFound();
       if (!canCancelLeave(request.status, policy.allowApprovedCancellation)) throw new ConflictException({ code: 'LEAVE_CANNOT_BE_CANCELLED', message: request.status === 'APPROVED' ? 'Chính sách không cho phép hủy đơn đã duyệt.' : 'Đơn này không còn ở trạng thái có thể hủy.' });
-      await this.assertOpenPeriod(manager, request.startDate, request.endDate);
       const oldValue = { status: request.status };
       request.status = 'CANCELLED'; request.cancelledAt = new Date(); request.cancelledBy = user.id; request.cancellationReason = input.reason.trim();
       if (request.approvalStage) { request.approvalStage = 'COMPLETED'; request.routeVersion++; }
@@ -153,19 +162,20 @@ export class LeaveService {
   }
 
   private async createForEmployee(user: AuthenticatedUserView, employeeId: string, input: CreateOwnLeaveRequestDto): Promise<LeaveRequestEntity> {
+    if (input.reason.trim().length < 3) throw new BadRequestException({ code: 'LEAVE_REASON_REQUIRED', message: 'Lý do nghỉ cần ít nhất 3 ký tự.' });
     if (!isValidLeaveDateRange(input.startDate, input.endDate)) throw new BadRequestException({ code: 'INVALID_LEAVE_RANGE', message: 'Ngày kết thúc phải từ ngày bắt đầu trở đi.' });
     const pushes: Array<{ announcement: AnnouncementEntity; employeeIds: string[] }> = [];
     const result = await this.dataSource.transaction(async (manager) => {
       await manager.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`leave-route:${employeeId}`]);
-      const [employee] = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND is_active=true', [employeeId]);
+      const [employee] = await manager.query<Array<{ id: string }>>('SELECT id FROM employees WHERE id=$1 AND is_active=true FOR SHARE', [employeeId]);
       if (!employee) throw new BadRequestException({ code: 'LEAVE_EMPLOYEE_INVALID', message: 'Nhân viên không tồn tại hoặc đã bị khóa.' });
+      await this.assertOpenPeriod(manager, input.startDate, input.endDate);
       const policy = await this.resolvePolicy(manager, input);
       const duration = await this.resolveDuration(manager, employeeId, policy, input);
-      await this.assertOpenPeriod(manager, input.startDate, input.endDate);
       const overlap = await manager.getRepository(LeaveRequestEntity).createQueryBuilder('leave').where('leave.employee_id=:employeeId', { employeeId }).andWhere("leave.status IN ('SUBMITTED','APPROVED')").andWhere('leave.start_date <= :endDate AND leave.end_date >= :startDate', { startDate: input.startDate, endDate: input.endDate }).getOne();
       if (overlap) throw new ConflictException({ code: 'LEAVE_DATE_OVERLAP', message: 'Khoảng nghỉ trùng với đơn đang chờ hoặc đã duyệt.' });
       if (policy.balanceTrackingEnabled) {
-        const { balance } = await this.ensureBalance(manager, employeeId, policy, Number(input.startDate.slice(0, 4)));
+        const { balance } = await this.ensureBalance(manager, employeeId, policy, Number(input.startDate.slice(0, 4)), user.id);
         const usage = await this.balanceUsage(manager, balance);
         const available = availableLeaveMinutes({ entitlement: balance.entitlementMinutes, carryOver: balance.carryOverMinutes, adjustments: usage.adjustments, approved: usage.approved, pending: usage.pending });
         if (available < duration.requestedMinutes) throw new ConflictException({ code: 'LEAVE_BALANCE_INSUFFICIENT', message: `Số dư phép không đủ. Còn ${available} phút, đơn cần ${duration.requestedMinutes} phút.` });
@@ -182,7 +192,7 @@ export class LeaveService {
 
   private async resolvePolicy(manager: EntityManager, input: CreateOwnLeaveRequestDto): Promise<LeavePolicyEntity> {
     const repository = manager.getRepository(LeavePolicyEntity);
-    const policy = input.policyId ? await repository.findOne({ where: { id: input.policyId, isActive: true } }) : input.leaveType ? await repository.findOne({ where: { code: input.leaveType.trim().toUpperCase(), isActive: true } }) : null;
+    const policy = input.policyId ? await repository.findOne({ where: { id: input.policyId, isActive: true }, lock: { mode: 'pessimistic_read' } }) : input.leaveType ? await repository.findOne({ where: { code: input.leaveType.trim().toUpperCase(), isActive: true }, lock: { mode: 'pessimistic_read' } }) : null;
     if (!policy) throw new BadRequestException({ code: 'LEAVE_POLICY_REQUIRED', message: 'Phải chọn một chính sách nghỉ đang hoạt động.' });
     return policy;
   }
@@ -191,43 +201,64 @@ export class LeaveService {
     const durationType = input.durationType ?? 'FULL_DAY';
     if (!isValidLeaveDurationInput({ allowHalfDay: policy.allowHalfDay, allowHourly: policy.allowHourly, durationType, startDate: input.startDate, endDate: input.endDate, halfDayPeriod: input.halfDayPeriod, startTime: input.startTime, endTime: input.endTime })) throw new BadRequestException({ code: 'LEAVE_DURATION_INVALID', message: 'Hình thức hoặc thời gian nghỉ không phù hợp với chính sách.' });
     if (policy.balanceTrackingEnabled && input.startDate.slice(0, 4) !== input.endDate.slice(0, 4)) throw new BadRequestException({ code: 'LEAVE_BALANCE_YEAR_CROSSING', message: 'Đơn có theo dõi số dư không được đi qua hai năm; hãy tách thành hai đơn.' });
+    if (policy.balanceTrackingEnabled) this.parseYear(input.startDate.slice(0, 4));
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     if (!satisfiesMinimumNotice(input.startDate, today, policy.minimumNoticeDays)) throw new ConflictException({ code: 'LEAVE_MINIMUM_NOTICE_NOT_MET', message: `Chính sách yêu cầu gửi trước ít nhất ${policy.minimumNoticeDays} ngày.` });
+    const scheduledMinutes = await this.resolveScheduledMinutes(manager, employeeId, input.startDate, input.endDate, policy.dayMinutes);
+    if (!Number.isSafeInteger(scheduledMinutes) || scheduledMinutes <= 0 || scheduledMinutes > 2147483647) throw new BadRequestException({ code: 'LEAVE_NO_WORKING_MINUTES', message: 'Khoảng nghỉ không có phút làm việc hợp lệ; ngày nghỉ theo lịch không cần trừ phép.' });
     if (durationType === 'HOURS') {
       const requestedMinutes = minutesBetween(input.startTime!, input.endTime!);
-      const dayMinutes = await this.resolveScheduledMinutes(manager, employeeId, input.startDate) ?? policy.dayMinutes;
+      const dayMinutes = scheduledMinutes;
       if (requestedMinutes > dayMinutes) throw new BadRequestException({ code: 'LEAVE_HOURLY_DURATION_EXCEEDS_DAY', message: 'Thời lượng nghỉ theo giờ vượt quá thời lượng ngày làm việc.' });
       return { durationType, requestedMinutes, halfDayPeriod: null, startTime: input.startTime!, endTime: input.endTime! };
     }
     if (durationType === 'HALF_DAY') {
-      const dayMinutes = await this.resolveScheduledMinutes(manager, employeeId, input.startDate) ?? policy.dayMinutes;
+      const dayMinutes = scheduledMinutes;
       return { durationType, requestedMinutes: Math.ceil(dayMinutes / 2), halfDayPeriod: input.halfDayPeriod!, startTime: null, endTime: null };
     }
-    const [row] = await manager.query<Array<{ minutes: number }>>(`WITH days AS (SELECT day::date FROM generate_series($2::date,$3::date,'1 day') day), scheduled AS (SELECT d.day,(SELECT ws.required_work_minutes FROM (SELECT es.schedule_id,es.effective_from,1 priority FROM employee_schedules es WHERE es.employee_id=$1 AND es.effective_from<=d.day AND (es.effective_to IS NULL OR es.effective_to>=d.day) UNION ALL SELECT ds.schedule_id,ds.effective_from,2 priority FROM employee_organization_assignments oa JOIN department_schedules ds ON ds.branch_id=oa.branch_id AND ds.department_id=oa.department_id WHERE oa.employee_id=$1 AND oa.effective_from<=d.day AND (oa.effective_to IS NULL OR oa.effective_to>=d.day) AND ds.effective_from<=d.day AND (ds.effective_to IS NULL OR ds.effective_to>=d.day)) c JOIN work_schedules ws ON ws.id=c.schedule_id WHERE ws.is_active=true AND extract(isodow from d.day)::int=ANY(ws.weekdays) ORDER BY c.priority,c.effective_from DESC LIMIT 1) minutes FROM days d) SELECT COALESCE(SUM(minutes),0)::int minutes FROM scheduled WHERE minutes IS NOT NULL`, [employeeId, input.startDate, input.endDate]);
-    const requestedMinutes = (row?.minutes ?? 0) > 0 ? row.minutes : this.inclusiveDays(input.startDate, input.endDate) * policy.dayMinutes;
+    const requestedMinutes = scheduledMinutes;
     return { durationType, requestedMinutes, halfDayPeriod: null, startTime: null, endTime: null };
   }
 
-  private resolveScheduledMinutes(manager: EntityManager, employeeId: string, date: string): Promise<number | null> {
-    return manager.query<Array<{ minutes: number }>>(`WITH org AS (SELECT branch_id,department_id FROM employee_organization_assignments WHERE employee_id=$1 AND effective_from<=$2::date AND (effective_to IS NULL OR effective_to>=$2::date) ORDER BY is_primary DESC,effective_from DESC LIMIT 1), candidates AS (SELECT es.schedule_id,es.effective_from,1 priority FROM employee_schedules es WHERE es.employee_id=$1 AND es.effective_from<=$2::date AND (es.effective_to IS NULL OR es.effective_to>=$2::date) UNION ALL SELECT ds.schedule_id,ds.effective_from,2 priority FROM department_schedules ds JOIN org o ON o.branch_id=ds.branch_id AND o.department_id=ds.department_id WHERE ds.effective_from<=$2::date AND (ds.effective_to IS NULL OR ds.effective_to>=$2::date)) SELECT ws.required_work_minutes::int minutes FROM candidates c JOIN work_schedules ws ON ws.id=c.schedule_id WHERE ws.is_active=true AND extract(isodow from $2::date)::int=ANY(ws.weekdays) ORDER BY c.priority,c.effective_from DESC LIMIT 1`, [employeeId, date]).then((rows: Array<{ minutes: number }>) => rows[0]?.minutes ?? null);
+  private async resolveScheduledMinutes(manager: EntityManager, employeeId: string, startDate: string, endDate: string, fallbackMinutes: number): Promise<number> {
+    // Pick the same effective schedule as Attendance/Reporting BEFORE testing
+    // weekdays. Missing schedule and scheduled rest day are distinct states.
+    const [row] = await manager.query<Array<{ minutes: string }>>(`
+      WITH days AS (SELECT day::date FROM generate_series($2::date,$3::date,'1 day') day)
+      SELECT COALESCE(SUM(CASE WHEN selected.id IS NULL THEN $4::int
+        WHEN extract(isodow from d.day)::int=ANY(selected.weekdays) THEN selected.required_work_minutes ELSE 0 END),0)::bigint AS minutes
+      FROM days d LEFT JOIN LATERAL (
+        SELECT ws.id,ws.weekdays,ws.required_work_minutes FROM (
+          SELECT es.schedule_id,es.effective_from,1 priority FROM employee_schedules es
+            WHERE es.employee_id=$1 AND es.effective_from<=d.day AND (es.effective_to IS NULL OR es.effective_to>=d.day)
+          UNION ALL SELECT ds.schedule_id,ds.effective_from,2 priority FROM (
+            SELECT branch_id,department_id FROM employee_organization_assignments
+            WHERE employee_id=$1 AND effective_from<=d.day AND (effective_to IS NULL OR effective_to>=d.day)
+            ORDER BY is_primary DESC,effective_from DESC LIMIT 1
+          ) org JOIN department_schedules ds ON ds.branch_id=org.branch_id AND ds.department_id=org.department_id
+            WHERE ds.effective_from<=d.day AND (ds.effective_to IS NULL OR ds.effective_to>=d.day)
+        ) candidate JOIN work_schedules ws ON ws.id=candidate.schedule_id WHERE ws.is_active
+        ORDER BY candidate.priority,candidate.effective_from DESC,ws.id LIMIT 1
+      ) selected ON true`, [employeeId, startDate, endDate, fallbackMinutes]);
+    return Number(row?.minutes ?? 0);
   }
 
-  private async assertBalanceAvailableForRequest(manager: EntityManager, request: LeaveRequestEntity): Promise<void> {
-    const policy = await manager.getRepository(LeavePolicyEntity).findOne({ where: { id: request.policyId } });
+  private async assertBalanceAvailableForRequest(manager: EntityManager, request: LeaveRequestEntity, actorId: string): Promise<void> {
+    const policy = await manager.getRepository(LeavePolicyEntity).findOne({ where: { id: request.policyId }, lock: { mode: 'pessimistic_read' } });
     if (!policy?.balanceTrackingEnabled) return;
-    const { balance } = await this.ensureBalance(manager, request.employeeId, policy, Number(request.startDate.slice(0, 4)));
+    const { balance } = await this.ensureBalance(manager, request.employeeId, policy, Number(request.startDate.slice(0, 4)), actorId);
     const usage = await this.balanceUsage(manager, balance);
     const available = availableLeaveMinutes({ entitlement: balance.entitlementMinutes, carryOver: balance.carryOverMinutes, adjustments: usage.adjustments, approved: usage.approved, pending: usage.pending });
     if (available < 0) throw new ConflictException({ code: 'LEAVE_BALANCE_INSUFFICIENT', message: 'Số dư phép đã thay đổi và không còn đủ để duyệt đơn này.' });
   }
 
-  private async ensureBalance(manager: EntityManager, employeeId: string, policy: LeavePolicyEntity, year: number): Promise<{ balance: EmployeeLeaveBalanceEntity; created: boolean }> {
+  private async ensureBalance(manager: EntityManager, employeeId: string, policy: LeavePolicyEntity, year: number, actorId: string): Promise<{ balance: EmployeeLeaveBalanceEntity; created: boolean }> {
     const repository = manager.getRepository(EmployeeLeaveBalanceEntity);
     const existing = await repository.findOne({ where: { employeeId, policyId: policy.id, balanceYear: year }, lock: { mode: 'pessimistic_write' } });
     if (existing) return { balance: existing, created: false };
     let carryOverMinutes = 0;
     if (policy.carryOverEnabled) {
-      const [previous] = await manager.query<Array<{ remaining: number }>>(`SELECT GREATEST(0,b.entitlement_minutes+b.carry_over_minutes+COALESCE((SELECT SUM(a.delta_minutes) FROM leave_balance_adjustments a WHERE a.balance_id=b.id),0)-COALESCE((SELECT SUM(l.requested_minutes) FROM leave_requests l WHERE l.employee_id=b.employee_id AND l.policy_id=b.policy_id AND l.status IN ('SUBMITTED','APPROVED') AND EXTRACT(YEAR FROM l.start_date)::int=b.balance_year),0))::int remaining FROM employee_leave_balances b WHERE b.employee_id=$1 AND b.policy_id=$2 AND b.balance_year=$3`, [employeeId, policy.id, year - 1]);
+      const [previous] = await manager.query<Array<{ remaining: number }>>(`SELECT GREATEST(0,${remainingBalanceSql})::int remaining FROM employee_leave_balances bal WHERE bal.employee_id=$1 AND bal.policy_id=$2 AND bal.balance_year=$3`, [employeeId, policy.id, year - 1]);
       carryOverMinutes = Math.min(previous?.remaining ?? 0, policy.maxCarryOverMinutes);
     }
     const inserted = await manager.query<Array<{ id: string }>>(
@@ -239,6 +270,7 @@ export class LeaveService {
     );
     const balance = await repository.findOne({ where: { employeeId, policyId: policy.id, balanceYear: year }, lock: { mode: 'pessimistic_write' } });
     if (!balance) throw new ConflictException({ code: 'LEAVE_BALANCE_INITIALIZATION_FAILED', message: 'Khong the khoi tao so du phep.' });
+    if (inserted.length > 0) await this.audit(manager, actorId, 'LEAVE_BALANCE', balance.id, 'INITIALIZE', null, this.balanceSummary(balance));
     return { balance, created: inserted.length > 0 };
   }
 
@@ -248,10 +280,11 @@ export class LeaveService {
   }
 
   private balanceQuery(year: number, employeeId?: string): Promise<unknown[]> {
-    return this.dataSource.query(`SELECT e.id AS "employeeId",e.employee_code AS "employeeCode",e.full_name AS "employeeName",d.name AS "departmentName",p.id AS "policyId",p.code AS "policyCode",p.name AS "policyName",p.day_minutes AS "dayMinutes",b.id AS "balanceId",(b.id IS NOT NULL) AS "initialized",COALESCE(b.entitlement_minutes,p.annual_entitlement_minutes)::int AS "entitlementMinutes",COALESCE(b.carry_over_minutes,0)::int AS "carryOverMinutes",COALESCE(adj.minutes,0)::int AS "adjustmentMinutes",COALESCE(used.approved,0)::int AS "approvedMinutes",COALESCE(used.pending,0)::int AS "pendingMinutes",(COALESCE(b.entitlement_minutes,p.annual_entitlement_minutes)+COALESCE(b.carry_over_minutes,0)+COALESCE(adj.minutes,0)-COALESCE(used.approved,0)-COALESCE(used.pending,0))::int AS "availableMinutes" FROM employees e CROSS JOIN leave_policies p LEFT JOIN employee_leave_balances b ON b.employee_id=e.id AND b.policy_id=p.id AND b.balance_year=$1 LEFT JOIN LATERAL (SELECT SUM(delta_minutes)::int minutes FROM leave_balance_adjustments WHERE balance_id=b.id) adj ON true LEFT JOIN LATERAL (SELECT SUM(requested_minutes) FILTER (WHERE status='APPROVED')::int approved,SUM(requested_minutes) FILTER (WHERE status='SUBMITTED')::int pending FROM leave_requests WHERE employee_id=e.id AND policy_id=p.id AND EXTRACT(YEAR FROM start_date)::int=$1) used ON true LEFT JOIN departments d ON d.id=e.department_id WHERE e.is_active=true AND p.is_active=true AND p.balance_tracking_enabled=true AND ($2::uuid IS NULL OR e.id=$2) ORDER BY e.full_name,p.name`, [year, employeeId ?? null]);
+    return readLeaveBalances(this.dataSource, year, employeeId);
   }
 
-  private validatePolicy(policy: Pick<LeavePolicyEntity, 'allowHalfDay' | 'allowHourly' | 'annualEntitlementMinutes' | 'balanceTrackingEnabled' | 'carryOverEnabled' | 'dayMinutes' | 'maxCarryOverMinutes' | 'minimumNoticeDays'>): void {
+  private validatePolicy(policy: Pick<LeavePolicyEntity, 'name' | 'allowHalfDay' | 'allowHourly' | 'annualEntitlementMinutes' | 'balanceTrackingEnabled' | 'carryOverEnabled' | 'dayMinutes' | 'maxCarryOverMinutes' | 'minimumNoticeDays'>): void {
+    if (policy.name.trim().length < 2) throw new BadRequestException({ code: 'LEAVE_POLICY_NAME_INVALID', message: 'Tên chính sách cần ít nhất 2 ký tự.' });
     if (policy.carryOverEnabled && !policy.balanceTrackingEnabled) throw new BadRequestException({ code: 'LEAVE_POLICY_CARRY_OVER_REQUIRES_BALANCE', message: 'Phải bật theo dõi số dư trước khi bật cộng dồn.' });
     if (!Number.isInteger(policy.dayMinutes) || policy.dayMinutes < 1 || policy.dayMinutes > 1440 || policy.annualEntitlementMinutes < 0 || policy.maxCarryOverMinutes < 0 || policy.minimumNoticeDays < 0) throw new BadRequestException({ code: 'LEAVE_POLICY_INVALID', message: 'Thông số chính sách nghỉ không hợp lệ.' });
   }
@@ -263,7 +296,6 @@ export class LeaveService {
     if (locked) throw new ConflictException({ code: 'ATTENDANCE_PERIOD_LOCKED', message: `Kỳ công ${locked.periodMonth.slice(0, 7)} đã chốt; không thể thay đổi đơn nghỉ.` });
   }
 
-  private inclusiveDays(startDate: string, endDate: string): number { return Math.floor((Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000) + 1; }
   private policySummary(policy: LeavePolicyEntity): Record<string, unknown> { return { code: policy.code, name: policy.name, isActive: policy.isActive, balanceTrackingEnabled: policy.balanceTrackingEnabled, annualEntitlementMinutes: policy.annualEntitlementMinutes, dayMinutes: policy.dayMinutes, carryOverEnabled: policy.carryOverEnabled, maxCarryOverMinutes: policy.maxCarryOverMinutes, allowHalfDay: policy.allowHalfDay, allowHourly: policy.allowHourly, allowApprovedCancellation: policy.allowApprovedCancellation, minimumNoticeDays: policy.minimumNoticeDays }; }
   private balanceSummary(balance: EmployeeLeaveBalanceEntity): Record<string, unknown> { return { employeeId: balance.employeeId, policyId: balance.policyId, balanceYear: balance.balanceYear, entitlementMinutes: balance.entitlementMinutes, carryOverMinutes: balance.carryOverMinutes }; }
   private audit(manager: EntityManager, userId: string, resourceType: string, resourceId: string, action: string, oldValue: unknown, newValue: unknown): Promise<ConfigurationAuditLogEntity> { return manager.save(ConfigurationAuditLogEntity, manager.create(ConfigurationAuditLogEntity, { resourceType, resourceId, action, oldValue, newValue, createdBy: userId })); }

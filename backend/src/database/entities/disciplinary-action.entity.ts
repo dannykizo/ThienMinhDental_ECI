@@ -11,6 +11,9 @@ export class DisciplinaryActionEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  @Column({ type: 'uuid', name: 'group_id', nullable: true })
+  groupId?: string | null;
+
   @Column({ type: 'uuid', name: 'employee_id' })
   employeeId!: string;
 

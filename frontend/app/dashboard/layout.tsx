@@ -8,8 +8,11 @@ import {
   BriefcaseBusiness,
   CalendarCheck2,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
   ChartNoAxesCombined,
   Clock3,
+  ClipboardList,
   Gauge,
   LayoutDashboard,
   LogOut,
@@ -24,7 +27,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import './workspace.css';
 import {
   ApiError,
   getAdminSession,
@@ -42,6 +46,7 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { group: 'VẬN HÀNH', label: 'Xử lý nghỉ phép', href: '/dashboard/leave-workflow', ready: true, icon: Clock3 },
+  { group: 'VẬN HÀNH', label: 'Phiếu tăng ca (OT)', href: '/dashboard/overtime', ready: true, icon: Clock3 },
   { group: 'VẬN HÀNH', label: 'Theo dõi phạm vi quản lý', href: '/dashboard/managed-modules', ready: true, icon: Clock3 },
   { group: 'VẬN HÀNH', label: 'Xử lý giải trình', href: '/dashboard/explanations', ready: true, icon: Clock3 },
   {
@@ -153,6 +158,16 @@ const navigation: NavItem[] = [
 
 const environmentLabel = process.env.NEXT_PUBLIC_APP_ENV?.toUpperCase() || 'DEVELOPMENT';
 
+// Presentation groups only. Backend portal.navigation remains the allow-list.
+const navigationGroups = [
+  { label: 'Tổng quan', icon: LayoutDashboard, paths: ['/dashboard', '/dashboard/managed', '/dashboard/managed-modules', '/dashboard/kpi'] },
+  { label: 'Nhân sự & tổ chức', icon: UsersRound, paths: ['/dashboard/employees', '/dashboard/organization'] },
+  { label: 'Chấm công & lịch làm', icon: CalendarDays, paths: ['/dashboard/attendance', '/dashboard/schedules', '/dashboard/locations', '/dashboard/business-trips'] },
+  { label: 'Đơn từ & phê duyệt', icon: ClipboardList, paths: ['/dashboard/leave-workflow', '/dashboard/explanations', '/dashboard/overtime', '/dashboard/leave'] },
+  { label: 'Thông báo & kỷ luật', icon: Bell, paths: ['/dashboard/announcements', '/dashboard/disciplinary-actions'] },
+  { label: 'Báo cáo & vận hành', icon: Activity, paths: ['/dashboard/reports', '/dashboard/access', '/dashboard/operations'] },
+];
+
 function canAccessPath(user: SessionUser | null, path: string): boolean {
   const normalized = path.replace(/\/$/, '');
   return user?.portal?.navigation.some((href) => normalized === href || (href !== '/dashboard' && normalized.startsWith(`${href}/`))) ?? false;
@@ -165,8 +180,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState('');
   const [menuPath, setMenuPath] = useState<string | null>(null);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const menuOpen = menuPath === pathname;
+  const sidebarRef = useRef<HTMLElement>(null);
   const dataScopeLabel = user?.portal?.scopeLabel ?? 'Đang kiểm tra phạm vi';
+  const currentItem = navigation.find(item => pathname.replace(/\/$/, '') === item.href);
+  const currentGroup = navigationGroups.find(group => group.paths.includes(currentItem?.href ?? ''));
   const [currentDateString] = useState(() => {
     try {
       const now = new Date();
@@ -251,6 +270,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('thien-minh:session-expired', handleSessionExpired);
   }, [router]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    sidebarRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const keyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setMenuPath(null); }
+      if (event.key !== 'Tab') return;
+      const nodes = [...(sidebarRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [])].filter(node => node.getClientRects().length > 0);
+      const first = nodes[0], last = nodes[nodes.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', keyboard);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', keyboard); if (previousFocus?.isConnected) previousFocus.focus(); };
+  }, [menuOpen]);
+
   async function handleLogout() {
     await logout().catch(() => undefined);
     router.replace('/login');
@@ -283,9 +320,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell admin-refresh">
       {menuOpen && <button aria-label="Đóng menu" className="sidebar-backdrop" onClick={() => setMenuPath(null)} type="button" />}
-      <aside className={menuOpen ? 'sidebar mobile-open' : 'sidebar'}>
+      <aside ref={sidebarRef} className={menuOpen ? 'sidebar mobile-open' : 'sidebar'} aria-label="Menu quản trị">
         <div className="sidebar-brand">
           <div className="sidebar-logo-card">
             <Image
@@ -312,16 +349,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </div>
 
         <nav aria-label="Điều hướng quản trị" className="sidebar-nav">
-          {(['TỔNG QUAN', 'NHÂN SỰ', 'VẬN HÀNH', 'HỆ THỐNG'] as const).map((group) => {
-            const groupItems = navigation.filter((item) => item.group === group && canAccessPath(user, item.href));
+          {navigationGroups.map((group, index) => {
+            const groupItems = group.paths.flatMap(path => navigation.filter(item => item.href === path && canAccessPath(user, item.href)));
             if (groupItems.length === 0) return null;
-            return <div className="nav-group" key={group}><p className="nav-label">{group}</p>{groupItems.map((item) => item.ready ? (
+            const open = expandedGroup === null ? currentGroup?.label === group.label : expandedGroup === group.label;
+            return <div className="nav-group" key={group.label}>
+              <button className={`nav-group-toggle${currentGroup?.label === group.label ? ' contains-current' : ''}`} type="button" aria-expanded={open} aria-controls={`nav-section-${index}`} onClick={() => setExpandedGroup(open ? '' : group.label)}>
+                <group.icon size={18} aria-hidden="true" /><span>{group.label}</span><ChevronDown size={15} aria-hidden="true" />
+              </button>
+              <div className="nav-group-links" id={`nav-section-${index}`} hidden={!open}>{groupItems.map((item) => item.ready ? (
               <Link
                 aria-current={pathname === item.href ? 'page' : undefined}
                 className={pathname === item.href ? 'nav-item active' : 'nav-item'}
                 href={item.href}
                 key={item.label}
-                onClick={() => setMenuPath(null)}
+                onClick={() => { setMenuPath(null); setExpandedGroup(null); }}
                 title={item.label}
               >
                 <span className="nav-icon" aria-hidden="true">
@@ -337,7 +379,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 <span>{item.label}</span>
                 <span className="nav-status">SẮP CÓ</span>
               </div>
-            ))}</div>;
+            ))}</div></div>;
           })}
         </nav>
 
@@ -365,18 +407,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <header className="topbar-strip">
           <div className="topbar-left">
             <button aria-expanded={menuOpen} aria-label={menuOpen ? 'Đóng menu điều hướng' : 'Mở menu điều hướng'} className="mobile-menu-button" onClick={() => setMenuPath((current) => current === pathname ? null : pathname)} type="button">{menuOpen ? <X size={19} /> : <Menu size={19} />}</button>
-            <div className="topbar-branch">
-              <MapPin aria-hidden="true" size={14} strokeWidth={2} />
-              {dataScopeLabel}
-            </div>
-            {currentDateString && (
-              <span className="topbar-date">
-                <CalendarDays aria-hidden="true" size={14} strokeWidth={2} />
-                {currentDateString}
-              </span>
-            )}
+            <nav className="workspace-breadcrumb" aria-label="Vị trí trang"><span>{currentGroup?.label ?? 'Khu vực quản trị'}</span><ChevronRight size={14} aria-hidden="true" /><strong>{currentItem?.label ?? 'Chi tiết'}</strong></nav>
           </div>
           <div className="topbar-right">
+            <span className="topbar-date">{currentDateString}</span>
+            <div className="topbar-branch"><MapPin aria-hidden="true" size={14} />{dataScopeLabel}</div>
             <div className="environment-badge">
               <span />
               {environmentLabel}

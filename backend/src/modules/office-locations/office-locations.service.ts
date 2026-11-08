@@ -4,6 +4,7 @@ import { DataSource, EntityManager, Repository } from 'typeorm';
 import { ConfigurationAuditLogEntity, OfficeLocationEntity } from '../../database/entities/workforce.entity.js';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import type { CreateOfficeLocationDto, UpdateOfficeLocationDto } from './office-locations.dto.js';
+import { requireActiveCatalogReferences } from '../organization-access/application/catalog.service.js';
 
 @Injectable()
 export class OfficeLocationsService {
@@ -26,6 +27,7 @@ export class OfficeLocationsService {
     const locationType = input.locationType ?? 'OFFICE';
     this.validateScope(locationType, input.branchId ?? null);
     return this.dataSource.transaction(async (manager) => {
+      await requireActiveCatalogReferences(manager, { branches: input.branchId ? [input.branchId] : [] });
       const location = await manager.save(OfficeLocationEntity, manager.create(OfficeLocationEntity, {
         ...input,
         locationType,
@@ -40,13 +42,17 @@ export class OfficeLocationsService {
   async update(user: AuthenticatedUserView, id: string, input: UpdateOfficeLocationDto): Promise<OfficeLocationEntity> {
     return this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(OfficeLocationEntity);
-      const location = await repository.findOne({ where: { id } });
+      const location = await repository.findOne({ where: { id }, lock: { mode: 'pessimistic_write' } });
       if (!location) throw new NotFoundException({ code: 'OFFICE_LOCATION_NOT_FOUND', message: 'Không tìm thấy vị trí làm việc.' });
       const oldValue = { ...location };
       const locationType = input.locationType ?? location.locationType;
       const branchId = input.branchId === undefined ? location.branchId : input.branchId;
       this.validateScope(locationType, branchId);
-      Object.assign(location, input, { locationType, branchId });
+      if (branchId && (branchId!==location.branchId || input.isActive===true)) {
+        await requireActiveCatalogReferences(manager, { branches: [branchId] });
+      }
+      const changes = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+      Object.assign(location, changes, { locationType, branchId });
       const saved = await repository.save(location);
       await this.audit(manager, user.id, saved.id, 'UPDATE', oldValue, saved);
       return saved;

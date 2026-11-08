@@ -1,5 +1,6 @@
 import { IsBoolean, IsDateString, IsIn, IsOptional, IsString, IsUUID, Matches, MaxLength, MinLength } from 'class-validator';
 import type { AppointmentType, ManagementRole } from '../domain/management-access.js';
+import { CatalogDecisionDto } from './catalog.dto.js';
 
 export class CreateTeamDto {
   @IsUUID() departmentId!: string;
@@ -7,7 +8,7 @@ export class CreateTeamDto {
   @IsString() @MinLength(1) @MaxLength(150) name!: string;
 }
 
-export class UpdateTeamDto {
+export class UpdateTeamDto extends CatalogDecisionDto {
   @IsString() @MinLength(1) @MaxLength(150) name!: string;
   @IsBoolean() isActive!: boolean;
 }

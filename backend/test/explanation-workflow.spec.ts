@@ -84,7 +84,7 @@ describe('PQ3 transaction/service boundaries', () => {
   it('requires Admin for direct reroute', async () => {
     await expect(fixture().service.reroute({ ...admin, roles: [RoleCode.Employee] }, 'explanation', { teamId: 'team', leaderUserId: 'leader', headUserId: 'head', reason: 'Development only', expectedVersion: 2 })).rejects.toMatchObject({ response: { code: 'EXPLANATION_ADMIN_REQUIRED' } });
   });
-  it('records a real Head decision without a mandatory note and notifies legacy employee ownership after commit', async () => {
+  it.each([false, true])('records a real Head decision without a mandatory note and notifies legacy ownership (push failure: %s)', async (pushFailure) => {
     const legacy = Object.assign(new AttendanceExplanationEntity(), item, { id: 'legacy', workDate: '2026-10-06', submittedBy: null, approvalStage: 'HEAD_APPROVAL', confirmedBy: 'leader', confirmedAt: now, routeVersion: 2 });
     const repo = { findOneBy: vi.fn().mockResolvedValue(legacy), findOne: vi.fn().mockResolvedValue(legacy), save: vi.fn().mockResolvedValue(legacy) };
     const announcement = { id: 'notification', title: 'Development only' };
@@ -98,7 +98,7 @@ describe('PQ3 transaction/service boundaries', () => {
     ));
     const manager = { query, getRepository: (entity: unknown): typeof repo | typeof annRepo => entity === AnnouncementEntity ? annRepo : repo };
     const db = { transaction: (callback: (m: typeof manager) => Promise<unknown>): Promise<unknown> => callback(manager) } as unknown as DataSource;
-    const sender = { deliverPublishedAnnouncementPush: vi.fn().mockResolvedValue({}) };
+    const sender = { deliverPublishedAnnouncementPush: pushFailure ? vi.fn().mockRejectedValue(new Error('Development-only push outage')) : vi.fn().mockResolvedValue({}) };
     const service = new ExplanationWorkflowService(db, sender as unknown as AnnouncementsService);
     const result = await service.process({ ...admin, id: 'head', employeeId: 'head-employee', roles: [RoleCode.Employee] }, 'legacy', { expectedVersion: 2, status: 'REJECTED' }, false);
     expect(result).toMatchObject({ status: 'REJECTED', reviewNote: null, reviewedBy: 'head', confirmedBy: 'leader', approvalStage: 'COMPLETED', routeVersion: 3 });

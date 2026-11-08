@@ -1,5 +1,25 @@
 # Thiên Minh Dental Workforce
 
+Hồ sơ nhân sự (2026-10-20): Admin mở `/dashboard/employees`, bấm tên/avatar/dòng để xem overlay **dark-glass/bento**, chân dung, tổng quan và chi tiết cuộn liên tục; dải nhân viên cuộn ngang, trước/sau, Esc/X và bố cục điện thoại. Ảnh profile dùng chung: nhân viên chụp/chọn trên app tại nút avatar ở Hôm nay; Admin thêm/thay/gỡ trong hồ sơ. Môi trường khác cần backup và chạy migration `1793060000000-employee-portraits` trước khi cập nhật API/Web/App. Không thay quy tắc công/phê duyệt. Xem [phạm vi và kiểm tra giao diện](docs/WEB_UI_REFRESH.md).
+
+Web UI sơ bộ (2026-10-19): shell sáu nhóm điều hướng, danh sách Nhân viên + drawer thao tác, workspace phê duyệt mẫu và Dashboard ưu tiên việc cần xử lý; giữ tím/logo thương hiệu và dữ liệu/quyền Backend. Chưa phủ lại mọi module hoặc thay Mobile. Typecheck/scoped lint/build Web PASS; không chạy test suite hoặc deploy. Xem [phạm vi và cách xem bản mẫu](docs/WEB_UI_REFRESH.md).
+
+Nghiệm thu app tích hợp (2026-10-14): đã thao tác máy thật với Nhân viên → Leader → Trưởng phòng, giải trình/ảnh/offline, phép giữ–trừ–hoàn, OT, công tác, kỷ luật và push foreground/background/cold. Sửa hiển thị OT trước check-out và loại route riêng tư khi phiên kết thúc; 17 regression có mục tiêu PASS. Sinh trắc skip theo chỉ thị, không release APK hoặc đóng mọi PARTIAL/production gate. Bản sửa đang chạy qua Hot Restart, chưa đóng lại APK đã cài. Xem [biên bản app](docs/MOBILE_INTEGRATED_ACCEPTANCE.md) cho phạm vi, dữ liệu thử và giới hạn; các mục R bên dưới là lịch sử riêng từng lượt.
+
+R14 (2026-10-14): Tech Lead chốt **hoàn thiện bộ triển khai và nghiệm thu local trước**, chưa có VPS/domain, không go-live trong lượt này. Cải thiện migration/readiness thật, lỗi DB/Pages an toàn, đóng gói Docker từ lockfile và backup/restore cả DB + ảnh biệt lập. Backup có cửa sổ ngừng ghi, không tự xóa bộ cũ chưa xác minh bản ngoài máy; xem [DEPLOYMENT](DEPLOYMENT.md) và [R14 acceptance](docs/R14_OPERATIONS_ACCEPTANCE.md) cho kết quả/gate. Không cần migration mới, không sửa Mobile hoặc xuất APK.
+
+R13 (2026-10-14): Dashboard/KPI/theo dõi quản lý đã đồng bộ nguồn R12, đếm cảnh báo theo ngày, scope chi nhánh hiệu lực và không lộ tổng thông báo ngoài phạm vi. KPI tách phép cả ngày/một phần, công văn phòng/hiện trường/đủ công và phút OT đã duyệt, có nguồn/bản chốt; không tính điểm/lương. Head/Leader vẫn theo dõi scoped, không mở KPI global/Excel/chốt. Không cần migration/App/APK mới. Xem [R13 acceptance](docs/R13_DASHBOARD_KPI_ACCEPTANCE.md); URL `/dashboard`, `/dashboard/kpi`, `/dashboard/managed-modules`.
+
+R12 (2026-10-13): có **bốn nút Excel riêng** tại Báo cáo tháng: bảng công, nghỉ phép/số dư, OT, giải trình/điều chỉnh. Dữ liệu thiếu/chưa duyệt vẫn xuất được, có ghi chú màu; chốt kỳ vẫn yêu cầu xử lý hết blocker. Bản chốt mới lưu cả bốn báo cáo bất biến, bản cũ thiếu chi tiết xuất LIVE với cảnh báo, không tạo giả lịch sử. Migration `1792972800000-supporting-report-snapshots` đã backup/apply development; môi trường khác phải migrate trước Backend/Web. Targeted **47/47 PASS**; Kế toán/HCNS còn cần kiểm định mẫu, không tính lương. Quỹ phép là quỹ năm tại lúc lấy dữ liệu/chốt, không tự phân bổ đơn giao tháng. Xem [R12 acceptance](docs/R12_REPORTING_ACCEPTANCE.md); mở `http://localhost:3000/dashboard/reports` → chọn bộ lọc → Tổng hợp → Xuất dữ liệu Excel.
+
+R5 (2026-10-10): vị trí văn phòng/geofence đạt **38/38 targeted tests** trên DB/API biệt lập; đã sửa validation, cập nhật đồng thời/audit và khoảng cách NaN tại điểm đối cực. Web có cảnh báo và thử lại khi tile lỗi. **Toàn module PARTIAL**: ảnh nền OSM đang lỗi DNS trên máy development, quyền vị trí/GPS thật chưa nghiệm thu. Không đổi vị trí hiện hữu hoặc schema/App. Xem [R5 Locations acceptance](docs/R5_LOCATIONS_ACCEPTANCE.md).
+
+R4 cập nhật hiện tại 2026-10-10: **Đơn từ và OT đã triển khai** (thay trạng thái chưa triển khai trong lịch sử bên dưới). App gom Giải trình/Nghỉ phép/Tăng ca; Admin/Head/Leader xử lý tại `http://localhost:3000/dashboard/overtime`, tuyến OT riêng và chỉ cộng phút đã duyệt. Migration `1792454400000-overtime-workflow` đã áp dụng development. Targeted Backend 73/73, Mobile 8/8; R4 vẫn PARTIAL do camera/GPS/push và UX máy thật chưa nghiệm thu đầy đủ. Account mới `fieldtest` chỉ development, mật khẩu bàn giao riêng, không lưu Git. Xem [R4 OT/Đơn từ](docs/R4_OT_FORMS_ACCEPTANCE.md).
+
+R4 bổ sung 2026-10-10: chấm công một cặp/ngày chung văn phòng/hiện trường, hiện trường không cần phiếu, ảnh camera-only tại check-in cả hai loại, timemark và nội dung công tác; checkout lấy GPS chỉ Admin xem, không chụp. Migration `1792368000000-daily-attendance-capture` cần chạy trước Backend/App mới. Giờ công và báo cáo lấy từ sự kiện, không suy từ phiếu công tác được giao; không theo dõi nền. **R4 vẫn PARTIAL**, Đơn từ và OT/tuyến riêng còn thiếu. Phần này thay trạng thái NOT_IMPLEMENTED của luồng chấm công ngày ở đoạn lịch sử kế tiếp. Xem [R4 daily attendance](docs/R4_DAILY_ATTENDANCE_ACCEPTANCE.md).
+
+R4 (2026-10-09) đang **PARTIAL**: cấu hình lịch/ngoại lệ và lựa chọn lịch Attendance/Reporting đã sửa, targeted 36/36 ca đạt. Quyết định mới thay mô tả OT tự động bên dưới: checkout muộn **không** tự tính OT; Backend hiện trả OT=0. Phiếu OT hai bước và một lượt in/out/ngày chung văn phòng/hiện trường (camera-only, công tác nhiều ngày) đã chốt yêu cầu nhưng **chưa triển khai** trong lát cắt này. Không coi R4 hoặc toàn bộ chấm công đã nghiệm thu. Xem [R4 Schedule acceptance](docs/R4_SCHEDULES_ACCEPTANCE.md).
+
 Hệ thống chấm công, công tác và thông báo nội bộ cho Văn phòng miền Nam của Thiên Minh Dental tại TP.HCM.
 
 Sản phẩm gồm:
@@ -128,7 +148,7 @@ Android platform shell đã được tạo trong `mobile/`. Xem hướng dẫn c
 
 Triển khai vận hành thật dùng Docker Compose production, HTTPS tự động và health/readiness check theo [`DEPLOYMENT.md`](DEPLOYMENT.md). Không dùng `compose.yaml`, development seed hoặc APK debug cho production.
 
-CR7 bổ sung chống brute-force cho endpoint xác thực, kiểm tra Origin đối với cookie mutation, request ID/log an toàn, mật khẩu tạm mạnh, trang vận hành chỉ Admin, báo cáo giờ làm/OT và Excel hai sheet. Bộ production có preflight, backup đồng bộ kèm checksum, kiểm tra restore biệt lập và quality gate thủ công/PR.
+CR7 bổ sung chống brute-force cho endpoint xác thực, kiểm tra Origin đối với cookie mutation, request ID/log an toàn, trang vận hành chỉ Admin, báo cáo giờ làm/OT và Excel hai sheet. Theo điều chỉnh ngày 2026-10-07, mật khẩu tài khoản dùng 6–128 ký tự, không yêu cầu hoa/thường/số/ký hiệu; Admin tự chọn khi tạo nhân sự. Mật khẩu hiện hữu không đổi và vẫn được hash bcrypt. Xem mật khẩu hiện tại/nhân viên tự đổi/Admin đặt lại mật khẩu chưa triển khai (`NOT_IMPLEMENTED`). Bộ production có preflight, backup đồng bộ kèm checksum, kiểm tra restore biệt lập và quality gate thủ công/PR.
 
 CR8 hoàn thiện trải nghiệm vận hành Admin Web mà không thay đổi business rule: dashboard có hàng đợi ưu tiên từ số liệu thật, menu mobile dạng drawer, hộp thoại xác nhận thống nhất cho thao tác nhạy cảm, toast thành công, focus/keyboard state rõ ràng và phân trang cho các danh sách dài. `GET /api/employees` hỗ trợ tùy chọn `search`, `page`, `pageSize`; khi có `page` response là `{ items, page, pageSize, total, activeTotal, inactiveTotal }`, còn request không có `page` giữ response mảng để tương thích các màn hình chọn nhân sự và Mobile. `GET /api/operations/audit` trả `{ items, page, pageSize, total }` và trang vận hành hiển thị lần giao email/push thành công gần nhất.
 
@@ -139,6 +159,13 @@ cd mobile
 flutter pub get
 flutter run --dart-define=API_BASE_URL=http://127.0.0.1:3001/api
 ```
+
+## Admin không PIN — cập nhật 2026-10-09
+
+- Đã bỏ lớp PIN theo yêu cầu khách hàng. Hồ sơ chi tiết, tài khoản/phân quyền vẫn chỉ Admin truy cập qua Backend có JWT/phiên/RBAC; không bỏ bảo mật hệ thống.
+- Chạy `pnpm --dir backend migration:run` để áp dụng migration retirement `1792108800000-retire-admin-pin`; cập nhật Backend trước Web. Migration PIN cũ giữ nguyên vì đã áp dụng ở development. Recovery/lời mời cũ hết hiệu lực; audit, dữ liệu nhân sự và phiên đăng nhập thông thường giữ nguyên.
+- Trang `/dashboard/security`, `/admin-handover` và API PIN đã ngừng dùng. Bàn giao Admin tự phục vụ không PIN chưa triển khai. Không đổi mật khẩu hoặc app/APK.
+- Runbook: [Admin security](docs/ADMIN_SECURITY.md). Rà soát chống gian lận: [Attendance security](docs/ATTENDANCE_SECURITY_REVIEW.md).
 
 ## Kiểm tra chất lượng
 
@@ -154,6 +181,18 @@ pnpm build
 ```
 
 Theo chỉ thị hiện hành của Tech Lead, vẫn bổ sung test cho business rule/authorization nhưng **không tự chạy test suite**; chỉ chạy khi được yêu cầu. Typecheck/lint/build và kiểm tra API development có kiểm soát được ghi rõ trong bàn giao, không coi là thay thế nghiệm thu UI hoặc test suite.
+
+## Nghiệm thu module
+
+R9 (2026-10-12): Backend46/Mobile15 targeted PASS cho giữ/trừ/hoàn quỹ, trùng đơn, AM/PM/giờ và hủy–duyệt đồng thời. Tech Lead chốt ngày nghỉ có lịch 0 phút, thiếu lịch fallback policy từng ngày; không tính lại đơn cũ. Sửa validation/audit/init/carry preview và lỗi dialog/retry app; không migration mới. Web đọc và Hot Reload đã kiểm tra, mutation UI/FCM vẫn PARTIAL. [Biên bản R9](docs/R9_LEAVE_ACCEPTANCE.md). Không tự chuyển R10 hoặc xuất APK.
+
+R3 ngày 2026-10-09: Admin xem tên đăng nhập/reset mật khẩu và xóa vĩnh viễn nhân sự, không giới hạn theo lịch sử/kỳ đã chốt, có preview, mã xác nhận, lý do/audit. Reset thu hồi phiên/push; xóa giữ phiếu chung và actor kỹ thuật cho lịch sử khác. Chạy migration `1792281600000-employee-file-cleanup` **trước** Backend mới. Backend/API targeted **59/59 đạt**; chưa coi là nghiệm thu thao tác cuối UI/điện thoại/production. Quyết định này thay quy tắc không hard-delete nhân sự và trạng thái Admin reset NOT_IMPLEMENTED ở các mô tả lịch sử phía trên. Xem [R3 Employee acceptance](docs/R3_EMPLOYEES_ACCEPTANCE.md). Không tự chuyển R4.
+
+R2 ngày 2026-10-09: đã rà tổ chức/phân quyền và sửa danh bạ quản lý còn hiển thị tài khoản inactive. **85/85 targeted tests đạt** (gồm PostgreSQL/API thật, concurrency, đọc ảnh và đổi tuyến giữ bước hoàn tất); không đổi schema/Web/App hoặc dữ liệu khách đang test. Nghiệm thu UI Head/Leader/điện thoại vẫn PARTIAL, chưa chuyển R3. Bằng chứng/lệnh chạy lại: [R2 Organization acceptance](docs/R2_ORGANIZATION_ACCEPTANCE.md).
+
+Bổ sung trước R2: quản trị chi nhánh/phòng ban/chức vụ/team tại `/dashboard/organization`, ngừng/khôi phục và chỉ xóa bản ghi chưa sử dụng. Chạy `pnpm --dir backend migration:run` cho migration `1792195200000-organization-catalog-lifecycle` **trước** Backend/Web mới. Không xóa dữ liệu nhân viên hoặc lịch sử cũ. Quy tắc, API, rollback và kiểm tra: [Vòng đời danh mục tổ chức](docs/ORGANIZATION_CATALOG_LIFECYCLE.md). Đây không phải PASS toàn bộ R2.
+
+Nghiệm thu R1 ngày 2026-10-09: 100/100 test có mục tiêu (Backend/Web/App) đạt; sửa refresh đa tab, phản hồi app về muộn, nhãn idle, parser/rate limit và Origin login Web. **Chưa chốt PASS toàn bộ**: chờ quyết định mật khẩu dài và UI thiết bị/production còn thiếu. Không coi đây là nghiệm thu các module còn lại. Chi tiết/lệnh chạy lại: [R1 Auth acceptance](docs/R1_AUTH_ACCEPTANCE.md).
 
 ## GitNexus
 
@@ -172,3 +211,23 @@ Tech Lead duyệt cho cả nghỉ phép/giải trình: Admin chỉ quyết đị
 Migration 1791849600000-admin-fallback-review thêm decision_method (ROUTED/ADMIN_FALLBACK, nullable cho lịch sử) và admin_override_reason vào hai bảng. Audit ADMIN_FALLBACK_REVIEW và inbox cùng transaction; push tracked sau commit. Thông báo quyết định, kể cả Head theo tuyến, ghi tên người xử lý thực tế. App hiện tại nhận qua Hộp thư và hiển thị reviewedByName; không cần đổi form/đóng gói APK trong task này. Cập nhật migration + Backend trước Web.
 
 Hai workspace Admin tách Hàng đợi đơn/Cấu hình tuyến; thẻ tóm tắt từ dữ liệu thật, chip lọc ngang, tìm kiếm/phân trang và drawer chi tiết/timeline/audit/nút xử lý. Form lưu nằm dưới các trường thay vì bị kéo cao; CSS giới hạn trong workspace, giữ brand tím/trắng. Menu phân biệt Chính sách & quỹ phép và Xử lý nghỉ phép. Không redesign module khác hay mở thêm ERP. Bàn giao/kiểm tra tại docs/PERMISSIONS_PLAN.md.
+
+## R8 — Công tác và khách hàng
+
+Ảnh công tác private/owned/immutable cần migration `1792713600000-business-trip-evidence-ownership` trước Backend mới; đã backup/apply development 2026-10-12. App chụp lại mã ảnh mới/read trạng thái sau lỗi; phiếu không cộng công ngày, daily field check-in/out riêng không cần phiếu. Backend42/Mobile7 targeted PASS; máy thật/push vẫn PARTIAL. [Biên bản R8 và lệnh chạy lại](docs/R8_BUSINESS_TRIPS_ACCEPTANCE.md). Không xuất APK release hoặc deploy production trong lượt nghiệm thu.
+
+## R11 — Thông báo/push (2026-10-13)
+
+Backend18 targeted PASS, noEmit/scoped lint/isolated compile PASS; sửa department recipient effective dates, publish target recheck, read/ack–withdraw races, validation và token registration gắn đúng JWT Mobile session/chống token race. Không migration/đổi payload App. Firebase Android/FCM-only account/key đã cấu hình sau phê duyệt; key ngoài Git, config local ignored, OAuth/Backend health/debug build-install-attach PASS. Flutter tự reinstall sau lỗi xác minh cài đặt; cần đăng nhập/cấp lại quyền. Background/cold push chưa nghiệm thu. Trạng thái PARTIAL, không coi inbox là push thật. [R11 acceptance và điểm tiếp tục](docs/R11_PUSH_ACCEPTANCE.md).
+
+## R10 — Kỷ luật cá nhân/tập thể
+
+Admin chọn team/phòng → popup tích sẵn nhân sự → bỏ ngoại lệ → ban hành. Mỗi người có hồ sơ/inbox/xác nhận riêng; thu hồi cả danh sách gốc, không áp cho người vào sau. Giữ tin ban hành/thu hồi/audit; không thu hồi riêng tin gắn quyết định. Roster thay đổi cần chọn lại. Không tự trừ lương, khóa tài khoản hoặc sửa công.
+
+Migration `1792800000000-disciplinary-action-groups` đã backup/apply development. Môi trường khác: backup trước, `pnpm --filter @thien-minh-dental/backend migration:run`, rồi triển khai Backend/Web; giữ synchronize=false, down từ chối khi đã có collective history. App dùng inbox hiện hữu, không cần APK mới chỉ cho phần tập thể. Backend27 targeted, noEmit/scoped lint/isolated compile/Web build PASS; Chrome popup/ngoại lệ/rỗng/hủy PASS. FCM nền và luồng UI/app thật chưa đủ nghiệm thu, trạng thái **PARTIAL**. [Biên bản R10](docs/R10_DISCIPLINARY_ACCEPTANCE.md).
+
+## R6 — Device proof và giới hạn chấm công
+
+Migration `1792540800000-attendance-device-proof` thêm khóa thiết bị, challenge và budget PostgreSQL. Cập nhật DB → Backend → Web → app cùng đợt: APK cũ không có chữ ký sẽ không chấm được; không tự backfill ACTIVE. Tech Lead duyệt điều chỉnh 2026-10-10: tài khoản chưa từng đăng ký khóa được tự gắn thiết bị đầu tiên khi bấm chấm công, không cần mục Đăng ký/xem mã khóa riêng. Mỗi lượt vào/ra vẫn bắt buộc strong biometric. App chỉ giữ nút Tạo lại khóa cho khôi phục; đổi máy/tạo lại khóa cần Admin thu hồi cũ, đối chiếu mã khóa đang chờ trong phản hồi chấm công/khôi phục và duyệt mới tại `/dashboard/access`; lịch sử REVOKED không mở lại tự đăng ký, PENDING cũ vẫn cần duyệt. Không đổi schema nên điều chỉnh này không cần migration mới. Máy không hỗ trợ strong biometric dùng giải trình, không bypass. Nhân viên phải tự thực hiện lần gắn đầu; chưa có xác minh danh tính người đăng ký bằng attestation/nhận diện nhân viên.
+
+Bản Android release chặn HTTP cleartext/tắt backup; debug/profile cho HTTP local với ADB reverse. Chữ ký không chứng minh GPS thật hoặc danh tính nhân viên; attestation chưa tích hợp. Trạng thái R6 PARTIAL, kiểm tra có mục tiêu và luồng người dùng cần làm tiếp tại [R6 acceptance](docs/R6_ATTENDANCE_ACCEPTANCE.md). Không tự triển khai production hay chuyển R7.

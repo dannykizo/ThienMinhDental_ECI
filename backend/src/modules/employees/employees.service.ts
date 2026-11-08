@@ -25,7 +25,9 @@ import {
 } from '../auth/application/auth.ports.js';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { RoleCode } from '../auth/domain/role-code.js';
-import { validateStrongPassword } from '../auth/domain/password-policy.js';
+import { validatePassword } from '../auth/domain/password-policy.js';
+import { basicEmployee } from './domain/employee-directory.js';
+import { CatalogService, requireActiveCatalogReferences } from '../organization-access/application/catalog.service.js';
 import {
   canChangeEmployeeStatus,
   hasValidLifecycleReason,
@@ -80,9 +82,10 @@ export class EmployeesService {
     @InjectRepository(BranchEntity)
     private readonly branches: Repository<BranchEntity>,
     @Inject(PASSWORD_HASHER) private readonly passwordHasher: PasswordHasher,
+    private readonly catalog: CatalogService,
   ) {}
 
-  async list(user: AuthenticatedUserView, search?: string, page?: number, pageSize = 25): Promise<unknown> {
+  async list(user: AuthenticatedUserView, search?: string, page?: number, pageSize = 25, detailId?: string): Promise<unknown> {
     const hasGlobalAccess = user.roles.some((role) =>
       [RoleCode.Admin, RoleCode.ChiefAccountant].includes(role),
     );
@@ -94,6 +97,7 @@ export class EmployeesService {
     if (search?.trim()) {
       query.andWhere('(employee.fullName ILIKE :search OR employee.employeeCode ILIKE :search)', { search: `%${search.trim()}%` });
     }
+    if (detailId) query.andWhere('employee.id=:detailId', { detailId });
     if (!hasGlobalAccess) {
       query.andWhere(`EXISTS (
         SELECT 1 FROM user_branch_scopes scope
@@ -145,11 +149,11 @@ export class EmployeesService {
     );
 
     const items = employees.map(({ user: account, ...employee }) => ({
-      ...employee,
-      accountEmail: account?.email ?? null,
-      accountRoles: accountByEmployee.get(employee.id)?.roles ?? [],
+      ...(detailId ? employee : { ...basicEmployee(employee), department: employee.department, position: employee.position }),
+      accountEmail: detailId ? account?.email ?? null : null,
+      accountRoles: detailId ? accountByEmployee.get(employee.id)?.roles ?? [] : [],
       scopeBranchIds:
-        accountByEmployee.get(employee.id)?.scopeBranchIds ?? [],
+        detailId ? accountByEmployee.get(employee.id)?.scopeBranchIds ?? [] : [],
       organizationAssignments: assignments.filter(
         (assignment) => assignment.employeeId === employee.id,
       ),
@@ -157,10 +161,19 @@ export class EmployeesService {
     return page ? { items, page, pageSize, total, activeTotal, inactiveTotal: total - activeTotal } : items;
   }
 
+  async detail(user: AuthenticatedUserView, id: string): Promise<unknown> {
+    const items = await this.list(user, undefined, undefined, 25, id) as unknown[];
+    if (!items.length) throw new NotFoundException({ code: 'EMPLOYEE_NOT_FOUND', message: 'Không tìm thấy nhân viên.' });
+    return items[0];
+  }
+
   async create(
     user: AuthenticatedUserView,
     input: CreateEmployeeDto,
   ): Promise<EmployeeEntity> {
+    if (!input.employeeCode.trim() || !input.fullName.trim()) {
+      throw new BadRequestException({ code: 'EMPLOYEE_IDENTITY_REQUIRED', message: 'Mã và họ tên nhân viên không được để trống.' });
+    }
     this.validateAssignments(input.organizationAssignments);
     if (
       (input.email && !input.temporaryPassword) ||
@@ -172,7 +185,7 @@ export class EmployeesService {
       });
     }
     if (input.temporaryPassword) {
-      const passwordError = validateStrongPassword(input.temporaryPassword);
+      const passwordError = validatePassword(input.temporaryPassword);
       if (passwordError) {
         throw new BadRequestException({ code: 'WEAK_TEMPORARY_PASSWORD', message: passwordError });
       }
@@ -270,6 +283,9 @@ export class EmployeesService {
     id: string,
     input: UpdateEmployeeDto,
   ): Promise<EmployeeEntity> {
+    if (input.fullName !== undefined && !input.fullName.trim()) {
+      throw new BadRequestException({ code: 'EMPLOYEE_IDENTITY_REQUIRED', message: 'Họ tên nhân viên không được để trống.' });
+    }
     if (input.organizationAssignments) {
       this.validateAssignments(input.organizationAssignments);
       if (
@@ -309,7 +325,7 @@ export class EmployeesService {
 
       const { organizationAssignments, scopeBranchIds, ...profile } = input;
       Object.assign(employee, {
-        ...profile,
+        ...Object.fromEntries(Object.entries(profile).filter(([, value]) => value !== undefined)),
         fullName: profile.fullName?.trim() ?? employee.fullName,
         phone:
           profile.phone === undefined
@@ -517,34 +533,16 @@ export class EmployeesService {
     return this.branches.find({ order: { name: 'ASC' } });
   }
 
-  async createDepartment(input: CreateLookupDto): Promise<DepartmentEntity> {
-    return this.departments.save(
-      this.departments.create({
-        code: input.code.trim().toUpperCase(),
-        name: input.name.trim(),
-        isActive: true,
-      }),
-    );
+  createDepartment(user: AuthenticatedUserView, input: CreateLookupDto): Promise<unknown> {
+    return this.catalog.create(user,'departments',input);
   }
 
-  async createPosition(input: CreateLookupDto): Promise<PositionEntity> {
-    return this.positions.save(
-      this.positions.create({
-        code: input.code.trim().toUpperCase(),
-        name: input.name.trim(),
-        isActive: true,
-      }),
-    );
+  createPosition(user: AuthenticatedUserView, input: CreateLookupDto): Promise<unknown> {
+    return this.catalog.create(user,'positions',input);
   }
 
-  async createBranch(input: CreateLookupDto): Promise<BranchEntity> {
-    return this.branches.save(
-      this.branches.create({
-        code: input.code.trim().toUpperCase(),
-        name: input.name.trim(),
-        isActive: true,
-      }),
-    );
+  createBranch(user: AuthenticatedUserView, input: CreateLookupDto): Promise<unknown> {
+    return this.catalog.create(user,'branches',input);
   }
 
   private validateAssignments(assignments: OrganizationAssignmentDto[]): void {
@@ -571,6 +569,10 @@ export class EmployeesService {
     assignments: OrganizationAssignmentDto[],
     effectiveFrom?: string,
   ): Promise<void> {
+    await requireActiveCatalogReferences(manager, {
+      branches: assignments.map(row => row.branchId), departments: assignments.map(row => row.departmentId),
+      positions: assignments.flatMap(row => row.positionId ? [row.positionId] : []),
+    });
     const repository = manager.getRepository(
       EmployeeOrganizationAssignmentEntity,
     );
@@ -593,6 +595,7 @@ export class EmployeesService {
     userId: string,
     branchIds: string[],
   ): Promise<void> {
+    await requireActiveCatalogReferences(manager, { branches: branchIds });
     const repository = manager.getRepository(UserBranchScopeEntity);
     await repository.delete({ userId });
     const uniqueBranchIds = [...new Set(branchIds)];

@@ -5,6 +5,10 @@ import {
 } from '../src/modules/disciplinary-actions/domain/disciplinary-action-policy.js';
 
 describe('disciplinary action policy', () => {
+  it('validates actual calendar dates instead of accepting a date-shaped string', () => {
+    for (const date of ['2030-02-29', '2030-02-31', '0000-01-01', '2026-13-01', '2026-10-13T00:00:00Z']) expect(isValidDisciplinaryPeriod('WARNING', date)).toBe(false);
+    expect(isValidDisciplinaryPeriod('WARNING', '2028-02-29')).toBe(true);
+  });
   it('only allows draft issue and issued revocation', () => {
     expect(canTransitionDisciplinaryAction('DRAFT', 'ISSUED')).toBe(true);
     expect(canTransitionDisciplinaryAction('ISSUED', 'REVOKED')).toBe(true);

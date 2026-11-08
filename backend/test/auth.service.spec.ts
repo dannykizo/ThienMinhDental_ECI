@@ -158,6 +158,7 @@ describe('AuthService', () => {
       loginContext,
       expect.any(Date),
       expect.stringMatching(/^[a-f0-9]{64}$/),
+      activeAdmin.passwordHash,
     );
     expect(signMock).toHaveBeenCalledWith(
       expect.objectContaining({ sid: sessionId }),

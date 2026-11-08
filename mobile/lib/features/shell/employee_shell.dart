@@ -10,6 +10,7 @@ import '../attendance/attendance_home.dart';
 import '../business_trips/business_trip_list_screen.dart';
 import '../explanations/explanation_list_screen.dart';
 import '../leave/leave_request_screen.dart';
+import '../forms/forms_home.dart';
 
 class EmployeeShell extends StatefulWidget {
   const EmployeeShell({required this.session, super.key});
@@ -33,7 +34,7 @@ class _EmployeeShellState extends State<EmployeeShell>
     _inboxNavigationRequest = widget.session.inboxNavigationRequest;
     _foregroundAnnouncementRequest =
         widget.session.foregroundAnnouncementRequest;
-    if (widget.session.pendingAnnouncementId != null) _selectedIndex = 4;
+    if (widget.session.pendingAnnouncementId != null) _selectedIndex = 3;
     widget.session.addListener(_onSessionChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(widget.session.refreshUnreadAnnouncements());
@@ -61,7 +62,7 @@ class _EmployeeShellState extends State<EmployeeShell>
     if (!mounted) return;
     if (_inboxNavigationRequest != widget.session.inboxNavigationRequest) {
       _inboxNavigationRequest = widget.session.inboxNavigationRequest;
-      setState(() => _selectedIndex = 4);
+      setState(() => _selectedIndex = 3);
     }
     if (_foregroundAnnouncementRequest !=
         widget.session.foregroundAnnouncementRequest) {
@@ -76,7 +77,7 @@ class _EmployeeShellState extends State<EmployeeShell>
             content: Text(title),
             action: SnackBarAction(
               label: 'Mở hộp thư',
-              onPressed: () => setState(() => _selectedIndex = 4),
+              onPressed: () => setState(() => _selectedIndex = 3),
             ),
             behavior: SnackBarBehavior.floating,
           ),
@@ -98,13 +99,22 @@ class _EmployeeShellState extends State<EmployeeShell>
             AttendanceHome(
               session: widget.session,
               onOpenBusinessTrips: () => _selectDestination(1),
-              onOpenLeave: () => _selectDestination(2),
-              onOpenExplanations: () => _selectDestination(3),
-              onOpenInbox: () => _selectDestination(4),
+              onOpenLeave: () {
+                _selectDestination(2);
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) =>
+                        LeaveRequestScreen(session: widget.session)));
+              },
+              onOpenExplanations: () {
+                _selectDestination(2);
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) =>
+                        ExplanationListScreen(session: widget.session)));
+              },
+              onOpenInbox: () => _selectDestination(3),
             ),
             BusinessTripListScreen(session: widget.session),
-            LeaveRequestScreen(session: widget.session),
-            ExplanationListScreen(session: widget.session),
+            FormsHome(session: widget.session),
             AnnouncementInboxScreen(session: widget.session),
           ],
         ),
@@ -131,13 +141,7 @@ class _EmployeeShellState extends State<EmployeeShell>
                   icon: Icon(Icons.event_note_outlined),
                   selectedIcon:
                       Icon(Icons.event_note_rounded, color: brandPurple),
-                  label: 'Nghỉ phép',
-                ),
-                const NavigationDestination(
-                  icon: Icon(Icons.fact_check_outlined),
-                  selectedIcon:
-                      Icon(Icons.fact_check_rounded, color: brandPurple),
-                  label: 'Giải trình',
+                  label: 'Đơn từ',
                 ),
                 NavigationDestination(
                   icon: Badge(

@@ -1,6 +1,8 @@
 # Dependencies and build output
 node_modules/
 .next/
+frontend/.next-r12/
+frontend/.next-r13/
 frontend/out/
 dist/
 coverage/

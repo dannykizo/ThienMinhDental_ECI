@@ -2,11 +2,13 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, S
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { AuthenticatedUserView } from '../auth/application/auth.service.js';
 import { RoleCode } from '../auth/domain/role-code.js';
-import { CurrentUser } from '../auth/presentation/current-user.decorator.js';
+import { CurrentSessionId, CurrentUser } from '../auth/presentation/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/presentation/jwt-auth.guard.js';
 import { Roles } from '../auth/presentation/roles.decorator.js';
 import { RolesGuard } from '../auth/presentation/roles.guard.js';
-import { ConfirmAttendanceExplanationDto, SetExplanationRouteDto, CreateAttendanceAdjustmentDto, CreateAttendanceExplanationDto, RecordAttendanceEventDto, RespondAttendanceExplanationDto, ReviewAttendanceExplanationDto, SubmitEmployeeExplanationDto, UploadAttendanceEvidenceDto } from './attendance.dto.js';
+import { DecideAttendanceDeviceDto, RegisterAttendanceDeviceDto, ConfirmAttendanceExplanationDto, SetExplanationRouteDto, CreateAttendanceAdjustmentDto, CreateAttendanceExplanationDto, PrepareCheckInDto, RecordAttendanceEventDto, RespondAttendanceExplanationDto, ReviewAttendanceExplanationDto, SubmitEmployeeExplanationDto, UploadAttendanceEvidenceDto } from './attendance.dto.js';
+import { AttendanceDeviceProof } from './infrastructure/attendance-device-proof.js';
+import { AttendanceAbuseGuard, AttendanceBudget } from './infrastructure/attendance-abuse.guard.js';
 import { ExplanationWorkflowService } from './application/explanation-workflow.service.js';
 import { AttendanceService } from './attendance.service.js';
 import { AttendanceEvidenceStorage, type AttendanceEvidenceUpload } from './infrastructure/attendance-evidence.storage.js';
@@ -18,8 +20,15 @@ export class AttendanceController {
     private readonly service: AttendanceService,
     private readonly evidenceStorage: AttendanceEvidenceStorage,
     private readonly workflow: ExplanationWorkflowService,
+    private readonly deviceProof: AttendanceDeviceProof,
   ) {}
-  @Post('events') record(@CurrentUser() user: AuthenticatedUserView, @Body() input: RecordAttendanceEventDto): Promise<unknown> { return this.service.record(user, input); }
+  @Post('events') @UseGuards(AttendanceAbuseGuard) @AttendanceBudget('EVENT') record(@CurrentUser() user: AuthenticatedUserView, @Body() input: RecordAttendanceEventDto, @CurrentSessionId() sid: string): Promise<unknown> { return this.service.record(user, input, sid); }
+  @Post('check-in-captures') @UseGuards(AttendanceAbuseGuard) @AttendanceBudget('CAPTURE') prepareCheckIn(@CurrentUser() user: AuthenticatedUserView, @Body() input: PrepareCheckInDto, @CurrentSessionId() sid: string): Promise<unknown> { return this.service.prepareCheckIn(user, input, sid); }
+  @Post('devices/register') registerDevice(@CurrentUser() user: AuthenticatedUserView, @CurrentSessionId() sid: string, @Body() input: RegisterAttendanceDeviceDto): Promise<unknown> { return this.deviceProof.register(user, sid, input); }
+  @Get('devices') @Roles(RoleCode.Admin) devices(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.deviceProof.list(user); }
+  @Patch('devices/:id') @Roles(RoleCode.Admin) decideDevice(@CurrentUser() user: AuthenticatedUserView, @Param('id', ParseUUIDPipe) id: string, @Body() input: DecideAttendanceDeviceDto): Promise<unknown> { return this.deviceProof.decide(user, id, input.action, input.reason); }
+  @Post('device-challenges') challenge(@CurrentUser() user: AuthenticatedUserView, @CurrentSessionId() sid: string, @Body() input: RecordAttendanceEventDto): Promise<unknown> { return this.deviceProof.challenge(user, sid, input); }
+  @Get('daily/:employeeId/details') @Roles(RoleCode.Admin) details(@CurrentUser() user: AuthenticatedUserView, @Param('employeeId', ParseUUIDPipe) id: string, @Query('date') date: string): Promise<unknown> { return this.service.dailyDetails(user, id, date); }
   @Get('me/today') today(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.getToday(user); }
   @Get('daily') @Roles(RoleCode.Admin, RoleCode.ChiefAccountant, RoleCode.Manager) daily(@Query('date') date?: string): Promise<unknown> { return this.service.list(date); }
   @Post('adjustments') @Roles(RoleCode.Admin) adjust(@CurrentUser() user: AuthenticatedUserView, @Body() input: CreateAttendanceAdjustmentDto): Promise<unknown> { return this.service.createAdjustment(user, input); }
@@ -27,6 +36,7 @@ export class AttendanceController {
   @Get('explanations/mine') explanationsMine(@CurrentUser() user: AuthenticatedUserView): Promise<unknown> { return this.service.listMyExplanations(user); }
   @Post('explanations/mine') submitExplanation(@CurrentUser() user: AuthenticatedUserView, @Body() input: SubmitEmployeeExplanationDto): Promise<unknown> { return this.service.submitEmployeeExplanation(user, input); }
   @Post('evidence')
+  @UseGuards(AttendanceAbuseGuard) @AttendanceBudget('UPLOAD')
   @UseInterceptors(FileInterceptor('file', { limits: { files: 1, fileSize: 5 * 1024 * 1024 } }))
   uploadEvidence(
     @CurrentUser() user: AuthenticatedUserView,

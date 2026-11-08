@@ -1,14 +1,34 @@
-import { IsBoolean, IsDateString, IsDefined, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from 'class-validator';
+import { IsBase64, IsBoolean, IsDateString, IsDefined, IsIn, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength, ValidateIf } from 'class-validator';
+
+export class RegisterAttendanceDeviceDto {
+  @IsString() @IsBase64() @MaxLength(200) publicKey!: string;
+}
+export class DecideAttendanceDeviceDto {
+  @IsIn(['APPROVE', 'REVOKE']) action!: 'APPROVE' | 'REVOKE';
+  @IsString() @MinLength(5) @MaxLength(2000) reason!: string;
+}
+
+export class PrepareCheckInDto {
+  @IsIn(['OFFICE', 'BUSINESS_TRIP']) attendanceType!: 'OFFICE' | 'BUSINESS_TRIP';
+  @IsNumber() @IsLatitude() latitude!: number;
+  @IsNumber() @IsLongitude() longitude!: number;
+  @IsNumber() @Min(0) @Max(10000) accuracyMeters!: number;
+  @IsBoolean() mockLocationSignal!: boolean;
+  @ValidateIf((_object, value) => value !== undefined) @IsString() @MinLength(5) @MaxLength(2000) fieldWorkContent?: string;
+}
 
 export class RecordAttendanceEventDto {
   @IsIn(['CHECK_IN', 'CHECK_OUT']) eventType!: 'CHECK_IN' | 'CHECK_OUT';
   @IsIn(['OFFICE', 'BUSINESS_TRIP']) attendanceType!: 'OFFICE' | 'BUSINESS_TRIP';
   @IsOptional() @IsDateString() deviceTime?: string;
-  @IsOptional() @IsLatitude() latitude?: number;
-  @IsOptional() @IsLongitude() longitude?: number;
-  @IsOptional() @IsNumber() @Min(0) @Max(10000) accuracyMeters?: number;
-  @IsOptional() @IsBoolean() mockLocationSignal?: boolean;
+  @IsNumber() @IsLatitude() latitude!: number;
+  @IsNumber() @IsLongitude() longitude!: number;
+  @IsNumber() @Min(0) @Max(10000) accuracyMeters!: number;
+  @IsBoolean() mockLocationSignal!: boolean;
   @IsOptional() @IsUUID() businessTripId?: string;
+  @ValidateIf((_object, value) => value !== undefined) @IsUUID() checkinCaptureId?: string;
+  @ValidateIf((_object, value) => value !== undefined) @IsUUID() challengeId?: string;
+  @ValidateIf((_object, value) => value !== undefined) @IsString() @IsBase64() @MaxLength(200) signature?: string;
 }
 
 export class CreateAttendanceAdjustmentDto {

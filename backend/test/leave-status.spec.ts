@@ -13,6 +13,10 @@ describe('leave request policy', () => {
     expect(canReviewLeave('APPROVED')).toBe(false);
     expect(canReviewLeave('REJECTED')).toBe(false);
   });
+  it('requires real calendar dates, not timestamps or normalized invalid dates', () => {
+    expect(isValidLeaveDateRange('2028-02-29', '2028-02-29')).toBe(true);
+    for (const value of ['2026-02-29', '2026-02-31', '2026-01-01T08:00:00Z', 'invalid']) expect(isValidLeaveDateRange(value, value)).toBe(false);
+  });
 
   it('requires a meaningful reason for rejection but not approval', () => {
     expect(hasValidLeaveReviewNote('APPROVED')).toBe(true);

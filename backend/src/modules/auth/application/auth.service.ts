@@ -105,6 +105,7 @@ export class AuthService {
       context,
       expiresAt,
       hashRefreshSecret(refreshSecret),
+      user.passwordHash,
     );
     const accessToken = await this.accessTokens.sign({
       sub: user.id,
@@ -247,7 +248,7 @@ export class AuthService {
       revokeReason: session.revokeReason,
       status: session.revokedAt
         ? 'REVOKED'
-        : session.expiresAt.getTime() <= now
+        : session.expiresAt.getTime() <= now || this.isWebIdle(session, now)
           ? 'EXPIRED'
           : 'ACTIVE',
       loginAlertStatus: session.loginAlertStatus,
@@ -282,16 +283,17 @@ export class AuthService {
   private async ensureSessionIdlePolicy(
     session: AuthSessionRecord,
   ): Promise<void> {
-    if (session.clientType !== 'WEB') return;
-    const idleMinutes = this.positiveNumber('AUTH_WEB_IDLE_MINUTES', 30);
-    if (session.lastSeenAt.getTime() > Date.now() - idleMinutes * 60 * 1000) {
-      return;
-    }
+    if (!this.isWebIdle(session, Date.now())) return;
     await this.sessions.revoke(session.id, 'IDLE_TIMEOUT');
     throw new UnauthorizedException({
       code: 'SESSION_IDLE_TIMEOUT',
       message: 'Phiên quản trị đã hết hạn do không hoạt động.',
     });
+  }
+
+  private isWebIdle(session: AuthSessionRecord, now: number): boolean {
+    return session.clientType === 'WEB' &&
+      session.lastSeenAt.getTime() <= now - this.positiveNumber('AUTH_WEB_IDLE_MINUTES', 30) * 60 * 1000;
   }
 
   private positiveNumber(key: string, fallback: number): number {

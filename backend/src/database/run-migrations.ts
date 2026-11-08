@@ -1,10 +1,17 @@
 import { applicationDataSource } from './data-source.js';
+import { runPendingMigrations } from './migration-runner.js';
 
 async function runMigrations(): Promise<void> {
-  await applicationDataSource.initialize();
-  const migrations = await applicationDataSource.runMigrations();
-  console.log(`Applied ${migrations.length} migration(s).`);
-  await applicationDataSource.destroy();
+  try {
+    await applicationDataSource.initialize();
+    const migrations = await runPendingMigrations(applicationDataSource);
+    console.log(`Applied ${migrations.length} migration(s).`);
+  } finally {
+    if (applicationDataSource.isInitialized) await applicationDataSource.destroy();
+  }
 }
 
-void runMigrations();
+void runMigrations().catch(() => {
+  console.error('Migration failed. Startup refused; preserve the backup and investigate before retrying.');
+  process.exitCode = 1;
+});

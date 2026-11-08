@@ -46,6 +46,7 @@ function fixture(options: { prior?: AttendanceExplanationEntity; pending?: boole
     repository as unknown as Repository<AttendanceExplanationEntity>,
     storage as unknown as AttendanceEvidenceStorage,
     { initialize: vi.fn((_manager: unknown, item: AttendanceExplanationEntity) => Promise.resolve(item)), deliver: vi.fn().mockResolvedValue(undefined), process: vi.fn().mockRejectedValue(new ForbiddenException({ code: 'EXPLANATION_STEP_FORBIDDEN' })) } as unknown as ExplanationWorkflowService,
+    undefined as never,
   );
   return { service, repository, query, storage };
 }
@@ -91,10 +92,10 @@ describe('employee-initiated explanations', () => {
   });
 
   it('accepts an attached image without GPS or capture time but verifies ownership', async () => {
-    const { service, storage } = fixture();
+    const { service, storage, query } = fixture();
     const reference = '/api/attendance/evidence/019b8453-5ce6-45bc-9c6c-459c33fd2130.png';
     const result = await service.submitEmployeeExplanation(employee, { ...input, issueType: 'GPS_RISK', evidenceImageReference: reference });
-    expect(storage.assertOwnedReference).toHaveBeenCalledWith(employee, reference);
+    expect(storage.assertOwnedReference).toHaveBeenCalledWith(employee, reference, expect.objectContaining({ query }));
     expect(result.evidenceCapturedAt).toBeNull();
     expect(result.evidenceLatitude).toBeNull();
   });

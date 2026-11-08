@@ -10,7 +10,8 @@ RUN pnpm install --frozen-lockfile
 
 COPY backend backend
 RUN pnpm --dir backend build
-RUN pnpm --filter @thien-minh-dental/backend deploy --prod --legacy /output/backend
+# Dedicated deploy lockfile: do not resolve newer versions after compiling.
+RUN pnpm --filter @thien-minh-dental/backend deploy --prod --config.inject-workspace-packages=true --offline /output/backend
 
 FROM node:22-alpine AS runtime
 

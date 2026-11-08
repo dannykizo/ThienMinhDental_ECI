@@ -1,5 +1,9 @@
 # Android push — readiness and customer acceptance
 
+## R11 progress — 2026-10-13
+
+Backend18 targeted PASS after audience/receipt concurrency/session-token corrections. Authorized Firebase project `thienminhdental-ciproject` now has Android configuration, a dedicated FCM-only service account and one Backend key outside Git; Terms accepted by Tech Lead, IAM/key creation explicitly approved. OAuth credential validation, Backend health/watch compile, Android debug build/install/VM attach PASS. Flutter auto-reinstalled after initial Android verification failure; notification permission must be granted again and the demo user must sign in. No eligible token/provider message yet; real background/cold phone push remains NOT_RUN, not PASS. Current evidence and handoff: [R11](R11_PUSH_ACCEPTANCE.md). Historic readiness matrix below is not overridden by mock tests or a local notification.
+
 ## Scope of the 2026-10-07 correction
 
 - Android creates the `announcements` high-importance channel before requesting an FCM token; default FCM channel and monochrome notification icon are declared in the manifest.
@@ -48,7 +52,7 @@ Do not repeatedly publish company-wide test messages or change real requests mer
 - Setup never reads GPS coordinates or opens camera/gallery. It explains location at attendance/trip events, system-camera capture and selective Photo Picker access. No background location, CAMERA or broad-storage permission is added.
 - Regression widget sources cover no permission/GPS request on entry, optional persisted skip, explicit notification grant and settings access. They are added but **not run** under the current Tech Lead instruction.
 - Firebase and checkout reminder prerequisites above remain outstanding. This update does not claim real FCM delivery acceptance.
-- Verification: `flutter analyze --no-pub` PASS (including new test sources), Android `assembleDebug` PASS. ADB reverse 3001 active and Backend health OK. Debug installation currently waits for user approval in Realme/Oplus InstallGuideActivity; no system permission is granted by the agent. Final phone UI/grant/deny/resume/photo-picker acceptance is pending installation and manual checks. No test suite or release/distribution APK is run/produced. The user-owned leave form remains excluded from commit.
+- Verification at implementation: `flutter analyze --no-pub` PASS (including new test sources), Android `assembleDebug` PASS. Installation was initially pending Realme/Oplus approval. During manual manager acceptance on 2026-10-07 the updated debug build was observed installed; the setup guide appeared and **Để sau** entered Home. The agent did not grant OS permissions or bypass installation/password-manager prompts. Grant/deny/resume/photo-picker and real Firebase delivery remain pending. ADB reverse 3001 restored, Backend health OK. No test suite or release/distribution APK is run/produced. The user-owned leave form remains excluded. See `MANAGER_UI_ACCEPTANCE.md` for separate workflow UI evidence.
 
 ## Checkout reminders (policy pending)
 

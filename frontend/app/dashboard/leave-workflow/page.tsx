@@ -2,5 +2,5 @@
 import { PageHeader } from '@/components/admin-ui';
 import { LeaveWorkflowWorkspace } from '@/components/leave-workflow-workspace';
 export default function LeaveWorkflowPage() {
-  return <div className="module-page"><PageHeader eyebrow="VẬN HÀNH / NGHỈ PHÉP" title="Xử lý nghỉ phép" description="Theo dõi đơn, xử lý theo tuyến và quản lý cấu hình trong các khu vực riêng." /><LeaveWorkflowWorkspace /></div>;
+  return <div className="module-page review-page"><PageHeader eyebrow="ĐƠN TỪ / NGHỈ PHÉP" title="Xử lý nghỉ phép" description="Ưu tiên đơn đến lượt bạn. Mở chi tiết để xem tuyến, lịch sử và thao tác được cấp." /><LeaveWorkflowWorkspace /></div>;
 }

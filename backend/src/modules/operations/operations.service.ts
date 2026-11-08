@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import type { OperationsAuditQueryDto } from './operations.dto.js';
+import { hasPendingMigrations } from '../../database/migration-status.js';
 
 @Injectable()
 export class OperationsService {
@@ -31,7 +32,7 @@ export class OperationsService {
       serverTime: new Date().toISOString(),
       uptimeSeconds: Math.floor(process.uptime()),
       release: process.env.RELEASE_SHA?.trim() || 'development',
-      pendingMigrations: await this.dataSource.showMigrations(),
+      pendingMigrations: await hasPendingMigrations(this.dataSource),
       integrations: {
         emailAlerts: Boolean(process.env.SMTP_HOST && process.env.ADMIN_LOGIN_ALERT_EMAILS),
         firebasePush: process.env.FIREBASE_PUSH_ENABLED === 'true',

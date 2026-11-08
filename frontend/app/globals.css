@@ -1,15 +1,24 @@
 :root {
   color-scheme: light;
+  
+  /* Thien Minh Dental Brand Colors */
   --brand-primary: #5e2d91;
-  --brand-primary-hover: #4d2377;
-  --brand-primary-dark: #381559;
-  --brand-primary-light: #f5f0fa;
-  --brand-primary-subtle: #ede4f5;
+  --brand-primary-hover: #4f237d;
+  --brand-primary-dark: #351356;
+  --brand-primary-light: #f7f2fc;
+  --brand-primary-subtle: #efe6f8;
+  --brand-gradient-primary: linear-gradient(135deg, #5e2d91 0%, #3e1964 100%);
+  
+  /* Brand Accent & Energy (Amber/Orange) */
   --brand-accent: #f97316;
   --brand-accent-hover: #ea580c;
   --brand-accent-light: #fff7ed;
+  --brand-accent-subtle: #ffedd5;
+  --brand-gradient-accent: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
   --brand-gold: #f59e0b;
   --brand-gold-light: #fef3c7;
+  
+  /* Clinical & Status Colors */
   --emerald: #10b981;
   --emerald-dark: #059669;
   --emerald-light: #ecfdf5;
@@ -17,7 +26,10 @@
   --danger-dark: #dc2626;
   --danger-light: #fef2f2;
   
+  /* Pure Porcelain Surfaces & Data Slates */
   --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-subtle: #fafbfd;
   --canvas: #f8fafc;
   --canvas-subtle: #f1f5f9;
   --ink: #0f172a;
@@ -25,23 +37,45 @@
   --muted: #64748b;
   --line: #e2e8f0;
   --line-subtle: #f1f5f9;
+  --line-crisp: rgba(226, 232, 240, 0.85);
+  --line-focus: rgba(94, 45, 145, 0.35);
   
-  --sidebar-bg: #181126;
+  /* Luxury Dark Royal Sidebar */
+  --sidebar-bg: #140d21;
+  --sidebar-gradient: linear-gradient(180deg, #170e27 0%, #100a1b 100%);
+  --sidebar-surface: rgba(255, 255, 255, 0.04);
   --sidebar-hover: rgba(255, 255, 255, 0.08);
-  --sidebar-active: #5e2d91;
-  --sidebar-active-glow: rgba(94, 45, 145, 0.35);
-  --sidebar-text: #e2d9f3;
-  --sidebar-muted: #9b8bb4;
+  --sidebar-active: linear-gradient(135deg, #6c32a7 0%, #502381 100%);
+  --sidebar-active-glow: 0 4px 16px rgba(94, 45, 145, 0.45);
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-text: #e6ddf5;
+  --sidebar-muted: #9f8fb5;
   
+  /* Precision Radius */
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
   --radius-xl: 18px;
+  --radius-full: 9999px;
   
-  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  /* Soft Multi-Layer Elevation Shadows (De-plasticizing) */
+  --shadow-xs: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  --shadow-elevation-low: 0 1px 2px -1px rgba(15, 23, 42, 0.05), 0 2px 4px 0 rgba(15, 23, 42, 0.03);
+  --shadow-elevation-mid: 0 4px 14px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+  --shadow-elevation-high: 0 16px 32px -4px rgba(15, 23, 42, 0.09), 0 4px 12px -2px rgba(15, 23, 42, 0.03);
+  --shadow-glow-purple: 0 6px 20px -3px rgba(94, 45, 145, 0.28);
+  --shadow-glow-accent: 0 6px 20px -3px rgba(249, 115, 22, 0.28);
+
+  /* Motion & Physics Timings */
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 220ms;
+  --duration-slow: 360ms;
   
   font-family: 'Plus Jakarta Sans', Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--canvas);
@@ -64,6 +98,89 @@ button, a { -webkit-tap-highlight-color: transparent; }
   font-weight: 750;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* -------------------------------------------------------------
+   Design System Primitives (Motion, Tactility & Workspace Overlay)
+------------------------------------------------------------- */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-tactile {
+  transition: transform var(--duration-fast) var(--ease-spring), box-shadow var(--duration-fast) var(--ease-spring);
+}
+.btn-tactile:active {
+  transform: scale(0.975);
+}
+
+.card-interactive {
+  transition: transform var(--duration-normal) var(--ease-spring), box-shadow var(--duration-normal) var(--ease-spring), border-color var(--duration-normal) ease;
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevation-mid);
+  border-color: rgba(94, 45, 145, 0.22);
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line-crisp);
+}
+
+@keyframes shimmer-sweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f1f5f9 25%, #f7f2fc 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 1.8s infinite linear;
+}
+
+@keyframes pulse-ring-glow {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.65; }
+}
+.pulse-ring {
+  animation: pulse-ring-glow 2.4s var(--ease-smooth) infinite;
+}
+
+/* Standardized Master-Detail Workspace Overlay (85-90% Viewport) */
+.workspace-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 40px);
+  background: rgba(15, 10, 24, 0.58);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: overlay-fade-in var(--duration-normal) var(--ease-smooth) both;
+}
+.workspace-overlay-dialog {
+  position: relative;
+  width: min(92vw, 1480px);
+  height: min(90vh, 940px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: #ffffff;
+  box-shadow: 0 25px 60px -10px rgba(20, 10, 35, 0.35), 0 0 0 1px rgba(94, 45, 145, 0.08);
+  overflow: hidden;
+  animation: overlay-pop-in var(--duration-normal) var(--ease-spring) both;
+}
+@keyframes overlay-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes overlay-pop-in {
+  from { opacity: 0; transform: scale(0.97) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* -------------------------------------------------------------
@@ -696,6 +813,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .action-dialog h2 { margin: 14px 36px 8px 0; font-size: 1.25rem; }
 .action-dialog > p { margin: 0 0 20px; color: var(--muted); line-height: 1.6; }
 .action-dialog textarea { min-height: 108px; }
+dialog.disciplinary-roster-dialog { position: fixed; inset: 0; margin: auto; width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; }
+dialog.disciplinary-roster-dialog::backdrop { background: rgba(19, 12, 30, 0.58); backdrop-filter: blur(3px); }
 .dialog-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: var(--brand-primary-light); color: var(--brand-primary); }
 .dialog-icon.danger { background: var(--danger-light); color: var(--danger); }
 .dialog-close { position: absolute; top: 18px; right: 18px; display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); cursor: pointer; }
@@ -1262,7 +1381,16 @@ tbody tr:hover {
 }
 
 .organization-tabs button { flex-shrink: 0; }
+
+.organization-workspace .action-dialog {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
 .organization-fields { display: contents; border: 0; padding: 0; margin: 0; min-width: 0; }
+.organization-list-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); gap: 16px; margin: 18px 0; align-items: end; }
+.organization-list-filters label { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--ink); font-size: 0.85rem; font-weight: 600; }
+.organization-list-filters input, .organization-list-filters select { width: 100%; }
+@media (max-width: 640px) { .organization-list-filters { grid-template-columns: minmax(0, 1fr); } }
 .organization-history-toggle { padding: 0 24px 18px; font-size: 0.85rem; }
 .organization-history-toggle label { display: flex; gap: 8px; align-items: center; }
 .organization-audit { padding: 20px 24px; }
@@ -2141,3 +2269,20 @@ tbody tr:hover {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+/* R12: scoped export tools; do not change other module layouts. */
+.report-exports { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 22px; }
+.report-export-heading { display: flex; gap: 12px; align-items: center; color: #60328e; margin-bottom: 18px; }
+.report-export-heading h2 { margin: 0; font-size: 18px; }
+.report-export-heading p, .report-export-card p { color: #64748b; font-size: 13px; line-height: 1.6; margin: 6px 0 0; }
+.report-export-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 14px; }
+.report-export-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.report-export-card h3 { margin: 0; font-size: 15px; }
+.report-export-card p { flex: 1; margin: 0; }
+.report-export-card button { display: inline-flex; justify-content: center; align-items: center; gap: 8px; white-space: normal; }
+.report-page .toolbar { flex-wrap: wrap; }
+.report-page .toolbar label { min-width: 0; max-width: 100%; flex: 1 1 210px; }
+.report-page .toolbar select, .report-page .toolbar input { width: 100%; min-width: 0; }
+/* R13: read-only dashboard cards must not link to a forbidden workspace. */
+.dashboard-page .priority-readonly { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid var(--line, #e2e8f0); border-radius: 12px; }
+.dashboard-page .priority-readonly > span { display: flex; align-items: center; gap: 12px; }
+.dashboard-page .priority-readonly small { color: var(--ink-muted, #64748b); }

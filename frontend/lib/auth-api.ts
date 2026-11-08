@@ -82,22 +82,39 @@ async function parseResponse<T>(response: Response): Promise<T> {
 
 let refreshRequest: Promise<boolean> | null = null;
 
+async function rotateWebSession(): Promise<boolean> {
+  const response = await fetch(`${apiUrl}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+    cache: 'no-store',
+  });
+  if (response.status === 401) return false;
+  // Outages are not proof of a revoked refresh credential.
+  await parseResponse<SessionResponse>(response);
+  return true;
+}
+
+async function coordinatedRefresh(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    return rotateWebSession();
+  }
+  // Cookies are shared by tabs, while the module-local promise is not.
+  // Recheck after acquiring the lock: another tab may have refreshed already.
+  return navigator.locks.request(`thien-minh:auth-refresh:${apiUrl}`, async () => {
+    const probe = await fetch(`${apiUrl}/auth/me`, {
+      credentials: 'include', cache: 'no-store',
+    });
+    if (probe.ok) return true;
+    if (probe.status !== 401) await parseResponse<SessionResponse>(probe);
+    return rotateWebSession();
+  });
+}
+
 async function refreshWebSession(): Promise<boolean> {
   if (!refreshRequest) {
-    refreshRequest = fetch(`${apiUrl}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{}',
-      cache: 'no-store',
-    })
-      .then(async (response) => {
-        if (response.status === 401) return false;
-        // Outage/network errors are not proof of a revoked refresh credential.
-        // Let the caller show a retry state without declaring session expiry.
-        await parseResponse<SessionResponse>(response);
-        return true;
-      })
+    refreshRequest = coordinatedRefresh()
       .finally(() => {
         refreshRequest = null;
       });
@@ -110,7 +127,7 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     ...init,
     credentials: 'include',
     headers: {
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...init?.headers,
     },
     cache: 'no-store',
@@ -123,6 +140,16 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     window.dispatchEvent(new Event('thien-minh:session-expired'));
   }
   return parseResponse<T>(response);
+}
+
+// Downloads use the same session refresh coordination, without parsing successful XLSX as JSON.
+export async function apiDownload(path: string): Promise<Blob> {
+  const request = () => fetch(`${apiUrl}${path}`, { credentials: 'include', cache: 'no-store' });
+  let response = await request();
+  if (response.status === 401 && (await refreshWebSession())) response = await request();
+  if (response.status === 401 && typeof window !== 'undefined') window.dispatchEvent(new Event('thien-minh:session-expired'));
+  if (!response.ok) await parseResponse<never>(response);
+  return response.blob();
 }
 
 export async function login(

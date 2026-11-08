@@ -14,7 +14,7 @@ ARG NEXT_PUBLIC_APP_ENV=production
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
 RUN pnpm --dir frontend build
-RUN pnpm --filter @thien-minh-dental/frontend deploy --prod --legacy /output/frontend
+RUN pnpm --filter @thien-minh-dental/frontend deploy --prod --config.inject-workspace-packages=true --offline /output/frontend
 
 FROM node:22-alpine AS runtime
 

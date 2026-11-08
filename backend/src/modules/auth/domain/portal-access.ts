@@ -36,6 +36,7 @@ export function portalAccess(roles: RoleCode[], grants: ManagementGrant[], now: 
   if (scoped) navigation.push('/dashboard/managed');
   if (admin || scoped) navigation.push('/dashboard/explanations');
   if (admin || scoped) navigation.push('/dashboard/leave-workflow');
+  if (admin || scoped) navigation.push('/dashboard/overtime');
   if (scoped) navigation.push('/dashboard/managed-modules');
   return {
     webAllowed: globalWeb || scoped,

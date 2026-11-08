@@ -1,6 +1,7 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { hasPendingMigrations } from '../database/migration-status.js';
 
 interface HealthResponse {
   status: 'ok';
@@ -28,6 +29,7 @@ export class HealthController {
   async getReadiness(): Promise<HealthResponse> {
     try {
       await this.dataSource.query('SELECT 1');
+      if (await hasPendingMigrations(this.dataSource)) throw new Error('Pending migration');
       return this.getHealth();
     } catch {
       throw new ServiceUnavailableException({

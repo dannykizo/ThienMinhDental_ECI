@@ -1,5 +1,9 @@
 # Thiên Minh Dental Workforce — Mobile Android
 
+Ảnh profile chung (2026-10-20): tại Hôm nay bấm nút avatar cạnh logo → chụp/chọn ảnh → xem trước → Lưu. Ảnh thuộc hồ sơ của tài khoản đăng nhập, Admin cũng xem và cập nhật cùng ảnh; không phải ảnh chấm công/nhận diện khuôn mặt. Cần Backend đã migrate `1793060000000-employee-portraits`. Có xác nhận bỏ nháp, lỗi mạng/xung đột phiên bản không tự gửi lại. Mở lại trang/app để tải ảnh mới. Lượt này chưa cài debug lên điện thoại hoặc tạo APK; kiểm tra và giới hạn tại [Web UI / profile](../docs/WEB_UI_REFRESH.md).
+
+Nghiệm thu tích hợp máy thật 2026-10-14: [biên bản ba vai trò](../docs/MOBILE_INTEGRATED_ACCEPTANCE.md). Hai sửa cục bộ: OT đã duyệt hiển thị dù chưa checkout; kết thúc/đổi phiên loại Navigator riêng tư cũ, còn refresh badge/mạng giữ navigation. 17 targeted tests và scoped analyze PASS, máy thật đã kiểm lại. Không release APK; code mới đang áp dụng bằng Hot Restart, cần cập nhật debug từ source trước khi dùng cold launch APK đã cài như bản sửa bền vững.
+
 ## Thiết lập quyền lần đầu
 
 Sau đăng nhập/khôi phục phiên hợp lệ, bản cập nhật hiện màn hướng dẫn một lần trên thiết bị. Chọn `Để sau` hoặc `Tiếp tục vào ứng dụng` để vào app mà không bắt buộc cấp quyền. Mở lại qua biểu tượng thiết lập cạnh Đăng xuất trên Trang chủ; quay lại từ Cài đặt sẽ đọc lại trạng thái.
